@@ -1,0 +1,364 @@
+#include "./YMGRE_CullingAndClipping.h"
+#include "./YMGRE_MathBase.h"
+#include "../OPOBJ/YMGRE_Free.h"
+#include "../CONFIG/YMGRE_Mem.h"
+#include "../DEBUG/YMGRE_Debug.h"
+
+/*----------------------------------------  视景体裁剪 ----------------------------------------------*/
+//对物体进行剔除
+void YMGRE_Object_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
+{
+	gre_fvector4d localpos;
+	//物体绝对位置（center 0,0,0,1 + 世界偏移 = 世界坐标） 
+	//变换到相机坐标系下
+	YMGRE_Fvector4d_MatMultTo(&mycam->move.TMat, &myobj->WorldCoordinate, &localpos);
+
+	float32 srx, sry, srz;
+	//选择剔除方式
+	switch (myobj->boundType)
+	{
+	case GRE_Bounding_Box_AABB:	//AABB包围盒剔除
+	{
+		//AABB - box简单点说就是垂直于坐标轴的包围盒，这种包围盒不会旋转（当物体旋转的时候，就用更大的包围盒去包围它）。
+		//参考：https://zhuanlan.zhihu.com/p/163590893
+		
+		srx = myobj->scale * (myobj->BoundingBoxMax.x - myobj->BoundingBoxMin.x) / 2; // r = d / 2
+		sry = myobj->scale * (myobj->BoundingBoxMax.y - myobj->BoundingBoxMin.y) / 2;
+		srz = myobj->scale * (myobj->BoundingBoxMax.z - myobj->BoundingBoxMin.z) / 2;
+
+		srx = (srx > sry) ? ((srx > srz) ? srx : srz) : sry;//取max,由于物体会发生各种旋转，所以取最大值
+		sry = srx;
+		srz = srx;
+		break;
+	}
+	case GRE_Bounding_Sphere_R://使用球体半径剔除
+	{
+		srx = myobj->scale * myobj->BoundingSphereR;
+		sry = srx;
+		srz = srx;
+		break;
+	}
+	default:
+		break;
+	}
+
+	uint8 dlflg = 0;
+	//远近面剔除
+	//    /    |      |
+	//   *   #-|      |-#
+	//    \    |      |
+	if (((localpos.z + srz) < mycam->frustum.Znear) || \
+		((localpos.z - srz) > mycam->frustum.Zfar))
+		dlflg = 1;
+	
+	//左右面(x)剔除：基于xz平面投影进行
+	//           |    
+	//      - - -|    /
+	//       \   |   /-#
+	//      #-\  |  /
+	//         \_| z
+	//          x          tan(θ) = x/z   其中   x=w/2 ，可得 x(t) = z(t)*tan(θ)
+	float32 x_tl = localpos.z * mycam->perspectPlane.kl; // pL是负数
+	float32 x_tr = localpos.z * mycam->perspectPlane.kr;
+	if (((localpos.x + srx) < x_tl) || \
+		((localpos.x - srx) > x_tr))
+		dlflg = 1;
+
+	//上下面剔除，原理同上
+	float32 y_tu = localpos.z * mycam->perspectPlane.ku;
+	float32 y_td = localpos.z * mycam->perspectPlane.kd;//pD是负数
+	if (((localpos.y + sry) < y_td) || \
+		((localpos.y - sry) > y_tu))
+		dlflg = 1;
+	
+	//被剔除了
+	if (dlflg)
+	{
+		myobj->isDelete = 1;
+	}
+	else
+	{
+		myobj->isDelete = 0;
+	}
+}
+
+//对面进行剔除
+void YMGRE_ObjectPoly_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
+{
+	for (int i = 0; i < myobj->polygonNum; i++)
+	{
+		GRE_Polygon4d thispoly = &myobj->polygonList[i];//取该四边形
+		uint8 outerflg = 1;
+		//注意：输入的是透视变换后的结果
+		for (int j = 0; j < thispoly->num; j++)
+		{
+			int i1 = thispoly->index[j];
+			GRE_Fvector4d point = &myobj->pointList_[i1].pos;
+			
+			//该点位于视景体内
+			if (((point->z < mycam->frustum.Zfar) && (point->z > mycam->frustum.Znear)) &&
+				((point->x < mycam->perspectPlane.pR) && (point->x > mycam->perspectPlane.pL)) &&
+				((point->y < mycam->perspectPlane.pU) && (point->y > mycam->perspectPlane.pD)))
+			{
+				outerflg =0;
+				break;
+			}
+		}
+		//平面完全位于视景体外，将面进行隐藏
+		if (outerflg)
+		{
+			thispoly->ishide = 1;
+		}
+	}
+}
+
+/*----------------------------------------  背面剔除 ----------------------------------------------*/
+//可以将面提取为一致的逆时针或顺时针边序列，那么这是一个经过充分研究的问题。
+// 经典解决方案是Newells算法：khronos.org / opengl / wiki / Calculating_a_Surface_Normal
+
+void YMGRE_Backface_Remove(GRE_Object4d myobj, GRE_Fvector4d camPos)
+{
+	for (int i = 0; i < myobj->polygonNum; i++)
+	{
+		GRE_Polygon4d thispoly = &myobj->polygonList[i];//取该四边形
+		//视矢量：由p[0]指向视点的向量：campos - p[0]= - p[0]
+		int i1 = thispoly->index[0];
+
+		//注意：必须使用 未经过透视变换的坐标点
+		GRE_Fvector4d viewv = YMGRE_Fvector4d_Sub(camPos, &myobj->pointList[i1].pos);//不能用 pointList_
+		//		//     |
+		//		//     |-----> pN
+		//		//     |\
+		//		//     | \ outside   cos(val)>0
+		//与视矢量p[0] 与平面法向量pn的点积 < 0时，为背面， =0时为侧面(垂直)， 
+		float32 dotv = YMGRE_Fvector4d_Dot(&thispoly->pN, viewv);
+
+		if (dotv> 0.0f)//则dot > 0时，等价于cos(-90,90)范围，是可见的。
+		{
+			thispoly->ishide = 0; //可见，未被隐藏
+		}
+		else
+		{
+			thispoly->ishide = 1;//被隐藏
+		}
+		//释放内存
+		YMGRE_Free_VectorF4d(viewv);
+	}
+}
+
+/*----------------------------------------  边框裁剪 ----------------------------------------------*/
+
+//求多边形的一条边sp和裁剪边point0 point1的交点
+static inline void YMGRE_Clip_Intersect_(float x0, float y0, float x1, float y1, GRE_FRECT myroi, uint8 flg, float* x, float* y)// 0上 1下 2左 3右
+{
+	switch (flg)
+	{
+		//水平裁剪边
+	case 0://(y == ymax)
+		*y = myroi->y1;
+		*x = x0 + (*y - y0) * (x1 - x0) / (y1 - y0);
+		break;
+	case 1://(y == ymin)
+		*y = myroi->y0;
+		*x = x0 + (*y - y0) * (x1 - x0) / (y1 - y0);
+		break;
+		//竖直裁剪边
+	case 2://(x == xmin)
+		*x = myroi->x0;
+		*y = y0 + (*x - x0) * (y1 - y0) / (x1 - x0);
+		break;
+	case 3://(x == xmax)
+		*x = myroi->x1;
+		*y = y0 + (*x - x0) * (y1 - y0) / (x1 - x0);
+		break;
+	default:
+		break;
+	}
+}
+static inline int YMGRE_Clip_isInside(float x0, float y0, GRE_FRECT myroi, uint8 flg)// 0上 1下 2左 3右
+{
+	switch (flg)
+	{
+	case 0:
+		if (y0 <= myroi->y1)//(y0 <= ymax)
+			return 1;
+		break;
+	case 1:
+		if (y0 >= myroi->y0)//(y0 >= ymin)
+			return 1;
+		break;
+	case 2:
+		if (x0 >= myroi->x0)//(x0 >= xmin)
+			return 1;
+		break;
+	case 3:
+		if (x0 <= myroi->x1)//(x0 <= xmax)
+			return 1;
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+static inline void YMGRE_Clip_u2Sortp(float* point, uint8 num)
+{
+	uint8 i, j, k;
+	float uc;
+	//找到最大值
+	if (num)
+	{
+		if (point[1] != point[3])//y不相等 按y排序
+		{
+			//数据按y 递增重排 选择排序
+			for (i = 0; i < num; i++)//选取表头
+			{
+				for (j = i, k = i; j < num; j++)
+				{
+					if ((point[2 * i + 1] > point[2 * j + 1]))
+					{
+						//纪录小的
+						k = j;
+					}
+				}
+				if (k != i)//交换数据
+				{
+					uc = point[2 * i]; point[2 * i] = point[2 * k]; point[2 * k] = uc; //x
+					uc = point[2 * i + 1]; point[2 * i + 1] = point[2 * k + 1]; point[2 * k + 1] = uc;//y
+				}
+			}
+		}
+		else//按x排序
+		{
+			for (i = 0; i < num; i++)//选取表头
+			{
+				for (j = i, k = i; j < num; j++)
+				{
+					if ((point[2 * i] > point[2 * j]))
+					{
+						//纪录小的
+						k = j;
+					}
+				}
+				if (k != i)//交换数据
+				{
+					uc = point[2 * i]; point[2 * i] = point[2 * k]; point[2 * k] = uc;//x
+					uc = point[2 * i + 1]; point[2 * i + 1] = point[2 * k + 1]; point[2 * k + 1] = uc;//y
+				}
+			}
+		}
+	}
+}
+//SutherlandHodgman 折线裁剪
+static inline void SutherlandHodgmanPolygonClip2(GRE_fLinesList inlines, GRE_fLinesList outlines, GRE_FRECT myroi, uint8 flg)
+{
+	float x0, y0, x1, y1, jx, jy;
+	int num = 0;//线段数量
+
+	float jxy[10*2];//交点的xy
+	uint8 jxyi = 0;
+	//在内的线段
+	for (int i = 0; i < inlines->lineNum; i++)
+	{
+		//S: x0,y0
+		x0 = inlines->data[i].x0;
+		y0 = inlines->data[i].y0;
+		//P: x1,y1
+		x1 = inlines->data[i].x1;
+		y1 = inlines->data[i].y1;
+
+		if (YMGRE_Clip_isInside(x1, y1, myroi, flg))//P在内侧
+		{
+			if (YMGRE_Clip_isInside(x0, y0, myroi, flg))//S在内侧  内部线段
+			{
+				//保留
+				outlines->data[num].x0 = x0;
+				outlines->data[num].y0 = y0;
+				outlines->data[num].x1 = x1;
+				outlines->data[num].y1 = y1;
+				num++;
+			}
+			else//IP段在内
+			{
+				YMGRE_Clip_Intersect_(x0, y0, x1, y1, myroi, flg, &jx, &jy);//求交点
+				//纪录交点
+				jxy[2 * jxyi] = jx;
+				jxy[2 * jxyi + 1] = jy;
+				jxyi++;
+				gre_log_explain((jxyi >= 10), GRE_LOG_ParamI, "边界交点数>10");
+				//纪录IP段
+
+				outlines->data[num].x0 = jx;
+				outlines->data[num].y0 = jy;
+				outlines->data[num].x1 = x1;
+				outlines->data[num].y1 = y1;
+				num++;
+			}
+		}
+		else if (YMGRE_Clip_isInside(x0, y0, myroi, flg))//P在外 S在内侧
+		{
+			YMGRE_Clip_Intersect_(x0, y0, x1, y1, myroi, flg, &jx, &jy);//求交点
+			//纪录交点
+			jxy[2 * jxyi] = jx;
+			jxy[2 * jxyi + 1] = jy;
+			jxyi++;
+			gre_log_explain((jxyi >= 10), GRE_LOG_ParamI, "边界交点数>10");
+			//纪录SI段
+			outlines->data[num].x0 = x0;
+			outlines->data[num].y0 = y0;
+			outlines->data[num].x1 = jx;
+			outlines->data[num].y1 = jy;
+			num++;
+		}
+		//访问下一条线段
+	}
+	//交点排序
+	YMGRE_Clip_u2Sortp(jxy, jxyi);
+	//两两连接交点
+	jxyi = jxyi / 2;
+	for (int i = 0; i < jxyi; i++)
+	{
+		outlines->data[num].x0 = jxy[4 * i];
+		outlines->data[num].y0 = jxy[4 * i + 1];
+		outlines->data[num].x1 = jxy[4 * i + 2];
+		outlines->data[num].y1 = jxy[4 * i + 3];
+		num++;
+	}
+	gre_log_explain((num > outlines->lineMax), GRE_LOG_ParamI, "产生的总边数 > 最大输出边数");
+	outlines->lineNum = num; //确定输出数量
+}
+
+//按多边形进行窗口裁剪
+void YMGRE_Polygon_clip2D(GRE_fLinesList thislines, GRE_LinesList olines, GRE_FRECT winRect)
+{
+	gre_flineslist uline, uline2;
+
+	gre_log_explain((thislines->lineMax > olines->lineNum), GRE_LOG_ParamI, "最大输入边数 > 输出边数");
+
+	uline.lineMax = olines->lineNum;
+	uline2.lineMax = olines->lineNum;
+	uline.data = (GRE_FLINE)GRE_malloc0(uline.lineMax * sizeof(gre_fline));
+	uline2.data = (GRE_FLINE)GRE_malloc0(uline2.lineMax * sizeof(gre_fline));
+
+	//L - > u
+	SutherlandHodgmanPolygonClip2(thislines, &uline, winRect, 0);//上
+	//u - > u2
+	SutherlandHodgmanPolygonClip2(&uline, &uline2, winRect, 1);//下
+	//u2 - > u
+	SutherlandHodgmanPolygonClip2(&uline2, &uline, winRect, 2);//左
+	//u - > u2
+	SutherlandHodgmanPolygonClip2(&uline, &uline2, winRect, 3);//右
+
+	//转short类型
+	olines->lineNum = uline2.lineNum;
+	for (int i = 0; i < uline2.lineNum; i++)
+	{
+		olines->data[i].x0 = (int16)(uline2.data[i].x0 + 0.5); //四舍五入
+		olines->data[i].y0 = (int16)(uline2.data[i].y0 + 0.5);
+		olines->data[i].x1 = (int16)(uline2.data[i].x1 + 0.5);
+		olines->data[i].y1 = (int16)(uline2.data[i].y1 + 0.5);
+	}
+	//内存释放
+	GRE_free0(uline2.data);//释放
+	GRE_free0(uline.data);//释放
+}
+

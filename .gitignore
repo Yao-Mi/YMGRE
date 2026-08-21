@@ -1,0 +1,17 @@
+# CMake编译输出
+build/
+**/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# 编译产物
+*.o
+*.a
+*.so
+*.exe
+
+# 运行输出
+*.log
+*.bmp~
