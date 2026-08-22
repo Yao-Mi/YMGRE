@@ -16,7 +16,8 @@ static inline void YMGRE_UVNCamera_PositionInit(GRE_Camera4d myCam, GRE_Fvector4
 	YMGRE_Fvector4d_AssTo(&myCam->traget, regardPoint);
 
 	//根据上述定义计算其他参数
-	GRE_Fvector4d viewN = YMGRE_Fvector4d_Sub(&myCam->traget, &myCam->pos); //法向量
+	gre_fvector4d viewN;
+	YMGRE_Fvector4d_SubToResult(&myCam->traget, &myCam->pos, &viewN); //法向量
 	//默认设置 up 向量朝上，这样设置如果横跨物体，则会产生问题，
 	//如在x=0,z=0，N向量与默认的up向量共线，该处为畸点
 	gre_fvector4d view_up;
@@ -35,16 +36,19 @@ static inline void YMGRE_UVNCamera_PositionInit(GRE_Camera4d myCam, GRE_Fvector4
 	}
 	view_up.w = 0;
 	//计算U V 平面 ,右手定则
-	GRE_Fvector4d viewU = YMGRE_Fvector4d_Cross(viewN, &view_up);// N×v =U ： right向量
-	GRE_Fvector4d viewV = YMGRE_Fvector4d_Cross(viewU, viewN);//N × U = V : up向量
+	gre_fvector4d viewU;
+	gre_fvector4d viewV;
+	YMGRE_Fvector4d_CrossToResult(&viewN, &view_up, &viewU);// N×v =U ： right向量
+	YMGRE_Fvector4d_CrossToResult(&viewU, &viewN, &viewV);//N × U = V : up向量
 	//归一化向量
-	YMGRE_Fvector4d_Normalize(viewU);
-	YMGRE_Fvector4d_Normalize(viewV);
-	YMGRE_Fvector4d_Normalize(viewN);
+	YMGRE_Fvector4d_Normalize(&viewU);
+	YMGRE_Fvector4d_Normalize(&viewV);
+	YMGRE_Fvector4d_Normalize(&viewN);
 	//UV绕 N轴 旋转theta度
-	GRE_FMat4x4 camRotate = YMGRE_FMat4x4_Rotate_Cal(viewN, theta);//必须是绕单位轴旋转
-	YMGRE_Fvector4d_MatMultTo(camRotate, viewU, viewU);
-	YMGRE_Fvector4d_MatMultTo(camRotate, viewV, viewV);
+	gre_fmat4x4 camRotate;
+	YMGRE_FMat4x4_RotateTo(&viewN, theta, &camRotate);//必须是绕单位轴旋转
+	YMGRE_Fvector4d_MatMultTo(&camRotate, &viewU, &viewU);
+	YMGRE_Fvector4d_MatMultTo(&camRotate, &viewV, &viewV);
 
 	//计算相机变换逆矩阵
 	gre_fvector4d mov; //平移向量，将相机平移到原点
@@ -53,15 +57,10 @@ static inline void YMGRE_UVNCamera_PositionInit(GRE_Camera4d myCam, GRE_Fvector4
 	mov.z = -myCam->pos.z;
 	mov.w = 0;
 	//对相机进行旋转
-	myCam->move.TMat.val[0][0] = viewU->x; myCam->move.TMat.val[0][1] = viewU->y; myCam->move.TMat.val[0][2] = viewU->z; myCam->move.TMat.val[0][3] = YMGRE_Fvector4d_Dot(&mov, viewU);
-	myCam->move.TMat.val[1][0] = viewV->x; myCam->move.TMat.val[1][1] = viewV->y; myCam->move.TMat.val[1][2] = viewV->z; myCam->move.TMat.val[1][3] = YMGRE_Fvector4d_Dot(&mov, viewV);
-	myCam->move.TMat.val[2][0] = viewN->x; myCam->move.TMat.val[2][1] = viewN->y; myCam->move.TMat.val[2][2] = viewN->z; myCam->move.TMat.val[2][3] = YMGRE_Fvector4d_Dot(&mov, viewN);
+	myCam->move.TMat.val[0][0] = viewU.x; myCam->move.TMat.val[0][1] = viewU.y; myCam->move.TMat.val[0][2] = viewU.z; myCam->move.TMat.val[0][3] = YMGRE_Fvector4d_Dot(&mov, &viewU);
+	myCam->move.TMat.val[1][0] = viewV.x; myCam->move.TMat.val[1][1] = viewV.y; myCam->move.TMat.val[1][2] = viewV.z; myCam->move.TMat.val[1][3] = YMGRE_Fvector4d_Dot(&mov, &viewV);
+	myCam->move.TMat.val[2][0] = viewN.x; myCam->move.TMat.val[2][1] = viewN.y; myCam->move.TMat.val[2][2] = viewN.z; myCam->move.TMat.val[2][3] = YMGRE_Fvector4d_Dot(&mov, &viewN);
 	myCam->move.TMat.val[3][0] = 0; myCam->move.TMat.val[3][1] = 0; myCam->move.TMat.val[3][2] = 0; myCam->move.TMat.val[3][3] = 1;
-	//释放内存
-	YMGRE_Free_VectorF4d(viewN);
-	YMGRE_Free_VectorF4d(viewU);
-	YMGRE_Free_VectorF4d(viewV);
-	YMGRE_Free_FMat4x4(camRotate);
 }
 
 //相机初始化：背景色，相机采集图像

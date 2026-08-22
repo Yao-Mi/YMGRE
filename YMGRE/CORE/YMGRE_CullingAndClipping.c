@@ -6,14 +6,14 @@
 
 /*----------------------------------------  视景体裁剪 ----------------------------------------------*/
 //对物体进行剔除
-void YMGRE_Object_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
+uint8 YMGRE_Object_FrustumCullingCal(GRE_Object4d myobj, GRE_Camera4d mycam)
 {
 	gre_fvector4d localpos;
 	//物体绝对位置（center 0,0,0,1 + 世界偏移 = 世界坐标） 
 	//变换到相机坐标系下
 	YMGRE_Fvector4d_MatMultTo(&mycam->move.TMat, &myobj->WorldCoordinate, &localpos);
 
-	float32 srx, sry, srz;
+	float32 srx = 0, sry = 0, srz = 0;
 	//选择剔除方式
 	switch (myobj->boundType)
 	{
@@ -39,6 +39,7 @@ void YMGRE_Object_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
 		break;
 	}
 	default:
+		gre_log_explain(1, GRE_LOG_TypeI, "物体包围体类型错误");
 		break;
 	}
 
@@ -71,15 +72,12 @@ void YMGRE_Object_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
 		((localpos.y - sry) > y_tu))
 		dlflg = 1;
 	
-	//被剔除了
-	if (dlflg)
-	{
-		myobj->isDelete = 1;
-	}
-	else
-	{
-		myobj->isDelete = 0;
-	}
+	return dlflg;
+}
+
+void YMGRE_Object_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
+{
+	myobj->isDelete = YMGRE_Object_FrustumCullingCal(myobj, mycam);
 }
 
 //对面进行剔除
@@ -112,6 +110,123 @@ void YMGRE_ObjectPoly_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
 	}
 }
 
+void YMGRE_ObjectPoly_FrustumCullingTo(GRE_Object4d myobj, GRE_Vertex4d points, GRE_Camera4d mycam, uint8* polygonHide)
+{
+	gre_log_explain((myobj == NULL) || (points == NULL) || (polygonHide == NULL), GRE_LOG_PtrIO, "输入的物体、顶点或多边形状态不存在");
+	for (int i = 0; i < myobj->polygonNum; i++)
+	{
+		GRE_Polygon4d thispoly = &myobj->polygonList[i];
+		uint8 outerflg = 1;
+		for (int j = 0; j < thispoly->num; j++)
+		{
+			GRE_Fvector4d point = &points[thispoly->index[j]].pos;
+			if (((point->z < mycam->frustum.Zfar) && (point->z > mycam->frustum.Znear)) &&
+				((point->x < mycam->perspectPlane.pR) && (point->x > mycam->perspectPlane.pL)) &&
+				((point->y < mycam->perspectPlane.pU) && (point->y > mycam->perspectPlane.pD)))
+			{
+				outerflg = 0;
+				break;
+			}
+		}
+		if (outerflg)
+			polygonHide[i] = 1;
+	}
+}
+
+//计算相机空间顶点到指定视景体平面的有向距离，非负表示位于内部
+static float32 YMGRE_FrustumPlaneDistance(GRE_Vertex4d vertex, GRE_Camera4d camera, uint8 plane)
+{
+	switch (plane)
+	{
+	case 0:
+		return vertex->pos.z - camera->frustum.Znear;
+	case 1:
+		return camera->frustum.Zfar - vertex->pos.z;
+	case 2:
+		return vertex->pos.x - camera->perspectPlane.kl * vertex->pos.z;
+	case 3:
+		return camera->perspectPlane.kr * vertex->pos.z - vertex->pos.x;
+	case 4:
+		return vertex->pos.y - camera->perspectPlane.kd * vertex->pos.z;
+	default:
+		return camera->perspectPlane.ku * vertex->pos.z - vertex->pos.y;
+	}
+}
+
+//根据端点到裁剪面的距离插值生成交点，同时保留纹理坐标
+static gre_vertex4d YMGRE_FrustumClipIntersect(GRE_Vertex4d start, GRE_Vertex4d end,
+	float32 startDistance, float32 endDistance)
+{
+	float32 t = startDistance / (startDistance - endDistance);
+	gre_vertex4d result;
+	result.pos.x = start->pos.x + (end->pos.x - start->pos.x) * t;
+	result.pos.y = start->pos.y + (end->pos.y - start->pos.y) * t;
+	result.pos.z = start->pos.z + (end->pos.z - start->pos.z) * t;
+	result.pos.w = start->pos.w + (end->pos.w - start->pos.w) * t;
+	result.u = start->u + (end->u - start->u) * t;
+	result.v = start->v + (end->v - start->v) * t;
+	return result;
+}
+
+uint16 YMGRE_Polygon_FrustumClip(GRE_Vertex4d input, uint16 inputNum, GRE_Vertex4d output,
+	uint16 outputMax, GRE_Camera4d camera)
+{
+	gre_log_explain((input == NULL) || (output == NULL) || (camera == NULL), GRE_LOG_PtrIO,
+		"输入多边形、输出缓存或相机不存在");
+	gre_log_explain((inputNum < 3) || (inputNum > YMGRE_FRUSTUM_CLIP_VERTEX_MAX), GRE_LOG_ParamI,
+		"视景体裁剪输入顶点数无效");
+
+	gre_vertex4d buffer0[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+	gre_vertex4d buffer1[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+	GRE_Vertex4d source = buffer0;
+	GRE_Vertex4d target = buffer1;
+	uint16 sourceNum = inputNum;
+	for (uint16 i = 0; i < inputNum; i++)
+		buffer0[i] = input[i];
+
+	for (uint8 plane = 0; plane < 6; plane++)
+	{
+		uint16 targetNum = 0;
+		GRE_Vertex4d start = &source[sourceNum - 1];
+		float32 startDistance = YMGRE_FrustumPlaneDistance(start, camera, plane);
+		for (uint16 i = 0; i < sourceNum; i++)
+		{
+			GRE_Vertex4d end = &source[i];
+			float32 endDistance = YMGRE_FrustumPlaneDistance(end, camera, plane);
+			uint8 startInside = startDistance >= 0.0f;
+			uint8 endInside = endDistance >= 0.0f;
+
+			if (startInside != endInside)
+			{
+				gre_log_explain(targetNum >= YMGRE_FRUSTUM_CLIP_VERTEX_MAX, GRE_LOG_Mem1,
+					"视景体裁剪输出顶点超过固定缓存");
+				target[targetNum++] = YMGRE_FrustumClipIntersect(start, end,
+					startDistance, endDistance);
+			}
+			if (endInside)
+			{
+				gre_log_explain(targetNum >= YMGRE_FRUSTUM_CLIP_VERTEX_MAX, GRE_LOG_Mem1,
+					"视景体裁剪输出顶点超过固定缓存");
+				target[targetNum++] = *end;
+			}
+			start = end;
+			startDistance = endDistance;
+		}
+
+		if (targetNum == 0)
+			return 0;
+		GRE_Vertex4d swap = source;
+		source = target;
+		target = swap;
+		sourceNum = targetNum;
+	}
+
+	gre_log_explain(sourceNum > outputMax, GRE_LOG_Mem1, "视景体裁剪输出缓存不足");
+	for (uint16 i = 0; i < sourceNum; i++)
+		output[i] = source[i];
+	return sourceNum;
+}
+
 /*----------------------------------------  背面剔除 ----------------------------------------------*/
 //可以将面提取为一致的逆时针或顺时针边序列，那么这是一个经过充分研究的问题。
 // 经典解决方案是Newells算法：khronos.org / opengl / wiki / Calculating_a_Surface_Normal
@@ -125,13 +240,14 @@ void YMGRE_Backface_Remove(GRE_Object4d myobj, GRE_Fvector4d camPos)
 		int i1 = thispoly->index[0];
 
 		//注意：必须使用 未经过透视变换的坐标点
-		GRE_Fvector4d viewv = YMGRE_Fvector4d_Sub(camPos, &myobj->pointList[i1].pos);//不能用 pointList_
+		gre_fvector4d viewv;
+		YMGRE_Fvector4d_SubToResult(camPos, &myobj->pointList[i1].pos, &viewv);//不能用 pointList_
 		//		//     |
 		//		//     |-----> pN
 		//		//     |\
 		//		//     | \ outside   cos(val)>0
 		//与视矢量p[0] 与平面法向量pn的点积 < 0时，为背面， =0时为侧面(垂直)， 
-		float32 dotv = YMGRE_Fvector4d_Dot(&thispoly->pN, viewv);
+		float32 dotv = YMGRE_Fvector4d_Dot(&thispoly->pN, &viewv);
 
 		if (dotv> 0.0f)//则dot > 0时，等价于cos(-90,90)范围，是可见的。
 		{
@@ -141,8 +257,19 @@ void YMGRE_Backface_Remove(GRE_Object4d myobj, GRE_Fvector4d camPos)
 		{
 			thispoly->ishide = 1;//被隐藏
 		}
-		//释放内存
-		YMGRE_Free_VectorF4d(viewv);
+	}
+}
+
+void YMGRE_Backface_RemoveTo(GRE_Object4d myobj, GRE_Fvector4d camPos, uint8* polygonHide)
+{
+	gre_log_explain((myobj == NULL) || (camPos == NULL) || (polygonHide == NULL), GRE_LOG_PtrIO, "输入的物体、相机或多边形状态不存在");
+	for (int i = 0; i < myobj->polygonNum; i++)
+	{
+		GRE_Polygon4d thispoly = &myobj->polygonList[i];
+		int i1 = thispoly->index[0];
+		gre_fvector4d viewv;
+		YMGRE_Fvector4d_SubToResult(camPos, &myobj->pointList[i1].pos, &viewv);
+		polygonHide[i] = (YMGRE_Fvector4d_Dot(&thispoly->pN, &viewv) > 0.0f) ? 0 : 1;
 	}
 }
 

@@ -89,6 +89,64 @@ void YMGRE_Camera_PolygonPipline_Rendering(GRE_Camera4d thiscam, GRE_List LightL
 	//}
 }
 
+//使用外部工作区渲染多边形，避免把相机相关临时结果写回共享物体
+void YMGRE_Camera_PolygonPipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList,
+	GRE_List MaterialList, GRE_RenderWorkspace workspace)
+{
+	(void)MaterialList;
+	gre_log_explain(thiscam == NULL, GRE_LOG_PtrI, "输入的相机不存在");
+	if (workspace == NULL)
+		workspace = thiscam->workspace;
+	gre_log_explain(workspace == NULL, GRE_LOG_PtrI, "相机未绑定渲染工作区");
+
+	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(thiscam);
+	//临时相机头只替换输出图像，镜头和变换参数继续复用原相机
+	gre_camera4d renderCamera = *thiscam;
+	renderCamera.img = *target;
+	renderCamera.target = target;
+	GRE_Camera4d mycam = &renderCamera;
+	GRErgb24 background = { .R = 50,.G = 50,.B = 50 };
+	YMGRE_CameraImage_Init(mycam, background);
+
+	//灯光位置属于相机上下文，写入工作区而不是共享灯光对象
+	uint32 lightNum = 0;
+	for (GRE_ListNode node = LightList->listhead; node != NULL; node = node->next)
+		lightNum++;
+	YMGRE_RenderWorkspace_Reserve(workspace, 0, 0, lightNum);
+	uint32 lightIndex = 0;
+	for (GRE_ListNode node = LightList->listhead; node != NULL; node = node->next)
+	{
+		GRE_Light4d light = node->data;
+		YMGRE_Point_WorldToCamera(&light->pos, &workspace->lightPos[lightIndex++], &mycam->move.TMat);
+	}
+
+	for (GRE_ListNode curObjlist = ObjList->listhead; curObjlist != NULL; curObjlist = curObjlist->next)
+	{
+		GRE_Object4d thisobj = curObjlist->data;
+		//依次处理同一模型文件中的所有 subMesh
+		do
+		{
+			//工作区只需扩展到当前物体规模，后续物体继续复用同一块缓存
+			YMGRE_RenderWorkspace_Reserve(workspace, thisobj->pointNum, thisobj->polygonNum, lightNum);
+			//世界坐标变换结果写入工作区，不修改共享物体的 pointList_
+			YMGRE_Object_WorldToCameraTo(thisobj, &mycam->move.TMat, workspace->pointList);
+			if (!YMGRE_Object_FrustumCullingCal(thisobj, mycam))
+			{
+				//逐面剔除和光照结果均按 polygon 索引写入工作区
+				YMGRE_Backface_RemoveTo(thisobj, &mycam->pos, workspace->polygonHide);
+				YMGRE_ObjectLighting_ColorTo(thisobj, workspace->pointList, LightList, workspace->lightPos, workspace->polygonColor);
+				//相机空间依次投影到视平面，再变换到 framebuffer 窗口坐标
+				YMGRE_VertexList_CameraToViewPlane(workspace->pointList, thisobj->pointNum, mycam->perspectPlane.Dis);
+				YMGRE_ObjectPoly_FrustumCullingTo(thisobj, workspace->pointList, mycam, workspace->polygonHide);
+				YMGRE_VertexList_ViewPlaneToWindows(workspace->pointList, thisobj->pointNum, mycam);
+				//普通多边形使用扫描线填充，外部工作区版本不回写 Polygon 状态
+				YMGRE_PolygonObject_Primitive_RasterizationTo(thisobj, workspace->pointList, workspace->polygonHide,
+					workspace->polygonColor, mycam, 0);
+			}
+		} while ((thisobj = thisobj->nextObject) != NULL);
+	}
+}
+
 //每个相机都拥有一条独立的渲染管线 ，三角形
 void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList)
 {
@@ -134,7 +192,7 @@ void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightLi
 				YMGRE_Object_ViewPlaneToWindows(thisobj, thiscam);
 
 				//线框模型
-				if (thiscam->wireFrame != 0)
+				if (thiscam->wireFrame == GRE_Render_Wireframe)
 				{
 					YMGRE_TrangleObject_Wires(thisobj, thiscam);
 				}
@@ -146,6 +204,7 @@ void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightLi
 
 					//三角图元光栅化显示，Zbuff算法消除被遮挡的隐面
 					YMGRE_TrangleObject_Primitive_Rasterization(thisobj, myMater, thiscam);
+
 				}
 			}
 		} while ((thisobj = thisobj->nextObject) != NULL);
@@ -166,6 +225,70 @@ void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightLi
 	//		YMGRE_Light_Primitive_Rasterization(thisLight, thiscam, 2);//显示大小为2倍
 	//	}
 	//}
+}
+
+//使用外部工作区渲染三角网格，支持顺序多相机共享只读场景
+void YMGRE_Camera_TanglePipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList,
+	GRE_List MaterialList, GRE_RenderWorkspace workspace)
+{
+	gre_log_explain(thiscam == NULL, GRE_LOG_PtrI, "输入的相机不存在");
+	if (workspace == NULL)
+		workspace = thiscam->workspace;
+	gre_log_explain(workspace == NULL, GRE_LOG_PtrI, "相机未绑定渲染工作区");
+
+	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(thiscam);
+	//渲染期间不改相机的兼容 img，端口仍可按旧接口读取原图像字段
+	gre_camera4d renderCamera = *thiscam;
+	renderCamera.img = *target;
+	renderCamera.target = target;
+	GRE_Camera4d mycam = &renderCamera;
+	GRErgb24 background = { .R = 50,.G = 50,.B = 50 };
+	YMGRE_CameraImage_Init(mycam, background);
+
+	//灯光的相机空间位置按当前相机重新计算，避免多相机互相覆盖
+	uint32 lightNum = 0;
+	for (GRE_ListNode node = LightList->listhead; node != NULL; node = node->next)
+		lightNum++;
+	YMGRE_RenderWorkspace_Reserve(workspace, 0, 0, lightNum);
+	uint32 lightIndex = 0;
+	for (GRE_ListNode node = LightList->listhead; node != NULL; node = node->next)
+	{
+		GRE_Light4d light = node->data;
+		YMGRE_Point_WorldToCamera(&light->pos, &workspace->lightPos[lightIndex++], &mycam->move.TMat);
+	}
+
+	for (GRE_ListNode curObjlist = ObjList->listhead; curObjlist != NULL; curObjlist = curObjlist->next)
+	{
+		GRE_Object4d thisobj = curObjlist->data;
+		//依次处理同一模型文件中的所有 subMesh
+		do
+		{
+			//每次只保留当前物体的临时结果，工作区容量按最大物体复用
+			YMGRE_RenderWorkspace_Reserve(workspace, thisobj->pointNum, thisobj->polygonNum, lightNum);
+			//世界坐标变换结果写入工作区，不修改共享物体的 pointList_
+			YMGRE_Object_WorldToCameraTo(thisobj, &mycam->move.TMat, workspace->pointList);
+			if (!YMGRE_Object_FrustumCullingCal(thisobj, mycam))
+			{
+				//背面状态和逐面光照颜色均保存在当前工作区
+				YMGRE_Backface_RemoveTo(thisobj, &mycam->pos, workspace->polygonHide);
+				YMGRE_ObjectLighting_ColorTo(thisobj, workspace->pointList, LightList, workspace->lightPos, workspace->polygonColor);
+				//投影后完成逐面视景体剔除，再变换到窗口坐标进行光栅化
+				YMGRE_VertexList_CameraToViewPlane(workspace->pointList, thisobj->pointNum, mycam->perspectPlane.Dis);
+				YMGRE_ObjectPoly_FrustumCullingTo(thisobj, workspace->pointList, mycam, workspace->polygonHide);
+				YMGRE_VertexList_ViewPlaneToWindows(workspace->pointList, thisobj->pointNum, mycam);
+
+				//相机线框模式只画边；实体模式下由模型 wireFrame 决定是否后画网格线
+				if (mycam->wireFrame == GRE_Render_Wireframe)
+					YMGRE_TrangleObject_WiresTo(thisobj, workspace->pointList, workspace->polygonHide, mycam);
+				else
+				{
+					GRE_Material myMater = YMGRE_Material_Find(MaterialList, thisobj->materiaName);
+					YMGRE_TrangleObject_Primitive_RasterizationTo(thisobj, workspace->pointList, workspace->polygonHide,
+						workspace->polygonColor, myMater, mycam);
+				}
+			}
+		} while ((thisobj = thisobj->nextObject) != NULL);
+	}
 }
 
 
@@ -196,7 +319,8 @@ void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightLi
 
 
 
-#include "../../Demo/worldmap.h"
+#if 0
+#include "../../Demo/legacy/worldmap.h"
 
 //平面着色指一个多边形一个颜色，平滑着色是一个顶点一个颜色然后使用双线性插值得到
 gre_object4d myobj;
@@ -460,3 +584,4 @@ void YMGRE_Pipline_Rendering0()
 	//释放相机内存
 	YMGRE_Free_Camera(mycam);
 }
+#endif

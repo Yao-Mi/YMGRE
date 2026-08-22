@@ -1,5 +1,5 @@
-#include "../YMGRE/PORT/YMGRE_YMGUI_LCD.h"
-#include "../YMGRE/CORE/YMGRE_ScenceManager.h"
+#include "YMGRE_YMGUI_LCD.h"
+#include "YMGRE_ScenceManager.h"
 
 int main(void)
 {

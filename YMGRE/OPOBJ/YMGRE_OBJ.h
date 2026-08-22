@@ -82,6 +82,7 @@ typedef struct gre_object4d_
 	int8 isVisible;//可见
 	int8 isDelete;//被剔除了
 	int8 boundType;
+	uint8 wireFrame;//模型是否叠加三角网格线
 	uint8 objNameLen;
 	uint32 cloneTimes;//被克隆的次数
 	//包围盒
@@ -172,7 +173,7 @@ typedef struct gre_light4d_
 			gre_fvector4d direct; //光源朝向
 			float32 cs_inner_angle; //内锥角 cos值
 			float32 cs_outer_angle; //外锥角 cos值
-			float32 cs_div_; // 内外锥角cos差值平方的倒数
+			float32 cs_div_; // 内外锥角cos差值的倒数
 			float32 pf;//指数因子
 		}spot;
 	}proper;
@@ -182,6 +183,28 @@ typedef struct gre_light4d_
 }gre_light4d;
 typedef gre_light4d* GRE_Light4d;
 
+/*-------------------------------------  渲染上下文  ---------------------------------------------*/
+typedef struct gre_render_target_
+{
+	uint16 width, height;//输出图像尺寸
+	GRE_FrameBuffer data;//颜色缓存，像素格式由 GRE_FramePixel 决定
+	float32* zbuff;//深度缓存，每个颜色像素对应一个 float32
+}gre_render_target;
+typedef gre_render_target* GRE_RenderTarget;
+
+typedef struct gre_render_workspace_
+{
+	GRE_Vertex4d pointList;//当前物体变换后的顶点
+	uint8* polygonHide;//当前物体的逐面剔除结果
+	GRErgb24* polygonColor;//当前物体的逐面光照颜色
+	gre_fvector4d* lightPos;//当前相机空间中的灯光位置
+	uint32 pointMax;//顶点缓存容量
+	uint32 polygonMax;//多边形状态和颜色缓存容量
+	uint32 lightMax;//灯光位置缓存容量
+	uint8 ownsMemory;//为1时由工作区扩容并释放内部缓存
+}gre_render_workspace;
+typedef gre_render_workspace* GRE_RenderWorkspace;
+
 /*-------------------------------------  相机  ---------------------------------------------*/
 //欧拉相机与UVN的区别在于欧拉使用角度来描述，UVN使用视点作为描述
 typedef enum
@@ -189,11 +212,20 @@ typedef enum
 	GRE_UVNCamera,//UVN相机
 	//GRE_PointLight,//欧拉相机
 }GRE_CameraType;
+
+//相机渲染模式，保留 wireFrame 字段兼容旧代码
+typedef enum
+{
+	GRE_Render_Solid = 0,//实体模型
+	GRE_Render_Wireframe = 1,//只显示线框模型
+	GRE_Render_SolidWire = 2,//实体模型叠加网格线
+}GRE_RenderMode;
+
 typedef struct gre_camera4d_
 {
 	int16 ID;
 	uint8 isMoved;//被移动标识
-	uint8 wireFrame;//只显示线框模型标识
+	uint8 wireFrame;//渲染模式，取值见 GRE_RenderMode
 	gre_fvector4d pos;//位置
 	gre_fvector4d traget;//注视目标，用于计算uvn向量
 	//运动信息
@@ -219,12 +251,9 @@ typedef struct gre_camera4d_
 		float32 Zfar; //远平面
 	}frustum;
 	//硬件参数，采集图形的大小
-	struct 
-	{
-		uint16 width, height;
-		GRE_FrameBuffer data;
-		float32* zbuff;
-	}img;
+	gre_render_target img;//兼容原有相机图像接口
+	GRE_RenderTarget target;//实际输出目标，NULL时使用相机自带的img
+	GRE_RenderWorkspace workspace;//渲染工作区，顺序多相机可以共享
 }gre_camera4d;
 typedef gre_camera4d* GRE_Camera4d;
 

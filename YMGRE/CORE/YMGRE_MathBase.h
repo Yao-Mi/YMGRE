@@ -329,28 +329,40 @@ static inline GRE_Fvector4d YMGRE_Fvector4d_Add(GRE_Fvector4d vec0, GRE_Fvector4
 	vout->w = vec0->w + vec1->w;
 	return vout;
 }
-//向量减法 
+//向量减法
+static inline void YMGRE_Fvector4d_SubToResult(GRE_Fvector4d vec0, GRE_Fvector4d vec1, GRE_Fvector4d result)
+{
+	gre_log_explain((vec0 == NULL) || (vec1 == NULL) || (result == NULL), GRE_LOG_PtrI, "输入的向量不存在");
+	result->x = vec0->x - vec1->x;
+	result->y = vec0->y - vec1->y;
+	result->z = vec0->z - vec1->z;
+	result->w = vec0->w - vec1->w;
+}
 static inline GRE_Fvector4d YMGRE_Fvector4d_Sub(GRE_Fvector4d vec0, GRE_Fvector4d vec1)
 {
 	gre_log_explain((vec0 == NULL) || (vec1 == NULL), GRE_LOG_PtrI, "输入的向量不存在");
 	GRE_Fvector4d vout = YMGRE_Creat_VectorF4d();
-	vout->x = vec0->x - vec1->x;
-	vout->y = vec0->y - vec1->y;
-	vout->z = vec0->z - vec1->z;
-	vout->w = vec0->w - vec1->w;
+	YMGRE_Fvector4d_SubToResult(vec0, vec1, vout);
 	return vout;
 }
 //向量叉积
 //参考：https://www.zhihu.com/question/536971503/answer/2522534794
+static inline void YMGRE_Fvector4d_CrossToResult(GRE_Fvector4d va, GRE_Fvector4d vb, GRE_Fvector4d result)
+{
+	gre_log_explain((va == NULL) || (vb == NULL) || (result == NULL), GRE_LOG_PtrI, "输入的向量不存在");
+	float32 x = va->y * vb->z - vb->y * va->z;
+	float32 y = va->z * vb->x - vb->z * va->x;
+	float32 z = va->x * vb->y - vb->x * va->y;
+	result->x = x;
+	result->y = y;
+	result->z = z;
+	result->w = 0;
+}
 static inline GRE_Fvector4d YMGRE_Fvector4d_Cross(GRE_Fvector4d va, GRE_Fvector4d vb)
 {
 	gre_log_explain((va == NULL) || (vb == NULL), GRE_LOG_PtrI, "输入的向量不存在");
 	GRE_Fvector4d vout = YMGRE_Creat_VectorF4d();
-	vout->x = va->y * vb->z - vb->y * va->z;
-	vout->y = va->z * vb->x - vb->z * va->x;
-	vout->z = va->x * vb->y - vb->x * va->y;
-
-	vout->w = 0;
+	YMGRE_Fvector4d_CrossToResult(va, vb, vout);
 	return vout;
 }
 
@@ -479,11 +491,10 @@ static inline GRE_FMat4x4 YMGRE_FMat4x4_RotateZ_Cal(float32 zAngle)
 }
 //以单位法向量为旋转轴
 //参考：https://zhuanlan.zhihu.com/p/56587491
-static inline GRE_FMat4x4 YMGRE_FMat4x4_Rotate_Cal(const GRE_Fvector4d NVec,float32 zAngle)
+static inline void YMGRE_FMat4x4_RotateTo(const GRE_Fvector4d NVec, float32 zAngle, GRE_FMat4x4 result)
 {
-	gre_log_explain(NVec == NULL, GRE_LOG_PtrI, "输入的单位法向量不存在");
+	gre_log_explain((NVec == NULL) || (result == NULL), GRE_LOG_PtrI, "输入的单位法向量或输出矩阵不存在");
 
-	GRE_FMat4x4 mat_o = YMGRE_Creat_FMAT4x4();
 	float32 s = YMGRE_Sin(zAngle * YMGRE_Deg2Rad);
 	float32 c = YMGRE_Cos(zAngle * YMGRE_Deg2Rad);
 	float32 n = 1.0f-c;
@@ -494,10 +505,18 @@ static inline GRE_FMat4x4 YMGRE_FMat4x4_Rotate_Cal(const GRE_Fvector4d NVec,floa
 	float32 z = NVec->z;
 
 	//绕单位法向量旋转矩阵
-	mat_o->val[0][0] = x * x * n + c;     mat_o->val[0][1] = x * y * n + z * s; mat_o->val[0][2] = x * z * n - y * s; mat_o->val[0][3] = 0;
-	mat_o->val[1][0] = x * y * n - z * s; mat_o->val[1][1] = y * y * n + c;     mat_o->val[1][2] = y * z * n + x * s; mat_o->val[1][3] = 0;
-	mat_o->val[2][0] = x * z * n + y * s; mat_o->val[2][1] = y * z * n - x * s; mat_o->val[2][2] = z * z * n + c;     mat_o->val[2][3] = 0;
-	mat_o->val[3][0] = 0; mat_o->val[3][1] = 0; mat_o->val[3][2] = 0; mat_o->val[3][3] = 1;
+	result->val[0][0] = x * x * n + c;     result->val[0][1] = x * y * n + z * s; result->val[0][2] = x * z * n - y * s; result->val[0][3] = 0;
+	result->val[1][0] = x * y * n - z * s; result->val[1][1] = y * y * n + c;     result->val[1][2] = y * z * n + x * s; result->val[1][3] = 0;
+	result->val[2][0] = x * z * n + y * s; result->val[2][1] = y * z * n - x * s; result->val[2][2] = z * z * n + c;     result->val[2][3] = 0;
+	result->val[3][0] = 0; result->val[3][1] = 0; result->val[3][2] = 0; result->val[3][3] = 1;
+}
+
+static inline GRE_FMat4x4 YMGRE_FMat4x4_Rotate_Cal(const GRE_Fvector4d NVec,float32 zAngle)
+{
+	gre_log_explain(NVec == NULL, GRE_LOG_PtrI, "输入的单位法向量不存在");
+
+	GRE_FMat4x4 mat_o = YMGRE_Creat_FMAT4x4();
+	YMGRE_FMat4x4_RotateTo(NVec, zAngle, mat_o);
 
 	return mat_o;
 }

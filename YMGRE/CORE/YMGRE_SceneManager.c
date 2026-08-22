@@ -1,12 +1,13 @@
 #include"./YMGRE_ScenceManager.h"
 #include"../IOFILE/YMCS_File_IO.h"
 #include "./YMGRE_Rendering_Pipeline.h"
+#include "./YMGRE_RenderContext.h"
 #include "./YMGRE_CullingAndClipping.h"
 #include "./YMGRE_Rasterization.h"
 #include "../PORT/YMGRE_YMGUI_LCD.h"
 
-#ifndef YMGRE_DEMO_ASSET_DIR
-#define YMGRE_DEMO_ASSET_DIR "Demo"
+#ifndef YMGRE_RESOURCE_DIR
+#define YMGRE_RESOURCE_DIR "Resource"
 #endif
 
 static char* unum2str(uint32 unum)
@@ -258,7 +259,7 @@ void YMGRE_Scence_AddTerrain(GRE_Scence thisSc, GRE_Terrain thiso)
 void gre_terrainInit(GRE_Scence pthisc)
 {
 	//添加地形
-	GRE_Terrain myTerr = YMGRE_Load_SceneTerrainAndMaterial(pthisc, YMGRE_DEMO_ASSET_DIR "/map/map001.map");
+	GRE_Terrain myTerr = YMGRE_Load_SceneTerrainAndMaterial(pthisc, YMGRE_RESOURCE_DIR "/map/map001.map");
 	
 	YMGRE_Scence_AddTerrain(pthisc, myTerr);//装载到全局地形库
 
@@ -285,7 +286,7 @@ void gre_lightInit(GRE_Scence pthisc)
 void gre_objInit(GRE_Scence pthisc)
 {
 	//添加物体
-	GRE_Object4d myMesh = YMGRE_LoadOgreMeshAndMaterial(pthisc, YMGRE_DEMO_ASSET_DIR "/obj/Tank1_Body.mesh");
+	GRE_Object4d myMesh = YMGRE_LoadOgreMeshAndMaterial(pthisc, YMGRE_RESOURCE_DIR "/obj/Tank1_Body.mesh");
 	YMGRE_Scence_AddObject(pthisc, myMesh);//装载到全局物体库
 	
 }
@@ -358,6 +359,7 @@ void gre_objOpera(GRE_Object4d pthis)
 //场景更新
 void gre_camUpdate(GRE_Camera4d pthis)
 {
+	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(pthis);
 	//初始位置点和注视点 //{ .x = -24,.y = 80 ,.z = 140 ,.w = 1 }
 	static gre_fvector4d campos = { .x = 10,.y = 25 ,.z = 30 ,.w = 1 }, targetpos = {.x = 0, .y = 0, .z = 0, .w = 1};
 	//自旋角
@@ -379,10 +381,10 @@ void gre_camUpdate(GRE_Camera4d pthis)
 		}
 
 		int x, y;
-		if (LCD_GetXY(0, 0, pthis->img.width, pthis->img.height, &x, &y))
+		if (LCD_GetXY(0, 0, target->width, target->height, &x, &y))
 		{
-			float thx = (x - pthis->img.width / 2.0f);
-			float thy = (pthis->img.height / 2.0f - y);//反向
+			float thx = (x - target->width / 2.0f);
+			float thy = (target->height / 2.0f - y);//反向
 			campos.x = thx;
 			campos.y = thy;
 			//YMGRE_SetLight_Pos(&mysc.LightList, 1, (gre_fvector4d) { .x = thx, .y = thy, .z = 20, .w = 1 });
@@ -402,13 +404,14 @@ void gre_camUpdate(GRE_Camera4d pthis)
 //显示摄像头采集到的图像
 void gre_camShow(GRE_Camera4d pthis)
 {
+	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(pthis);
 	if (pthis->ID == 0)
 	{
-		LCD_Fill_RgbRect(0, 0, pthis->img.width, pthis->img.height, pthis->img.data);
+		LCD_Fill_RgbRect(0, 0, target->width, target->height, target->data);
 	}
 	else if (pthis->ID == 1)
 	{
-		LCD_Fill_RgbRect(500, 0, pthis->img.width, pthis->img.height, pthis->img.data);
+		LCD_Fill_RgbRect(500, 0, target->width, target->height, target->data);
 	}
 }
 
@@ -424,6 +427,8 @@ void YMGRE_Scene_Rendering(GRE_Scence pthisc)
 
 	//将所有物体Mesh添加到渲染列表中
 	gre_RenderListInit(pthisc);
+	//多个相机顺序渲染时共享一份临时工作区，各自保留独立图像
+	GRE_RenderWorkspace renderWorkspace = YMGRE_Creat_RenderWorkspace();
 
 	//物理空间变换到世界空间
 	for (GRE_ListNode curObjlist = pthisc->RenderList.listhead; curObjlist != NULL; curObjlist = curObjlist->next)//遍历物体
@@ -457,7 +462,8 @@ void YMGRE_Scene_Rendering(GRE_Scence pthisc)
 			{
 				////对相机所在管线进行渲染
 				//YMGRE_Camera_PolygonPipline_Rendering(thiscam, &pthisc->LightList, &pthisc->RenderList, &pthisc->MaterialList);
-				YMGRE_Camera_TanglePipline_Rendering(thiscam, &pthisc->LightList, &pthisc->RenderList, &pthisc->MaterialList);
+				YMGRE_Camera_TanglePipline_RenderingWithWorkspace(thiscam, &pthisc->LightList, &pthisc->RenderList,
+					&pthisc->MaterialList, renderWorkspace);
 
 				//显示相机画面
 				gre_camShow(thiscam);
@@ -471,6 +477,7 @@ void YMGRE_Scene_Rendering(GRE_Scence pthisc)
 	}
 
 	//释放场景内存
+	YMGRE_Free_RenderWorkspace(renderWorkspace);//释放相机共享工作区
 	gre_RenderListClear(pthisc);//渲染列表只释放节点，不释放物体
 	YMGRE_List_Clear(&pthisc->CamList, YMGRE_Free_Camera);//释放相机内存
 	YMGRE_List_Clear(&pthisc->ObjList, YMGRE_Free_Object);//释放物体内存

@@ -34,6 +34,18 @@ void YMGRE_Object_WorldToCamera(GRE_Object4d myobj, GRE_FMat4x4 camera)
 	}
 }
 
+//世界坐标变换到外部相机顶点缓存
+void YMGRE_Object_WorldToCameraTo(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Vertex4d out)
+{
+	gre_log_explain((myobj == NULL) || (camera == NULL) || (out == NULL), GRE_LOG_PtrIO, "输入的物体、相机或输出缓存不存在");
+	for (uint32 i = 0, danum = myobj->pointNum; i < danum; i++)
+	{
+		YMGRE_Fvector4d_MatMultTo(camera, &myobj->pointList[i].pos, &out[i].pos);
+		out[i].u = myobj->pointList[i].u;
+		out[i].v = myobj->pointList[i].v;
+	}
+}
+
 
 //相机坐标变换到视平面坐标
 void YMGRE_Object_CameraToViewPlane(GRE_Object4d myobj, float32 viewPlaneDis)
@@ -48,6 +60,19 @@ void YMGRE_Object_CameraToViewPlane(GRE_Object4d myobj, float32 viewPlaneDis)
 		float32 pk = viewPlaneDis / localpos[i].pos.z;
 		localpos[i].pos.x *= pk;
 		localpos[i].pos.y *= pk;
+	}
+}
+
+//外部相机顶点缓存变换到视平面坐标
+void YMGRE_VertexList_CameraToViewPlane(GRE_Vertex4d points, uint32 pointNum, float32 viewPlaneDis)
+{
+	gre_log_explain(points == NULL, GRE_LOG_PtrI, "输入的顶点缓存不存在");
+	gre_log_explain(viewPlaneDis < 1e-9f, GRE_LOG_PtrI, "视平面距离需>0");
+	for (uint32 i = 0; i < pointNum; i++)
+	{
+		float32 pk = viewPlaneDis / points[i].pos.z;
+		points[i].pos.x *= pk;
+		points[i].pos.y *= pk;
 	}
 }
 
@@ -75,6 +100,28 @@ void YMGRE_Object_ViewPlaneToWindows(GRE_Object4d myobj, GRE_Camera4d mycam)
 		//从[-w2,w2]偏移到[0,w]
 		localpos[i].pos.x += w_2;
 		localpos[i].pos.y += h_2;
+	}
+}
+
+//外部视平面顶点缓存变换到窗口坐标
+void YMGRE_VertexList_ViewPlaneToWindows(GRE_Vertex4d points, uint32 pointNum, GRE_Camera4d mycam)
+{
+	gre_log_explain((points == NULL) || (mycam == NULL), GRE_LOG_PtrIO, "输入的顶点缓存或相机不存在");
+	float32 viewPlaneW = mycam->perspectPlane.pR - mycam->perspectPlane.pL;
+	float32 viewPlaneH = mycam->perspectPlane.pU - mycam->perspectPlane.pD;
+	float32 winW = mycam->img.width;
+	float32 winH = mycam->img.height;
+	float32 pkw = winW / viewPlaneW;
+	float32 pkh = winH / viewPlaneH;
+	float32 w_2 = winW / 2.0f;
+	float32 h_2 = winH / 2.0f;
+
+	for (uint32 i = 0; i < pointNum; i++)
+	{
+		points[i].pos.x *= pkw;
+		points[i].pos.y *= -pkh;
+		points[i].pos.x += w_2;
+		points[i].pos.y += h_2;
 	}
 }
 

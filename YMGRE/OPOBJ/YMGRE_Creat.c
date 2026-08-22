@@ -106,7 +106,7 @@ GRE_Light4d YMGRE_Creat_Light(int16 id, GRE_LightType type, GRErgb24 color, floa
 	mylight->proper.spot.cs_inner_angle = YMGRE_Cos(10.0f * YMGRE_Deg2Rad);//内锥角10°
 	mylight->proper.spot.cs_outer_angle = YMGRE_Cos(30.0f * YMGRE_Deg2Rad);//外锥角30°
 	float32 cs_sub = mylight->proper.spot.cs_inner_angle - mylight->proper.spot.cs_outer_angle;
-	mylight->proper.spot.cs_div_ = 1.0f / (cs_sub * cs_sub);//差值的倒数
+	mylight->proper.spot.cs_div_ = 1.0f / cs_sub;//cos内外锥角差值的倒数
 
 	mylight->pos.x = 0; //位置
 	mylight->pos.y = 0;
@@ -116,7 +116,7 @@ GRE_Light4d YMGRE_Creat_Light(int16 id, GRE_LightType type, GRErgb24 color, floa
 }
 
 /***********************************************************   相机创建  *****************************************************************************/
-GRE_Camera4d YMGRE_Creat_Camera(int16 id, uint16 imgW, uint16 imgH, float32 alpha_Lx, float32 alpha_Rx, float32 beta_Uy, float32 beta_Dy)
+static GRE_Camera4d creatCameraHeader(int16 id, float32 alpha_Lx, float32 alpha_Rx, float32 beta_Uy, float32 beta_Dy)
 {
 	GRE_Camera4d mycam;
 	mycam = (GRE_Camera4d)GRE_malloc0(sizeof(gre_camera4d));
@@ -125,7 +125,7 @@ GRE_Camera4d YMGRE_Creat_Camera(int16 id, uint16 imgW, uint16 imgH, float32 alph
 
 	mycam->ID = id;
 	mycam->isMoved = 1;
-	mycam->wireFrame = 0;//默认关闭线框模式
+	mycam->wireFrame = GRE_Render_Solid;//默认使用实体模式
 
 	gre_log_explain((alpha_Lx <= 0.0f) || (alpha_Rx <= 0.0f) || (beta_Uy <= 0.0f) || (beta_Dy <= 0.0f), GRE_LOG_Mem0, "偏角必须大于0");
 	//视平面确定
@@ -148,13 +148,31 @@ GRE_Camera4d YMGRE_Creat_Camera(int16 id, uint16 imgW, uint16 imgH, float32 alph
 	mycam->perspectPlane.ku = mycam->perspectPlane.pU / pdis;
 	mycam->perspectPlane.kd = mycam->perspectPlane.pD / pdis;
 
-	//初始化图片参数
+	mycam->img = (gre_render_target){ 0 };
+	mycam->target = NULL;
+	mycam->workspace = NULL;
+	return mycam;
+}
+
+GRE_Camera4d YMGRE_Creat_Camera(int16 id, uint16 imgW, uint16 imgH, float32 alpha_Lx, float32 alpha_Rx, float32 beta_Uy, float32 beta_Dy)
+{
+	GRE_Camera4d mycam = creatCameraHeader(id, alpha_Lx, alpha_Rx, beta_Uy, beta_Dy);
 	mycam->img.width = imgW;
 	mycam->img.height = imgH;
-	mycam->img.data = (GRE_FrameBuffer)GRE_ImageBuff_Malloc(imgW * imgH * sizeof(GRE_FramePixel));
-	mycam->img.zbuff = (float32*)GRE_ImageBuff_Malloc(imgW * imgH * sizeof(float32));
-	//申请失败
-	gre_log_explain(mycam->img.data == NULL, GRE_LOG_Mem1, "相机照片内存申请失败");
+	mycam->img.data = (GRE_FrameBuffer)GRE_ImageBuff_Malloc((size_t)imgW * imgH * sizeof(GRE_FramePixel));
+	mycam->img.zbuff = (float32*)GRE_ImageBuff_Malloc((size_t)imgW * imgH * sizeof(float32));
+	mycam->target = &mycam->img;
+	gre_log_explain((mycam->img.data == NULL) || (mycam->img.zbuff == NULL), GRE_LOG_Mem1, "相机照片内存申请失败");
+	return mycam;
+}
+
+GRE_Camera4d YMGRE_Creat_CameraFromTarget(int16 id, GRE_RenderTarget target, float32 alpha_Lx, float32 alpha_Rx, float32 beta_Uy, float32 beta_Dy)
+{
+	gre_log_explain(target == NULL, GRE_LOG_PtrI, "外部渲染目标不存在");
+	GRE_Camera4d mycam = creatCameraHeader(id, alpha_Lx, alpha_Rx, beta_Uy, beta_Dy);
+	mycam->img.width = target->width;//保留原相机尺寸读取接口
+	mycam->img.height = target->height;
+	mycam->target = target;
 	return mycam;
 }
 
@@ -186,6 +204,7 @@ GRE_Object4d YMGRE_Creat_Object(int pointNum,int polygonNum,char* name,char* mat
 	
 	myobj->isVisible = 1;//可见
 	myobj->isDelete = 0;//未被剔除
+	myobj->wireFrame = 0;//默认不绘制模型线框
 	myobj->cloneTimes = 0;//被克隆次数为0
 	return myobj;
 }

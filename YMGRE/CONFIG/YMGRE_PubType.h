@@ -45,8 +45,8 @@ typedef GRErgb24* GRERGB24;
 typedef _color16_t GRErgb16;
 typedef GRErgb16* GRERGB16;
 
-// Camera output format. RGB565 is the native YMGUI/SDL format and is the
-// default; RGB888 remains available for reference renders and screenshots.
+// Camera output format. RGB565 is the native YMGUI/SDL format and the
+// project default; alternate formats remain source-compatible for ports.
 #ifndef YMGRE_CAMERA_COLOR_DEPTH
 #define YMGRE_CAMERA_COLOR_DEPTH 16
 #endif

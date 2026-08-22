@@ -15,14 +15,16 @@
 
 static GYdisp s_disp;
 static GYCTX s_ctx;
-static GYOBJ s_main_image;
-static GYOBJ s_aux_image;
-static GYimg s_main_src;
-static GYimg s_aux_src;
-static GYpx* s_main_pixels;
-static GYpx* s_aux_pixels;
-static uint32 s_main_pixels_count;
-static uint32 s_aux_pixels_count;
+#define LCD_IMAGE_SLOTS 16
+typedef struct
+{
+	GYOBJ image;
+	GYimg src;
+	GYpx* pixels;
+	uint32 pixels_count;
+	int x, y, width, height;
+} lcd_image_slot;
+static lcd_image_slot s_image_slots[LCD_IMAGE_SLOTS];
 static int s_pointer_x;
 static int s_pointer_y;
 static uint8 s_pointer_active;
@@ -51,6 +53,7 @@ static int s_frame_limit;
 
 void LCD_Init(uint32 width, uint32 height)
 {
+	GY_memset(s_image_slots, 0, sizeof(s_image_slots));
 	s_disp.hor_res = (GYcoord)width;
 	s_disp.ver_res = (GYcoord)height;
 	s_disp.buf_px_cnt = width * height;
@@ -75,14 +78,6 @@ void LCD_Init(uint32 width, uint32 height)
 	if (s_ctx == NULL)
 		return;
 	YMGUI_Obj_SetBgColor(s_ctx->root, GY_ARGB(0xFF, 0x18, 0x18, 0x20));
-	s_main_image = YMGUI_Creat_Image_Creat(s_ctx->root, 0, 0, 500, 500);
-	s_aux_image = YMGUI_Creat_Image_Creat(s_ctx->root, 500, 0, 300, 300);
-	s_main_image->event_cb = ymguiCameraEvent;
-	s_aux_image->event_cb = ymguiCameraEvent;
-	s_main_image->state |= GY_STATE_Focusable;
-	s_aux_image->state |= GY_STATE_Focusable;
-	YMGUI_Image_SetScaleMode(s_main_image, GY_IMG_NONE);
-	YMGUI_Image_SetScaleMode(s_aux_image, GY_IMG_NONE);
 	YMGUI_Inject_SetCtx(s_ctx);
 	s_ready = 1;
 }
@@ -96,12 +91,8 @@ void LCD_Destory(void)
 	SDL_LCD_Destroy();
 	GY_free1(s_disp.buf1);
 	s_disp.buf1 = NULL;
-	GY_free1(s_main_pixels);
-	GY_free1(s_aux_pixels);
-	s_main_pixels = NULL;
-	s_aux_pixels = NULL;
-	s_main_pixels_count = 0;
-	s_aux_pixels_count = 0;
+	for (int i = 0; i < LCD_IMAGE_SLOTS; i++)
+		GY_free1(s_image_slots[i].pixels);
 	s_ready = 0;
 }
 
@@ -153,32 +144,45 @@ void LCD_Clear(int color)
 void LCD_Fill_RgbRect(int startx, int starty, int width, int height,
                      GRE_FrameBuffer data)
 {
-	(void)starty;
-	GYimg* src = (startx == 500) ? &s_aux_src : &s_main_src;
-	GYOBJ image = (startx == 500) ? s_aux_image : s_main_image;
-	if (src == NULL || image == NULL || data == NULL)
+	if (s_ctx == NULL || data == NULL || width <= 0 || height <= 0)
 		return;
-	uint32 count = (uint32)width * (uint32)height;
-#if YMGRE_CAMERA_COLOR_DEPTH == 16
-	src->data = (const GYpx*)data;
-#else
-	GYpx** pixels = (startx == 500) ? &s_aux_pixels : &s_main_pixels;
-	uint32* pixels_count = (startx == 500) ? &s_aux_pixels_count : &s_main_pixels_count;
-	if (*pixels == NULL || *pixels_count != count)
+	lcd_image_slot* slot = NULL;
+	for (int i = 0; i < LCD_IMAGE_SLOTS; i++)
+		if (s_image_slots[i].image != NULL && s_image_slots[i].x == startx &&
+			s_image_slots[i].y == starty && s_image_slots[i].width == width &&
+			s_image_slots[i].height == height) { slot = &s_image_slots[i]; break; }
+	if (slot == NULL)
 	{
-		GY_free1(*pixels);
-		*pixels = (GYpx*)GY_malloc1((size_t)count * sizeof(GYpx));
-		*pixels_count = (*pixels != NULL) ? count : 0;
+		for (int i = 0; i < LCD_IMAGE_SLOTS; i++)
+			if (s_image_slots[i].image == NULL) { slot = &s_image_slots[i]; break; }
+		if (slot == NULL) return;
+		slot->image = YMGUI_Creat_Image_Creat(s_ctx->root, (GYcoord)startx,
+			(GYcoord)starty, (GYcoord)width, (GYcoord)height);
+		if (slot->image == NULL) return;
+		slot->image->event_cb = ymguiCameraEvent;
+		slot->image->state |= GY_STATE_Focusable;
+		YMGUI_Image_SetScaleMode(slot->image, GY_IMG_NONE);
+		slot->x = startx; slot->y = starty; slot->width = width; slot->height = height;
 	}
-	if (*pixels == NULL)
+#if YMGRE_CAMERA_COLOR_DEPTH == 16
+	slot->src.data = (const GYpx*)data;
+#else
+	uint32 count = (uint32)width * (uint32)height;
+	if (slot->pixels == NULL || slot->pixels_count != count)
+	{
+		GY_free1(slot->pixels);
+		slot->pixels = (GYpx*)GY_malloc1((size_t)count * sizeof(GYpx));
+		slot->pixels_count = (slot->pixels != NULL) ? count : 0;
+	}
+	if (slot->pixels == NULL)
 		return;
 	for (uint32 i = 0; i < count; i++)
-		(*pixels)[i] = GRE_RGB24_To_RGB565(data[i]);
-	src->data = *pixels;
+		slot->pixels[i] = GRE_RGB24_To_RGB565(data[i]);
+	slot->src.data = slot->pixels;
 #endif
-	src->w = (GYcoord)width;
-	src->h = (GYcoord)height;
-	src->use_key = 0;
-	src->key = 0;
-	YMGUI_Image_SetSrc(image, src);
+	slot->src.w = (GYcoord)width;
+	slot->src.h = (GYcoord)height;
+	slot->src.use_key = 0;
+	slot->src.key = 0;
+	YMGUI_Image_SetSrc(slot->image, &slot->src);
 }
