@@ -62,9 +62,12 @@ static float32 g_depthBuffer[1024 * 540];
 static gre_render_target g_target;
 static GYOBJ g_image, g_editMenu, g_leftPanel, g_rightPanel, g_centerPanel;
 static GYimg g_imageSource;
-static gre_line3d g_lines[160];
+static gre_line3d g_lines[256];
 static uint32 g_lineCount, g_baseLineCount;
 static uint8 g_referenceVisible=1;
+static int8 g_rotateAxis=-1;
+static float32 g_rotateStartAngle;
+static int g_rotateStartX;
 static GYOBJ g_referenceToggle;
 static GYOBJ g_transformButtons[3];
 static TransformMode g_transformMode=TRANSFORM_NONE;
@@ -100,7 +103,13 @@ static void setStatus(const char* text)
 static void addLine(gre_fvector4d start, gre_fvector4d end, GRErgb24 color)
 {
 	if (g_lineCount < sizeof(g_lines) / sizeof(g_lines[0]))
-		g_lines[g_lineCount++] = (gre_line3d){ start, end, color };
+		g_lines[g_lineCount++] = (gre_line3d){ start, end, color, 1 };
+}
+
+static void addGizmoLine(gre_fvector4d start, gre_fvector4d end, GRErgb24 color)
+{
+	if (g_lineCount < sizeof(g_lines) / sizeof(g_lines[0]))
+		g_lines[g_lineCount++] = (gre_line3d){ start, end, color, 4 };
 }
 
 static void addSpotConeLines(const SceneEditorObject* object, GRErgb24 color)
@@ -265,7 +274,19 @@ static float32 transformGizmoSize(void)
 	float32 dy=g_activeCamera->y-g_activeCamera->targetY;
 	float32 dz=g_activeCamera->z-g_activeCamera->targetZ;
 	float32 size=sqrtf(dx*dx+dy*dy+dz*dz)*0.12f;
-	if(size<15.0f)size=15.0f;if(size>80.0f)size=80.0f;return size;
+	float32 extent=0.0f;
+	if(g_selected!=NULL&&g_selected->mesh!=NULL){
+		float32 minX=FLT_MAX,minY=FLT_MAX,minZ=FLT_MAX,maxX=-FLT_MAX,maxY=-FLT_MAX,maxZ=-FLT_MAX;
+		uint8 found=0;
+		for(GRE_Object4d part=g_selected->mesh;part!=NULL;part=part->nextObject) {
+			if(!part->isVisible)continue;
+			for(int i=0;i<part->pointNum;++i){gre_fvector4d p=part->pointList[i].pos;
+				minX=GREMin(minX,p.x);maxX=GREMax(maxX,p.x);minY=GREMin(minY,p.y);maxY=GREMax(maxY,p.y);minZ=GREMin(minZ,p.z);maxZ=GREMax(maxZ,p.z);found=1;}
+		}
+		if(found)extent=GREMax(maxX-minX,GREMax(maxY-minY,maxZ-minZ));
+	}
+	if(extent>0.0f)size=GREMax(size,extent*1.15f);
+	if(size<24.0f)size=24.0f;if(size>240.0f)size=240.0f;return size;
 }
 
 static void addTransformGizmo(void)
@@ -275,16 +296,27 @@ static void addTransformGizmo(void)
 	if(g_transformMode==TRANSFORM_ROTATE){
 		if(g_selected->kind!=SCENE_OBJECT_MESH)return;
 		/* 灰色为物体原始坐标轴，彩色环为当前局部坐标轴，旋转过程中保持对照。 */
-		addLine(center,(gre_fvector4d){center.x+size,center.y,center.z,1},(GRErgb24){150,150,150});
-		addLine(center,(gre_fvector4d){center.x,center.y+size,center.z,1},(GRErgb24){150,150,150});
-		addLine(center,(gre_fvector4d){center.x,center.y,center.z+size,1},(GRErgb24){150,150,150});
+		addGizmoLine(center,(gre_fvector4d){center.x+size,center.y,center.z,1},(GRErgb24){150,150,150});
+		addGizmoLine(center,(gre_fvector4d){center.x,center.y+size,center.z,1},(GRErgb24){150,150,150});
+		addGizmoLine(center,(gre_fvector4d){center.x,center.y,center.z+size,1},(GRErgb24){150,150,150});
 		for(uint8 axis=0;axis<3;++axis){gre_fvector4d ring[24];
 			for(uint8 i=0;i<24;++i){float32 angle=(float32)i*2.0f*YMGRE_Pai/24.0f;ring[i]=center;
 				if(axis==0){ring[i].y+=cosf(angle)*size;ring[i].z+=sinf(angle)*size;}
 				else if(axis==1){ring[i].x+=cosf(angle)*size;ring[i].z+=sinf(angle)*size;}
 				else {ring[i].x+=cosf(angle)*size;ring[i].y+=sinf(angle)*size;}}
 			GRErgb24 color=axis==0?(GRErgb24){224,72,72}:(axis==1?(GRErgb24){82,205,112}:(GRErgb24){70,135,235});
-			for(uint8 i=0;i<24;++i)addLine(ring[i],ring[(i+1)%24],color);
+			for(uint8 i=0;i<24;++i)addGizmoLine(ring[i],ring[(i+1)%24],color);
+			if(g_rotateAxis==(int8)axis){
+				float32 degrees=axis==0?g_selected->rotX:(axis==1?g_selected->rotY:g_selected->rotZ);
+				float32 radians=degrees*YMGRE_Deg2Rad; int steps=(int)(fabsf(radians)*12.0f/YMGRE_Pai)+1; if(steps>48)steps=48;
+				gre_fvector4d previous=center;
+				for(int i=0;i<=steps;++i){float32 a=radians*(float32)i/(float32)steps;gre_fvector4d point=center;
+					if(axis==0){point.y+=cosf(a)*size*0.82f;point.z+=sinf(a)*size*0.82f;}
+					else if(axis==1){point.x+=cosf(a)*size*0.82f;point.z+=sinf(a)*size*0.82f;}
+					else {point.x+=cosf(a)*size*0.82f;point.y+=sinf(a)*size*0.82f;}
+					if(i>0)addGizmoLine(previous,point,(GRErgb24){245,210,70}); previous=point;
+				}
+			}
 		}
 		return;
 	}
@@ -292,11 +324,11 @@ static void addTransformGizmo(void)
 	gre_fvector4d ends[3]={{center.x+size,center.y,center.z,1},{center.x,center.y+size,center.z,1},{center.x,center.y,center.z+size,1}};
 	GRErgb24 colors[3]={{224,72,72},{82,205,112},{70,135,235}};
 	for(uint8 axis=0;axis<3;++axis){
-		addLine(center,ends[axis],colors[axis]);
+		addGizmoLine(center,ends[axis],colors[axis]);
 		if(g_transformMode==TRANSFORM_SCALE){float32 marker=size*0.08f;
-			addLine((gre_fvector4d){ends[axis].x-marker,ends[axis].y,ends[axis].z,1},
+			addGizmoLine((gre_fvector4d){ends[axis].x-marker,ends[axis].y,ends[axis].z,1},
 				(gre_fvector4d){ends[axis].x+marker,ends[axis].y,ends[axis].z,1},colors[axis]);
-			addLine((gre_fvector4d){ends[axis].x,ends[axis].y-marker,ends[axis].z,1},
+			addGizmoLine((gre_fvector4d){ends[axis].x,ends[axis].y-marker,ends[axis].z,1},
 				(gre_fvector4d){ends[axis].x,ends[axis].y+marker,ends[axis].z,1},colors[axis]);
 		}
 	}
@@ -607,8 +639,8 @@ static void dragSelectedAxis(ViewDragMode mode,float32 deltaX,float32 deltaY)
 {
 	if(g_selected==NULL||g_selected->fixed)return;
 	if(mode>=VIEW_DRAG_ROTATE_X&&mode<=VIEW_DRAG_ROTATE_Z&&g_selected->kind==SCENE_OBJECT_MESH){
-		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);float32 angle=axis==0?g_selected->rotX:(axis==1?g_selected->rotY:g_selected->rotZ);
-		SceneEditorObject_SetRotationAxis(g_selected,axis,angle+deltaX*0.6f);
+		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);
+		SceneEditorObject_SetRotationAxis(g_selected,axis,g_rotateStartAngle+deltaX*0.6f);
 	}else if(mode==VIEW_DRAG_SCALE&&g_selected->kind==SCENE_OBJECT_MESH){
 		float32 scale=g_selected->scale*expf((deltaX-deltaY)*0.01f);
 		if(scale<0.01f)scale=0.01f;if(scale>1000.0f)scale=1000.0f;SceneEditorObject_SetScale(g_selected,scale);
@@ -638,16 +670,22 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 		YMGUI_SetFocus(object->ctx, object);
 		g_ui->pointerX=x; g_ui->pointerY=y;g_ui->dragChanged=0;
 		ViewDragMode gizmoMode=gizmoDragMode(object,x,y);
-		if(gizmoMode!=VIEW_DRAG_NONE){g_ui->dragMode=gizmoMode;setStatus(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z?"拖动旋转参考轴":
+		if(gizmoMode!=VIEW_DRAG_NONE){g_ui->dragMode=gizmoMode;
+			if(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z){g_rotateAxis=(int8)(gizmoMode-VIEW_DRAG_ROTATE_X);g_rotateStartX=x;g_rotateStartAngle=g_rotateAxis==0?g_selected->rotX:(g_rotateAxis==1?g_selected->rotY:g_selected->rotZ);}
+			setStatus(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z?"拖动旋转参考轴":
 			(gizmoMode==VIEW_DRAG_SCALE?"拖动操作轴统一缩放":"拖动操作轴约束移动"));}
 		else{SceneEditorObject* picked=pickObject(object,x,y);
-			if(picked!=NULL){selectObject(picked,"已在视口中选中对象");g_ui->dragMode=(g_transformMode==TRANSFORM_NONE||g_transformMode==TRANSFORM_MOVE)?VIEW_DRAG_OBJECT:VIEW_DRAG_NONE;}
+			if(picked!=NULL){selectObject(picked,"已在视口中选中对象");g_rotateAxis=-1;g_ui->dragMode=(g_transformMode==TRANSFORM_NONE||g_transformMode==TRANSFORM_MOVE)?VIEW_DRAG_OBJECT:VIEW_DRAG_NONE;}
 			else{clearSelection("已取消选择；拖动空白区域可平移视图");g_ui->dragMode=VIEW_DRAG_PAN;}}
 	} else if (event == GY_EVENT_Pressing) {
 		float32 dx=x-g_ui->pointerX, dy=y-g_ui->pointerY;
 		if (g_ui->dragMode==VIEW_DRAG_OBJECT) { dragSelected(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在移动选中对象"); }
 		else if (g_ui->dragMode==VIEW_DRAG_PAN) { panCamera(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;refreshCameraInspector();setStatus("正在平移视图"); }
-		else if(g_ui->dragMode>=VIEW_DRAG_MOVE_X){dragSelectedAxis(g_ui->dragMode,dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在使用变换操作轴");}
+		else if(g_ui->dragMode>=VIEW_DRAG_MOVE_X){
+			if(g_ui->dragMode>=VIEW_DRAG_ROTATE_X&&g_ui->dragMode<=VIEW_DRAG_ROTATE_Z)
+				dragSelectedAxis(g_ui->dragMode,(float32)(x-g_rotateStartX),dy);
+			else dragSelectedAxis(g_ui->dragMode,dx,dy);
+			g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在使用变换操作轴");}
 		g_ui->pointerX=x; g_ui->pointerY=y; YMGUI_Obj_Invalidate(object);
 	} else if (event == GY_EVENT_ContextRequested) {
 		uint8 orbitSelection=g_selected!=NULL&&g_selected!=g_activeCamera&&

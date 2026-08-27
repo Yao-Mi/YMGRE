@@ -120,6 +120,7 @@ typedef struct gre_line3d_
 	gre_fvector4d start;
 	gre_fvector4d end;
 	GRErgb24 color;
+	uint8 thickness;
 }gre_line3d;
 typedef gre_line3d* GRE_Line3d;
 

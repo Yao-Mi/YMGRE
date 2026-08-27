@@ -352,7 +352,13 @@ void YMGRE_Camera_LineList_Rendering(GRE_Camera4d camera, const gre_line3d* line
 		if (x2 < 0) x2 = 0; if (x2 >= target->width) x2 = target->width - 1;
 		if (y1 < 0) y1 = 0; if (y1 >= target->height) y1 = target->height - 1;
 		if (y2 < 0) y2 = 0; if (y2 >= target->height) y2 = target->height - 1;
-		YMGRE_Img_LineDepth(target->data, target->zbuff, target->width, target->height,
-			(int16)x1, (int16)y1, z1, (int16)x2, (int16)y2, z2, lines[i].color, depthTest);
+		uint8 thickness=lines[i].thickness?lines[i].thickness:1;
+		int half=(int)thickness/2; int32 dx=x2-x1,dy=y2-y1; float32 len=sqrtf((float32)dx*dx+(float32)dy*dy);
+		float32 nx=len>0.0f?-(float32)dy/len:0.0f, ny=len>0.0f?(float32)dx/len:1.0f;
+		for(int offset=-half;offset<=half;++offset){
+			int16 ox1=(int16)(x1+nx*offset),oy1=(int16)(y1+ny*offset),ox2=(int16)(x2+nx*offset),oy2=(int16)(y2+ny*offset);
+			YMGRE_Img_LineDepth(target->data, target->zbuff, target->width, target->height,
+				ox1, oy1, z1, ox2, oy2, z2, lines[i].color, depthTest);
+		}
 	}
 }
