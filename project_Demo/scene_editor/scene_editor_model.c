@@ -4,6 +4,23 @@
 #include "YMGRE_MathBase.h"
 #include <math.h>
 
+static void refreshMeshNormals(GRE_Object4d mesh)
+{
+	for (GRE_Object4d part = mesh; part != NULL; part = part->nextObject) {
+		for (int i = 0; i < part->polygonNum; ++i) {
+			GRE_Polygon4d polygon = &part->polygonList[i];
+			if (polygon->num < 3) continue;
+			gre_fvector4d a = part->pointList[polygon->index[0]].pos;
+			gre_fvector4d b = part->pointList[polygon->index[1]].pos;
+			gre_fvector4d c = part->pointList[polygon->index[2]].pos;
+			gre_fvector4d u = { b.x - a.x, b.y - a.y, b.z - a.z, 0 };
+			gre_fvector4d v = { c.x - a.x, c.y - a.y, c.z - a.z, 0 };
+			YMGRE_Fvector4d_CrossToResult(&u, &v, &polygon->pN);
+			YMGRE_Fvector4d_Normalize(&polygon->pN);
+		}
+	}
+}
+
 void SceneEditorObject_Translate(SceneEditorObject* object, float32 dx, float32 dy, float32 dz)
 {
 	if (object == NULL || !isfinite(dx) || !isfinite(dy) || !isfinite(dz)) return;
@@ -56,6 +73,7 @@ void SceneEditorObject_SetRotationY(SceneEditorObject* object, float32 rotationY
 		}
 	}
 	object->rotY = rotationY;
+	refreshMeshNormals(object->mesh);
 }
 
 void SceneEditorObject_SetRotationAxis(SceneEditorObject* object, uint8 axis, float32 angle)
@@ -70,6 +88,7 @@ void SceneEditorObject_SetRotationAxis(SceneEditorObject* object, uint8 axis, fl
 		else {p->x=object->x+x*c-y*s;p->y=object->y+x*s+y*c;}
 	}
 	*current=angle;
+	refreshMeshNormals(object->mesh);
 }
 
 void SceneEditorObject_SetColor(SceneEditorObject* object, GYcolor color)

@@ -646,7 +646,9 @@ static void dragSelectedAxis(ViewDragMode mode,float32 deltaX,float32 deltaY)
 	if(g_selected==NULL||g_selected->fixed)return;
 	if(mode>=VIEW_DRAG_ROTATE_X&&mode<=VIEW_DRAG_ROTATE_Z&&g_selected->kind==SCENE_OBJECT_MESH){
 		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);
-		SceneEditorObject_SetRotationAxis(g_selected, axis, g_rotateStartAngle - deltaX * 0.6f);
+		/* 屏幕水平拖动在 Y 环与 X/Z 环上的正方向相反。 */
+		float32 direction = axis == 1 ? -1.0f : 1.0f;
+		SceneEditorObject_SetRotationAxis(g_selected, axis, g_rotateStartAngle + direction * deltaX * 0.6f);
 	}else if(mode==VIEW_DRAG_SCALE&&g_selected->kind==SCENE_OBJECT_MESH){
 		float32 scale=g_selected->scale*expf((deltaX-deltaY)*0.01f);
 		if(scale<0.01f)scale=0.01f;if(scale>1000.0f)scale=1000.0f;SceneEditorObject_SetScale(g_selected,scale);
