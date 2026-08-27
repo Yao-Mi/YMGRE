@@ -136,16 +136,6 @@ static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fve
 	GRE_Camera4d camera=g_activeCamera->camera;
 	float32 px=(float32)(g_ui->pointerX-area.x), py=(float32)(g_ui->pointerY-area.y);
 	float32 viewW=camera->perspectPlane.pR-camera->perspectPlane.pL, viewH=camera->perspectPlane.pU-camera->perspectPlane.pD;
-	if(axis==2){
-		float32 centerX,centerY,depth;
-		if(!projectPoint(&center,&centerX,&centerY,&depth))return 0;
-		float32 sx=(px-(float32)g_target.width*0.5f)*viewW*depth/(camera->perspectPlane.Dis*g_target.width);
-		float32 sy=((float32)g_target.height*0.5f-py)*viewH*depth/(camera->perspectPlane.Dis*g_target.height);
-		hit->x=camera->pos.x+camera->move.cu.x*sx+camera->move.cv.x*sy+camera->move.cn.x*depth;
-		hit->y=camera->pos.y+camera->move.cu.y*sx+camera->move.cv.y*sy+camera->move.cn.y*depth;
-		hit->z=center.z; hit->w=1;
-		return isfinite(hit->x)&&isfinite(hit->y);
-	}
 	float32 cx=(px-(float32)g_target.width*0.5f)*viewW/(camera->perspectPlane.Dis*g_target.width);
 	float32 cy=((float32)g_target.height*0.5f-py)*viewH/(camera->perspectPlane.Dis*g_target.height);
 	gre_fvector4d origin=camera->pos;
@@ -160,7 +150,7 @@ static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fve
 	if(fabsf(denominator)<0.0001f){
 		/* 视线平行于旋转面时没有唯一交点，取中心深度处的射线点并压回该平面。 */
 		t=YMGRE_Fvector4d_Dot(&toCenter,&direction); if(t<=0.0f||!isfinite(t))t=1.0f;
-	} else { t=YMGRE_Fvector4d_Dot(&toCenter,&normal)/denominator; if(!isfinite(t))return 0; if(t<0.0f)t=-t; }
+	} else { t=YMGRE_Fvector4d_Dot(&toCenter,&normal)/denominator; if(t<=0.0f||!isfinite(t))return 0; }
 	hit->x=origin.x+direction.x*t;hit->y=origin.y+direction.y*t;hit->z=origin.z+direction.z*t;hit->w=1;
 	if(fabsf(denominator)<0.0001f){if(axis==0)hit->x=center.x;else if(axis==1)hit->y=center.y;else hit->z=center.z;}
 	return isfinite(hit->x)&&isfinite(hit->y)&&isfinite(hit->z);
