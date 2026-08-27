@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_Rasterization.h"
 #include "YMGRE_CullingAndClipping.h"
 #include "YMGRE_Camera.h"
@@ -99,12 +99,12 @@ int main(void)
 	YMGRE_Camera_Frustum_Init(clipCamera, 1, 500);
 	YMGRE_CameraImage_Init(clipCamera, (GRErgb24){ 42, 43, 47 });
 	clipPanel(clipCamera);
-	LCD_Init(DEMO_WIDTH, DEMO_HEIGHT);
-	LCD_Fill_RgbRect(0, 0, 300, DEMO_HEIGHT, camera->img.data);
-	LCD_Fill_RgbRect(300, 0, 300, DEMO_HEIGHT, fillCamera->img.data);
-	LCD_Fill_RgbRect(600, 0, 300, DEMO_HEIGHT, clipCamera->img.data);
-	while (LCD_Update(60)) { }
-	LCD_Destory();
+	YMGRE_DemoView views[] = {
+		{ YMGRE_Camera_GetRenderTarget(camera), 0, 0, 300, DEMO_HEIGHT },
+		{ YMGRE_Camera_GetRenderTarget(fillCamera), 300, 0, 300, DEMO_HEIGHT },
+		{ YMGRE_Camera_GetRenderTarget(clipCamera), 600, 0, 300, DEMO_HEIGHT }
+	};
+	YMGRE_DemoHost_Show(DEMO_WIDTH, DEMO_HEIGHT, views, 3, 60);
 	YMGRE_Free_Camera(camera);
 	YMGRE_Free_Camera(fillCamera);
 	YMGRE_Free_Camera(clipCamera);

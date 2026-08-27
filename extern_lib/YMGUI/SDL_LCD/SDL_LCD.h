@@ -4,7 +4,7 @@
 #include "YMGUI_Hal.h"
 
 //===========================================================================
-// SDL 假 LCD:实现 HAL 的 flush_cb,把软件渲染好的 framebuffer 推给 SDL 纹理
+// SDL 假 LCD:flush_cb 分块上传纹理，frame-done 回调每轮 Refresh 只 present 一次
 //   "假装自己是一块 LCD 面板"。移植到真实硬件时照此写一个 SPI/并口版 flush_cb
 //===========================================================================
 //初始化窗口 + 纹理,并填好 disp 的 flush_cb / user_data。

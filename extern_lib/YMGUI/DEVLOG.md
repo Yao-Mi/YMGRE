@@ -2,6 +2,43 @@
 
 按时间顺序记录每一轮做了什么、遇到什么问题、怎么解决的。开发始于 2026-07。
 
+## 2026-08-26：YMGRE 场景编辑器联调记录
+
+本节用于后续把工作区内 YMGUI 改动同步回独立 YMGUI 工程，不能只同步场景编辑器代码。
+
+- `SDL_LCD.c` 增加 `SDL_MOUSEWHEEL` 转发：滚轮向上注入字符键 `+`，向下注入 `-`；当前由获得焦点的视口对象把它解释为相机缩放。
+- 场景视口使用通用 `Image` 控件直接显示持续存在的 RGB565 framebuffer，不需要视频播放器专用控件；`GYimg` 和像素缓存的生命周期由应用保证。
+- Image 上方如需覆盖鼠标命中层，可以使用基础 `Obj`，但必须把 `draw_cb` 设为 `NULL`。基础 Obj 默认会以不透明灰色绘制，直接覆盖下层 Image；这是应用层透明 overlay 的明确约定，不是 Image 刷新故障。
+- YMGRE 每帧原地更新 framebuffer 后，应用需调用 `YMGUI_Obj_Invalidate(image)`，否则无其他脏区时 YMGUI 不会重新 blit 新像素。
+- Button 增加可选的裸机友好连发：`YMGUI_Button_SetRepeat` 设置首次延迟和重复间隔，应用主循环
+  调 `YMGUI_Button_Tick` 喂入经过毫秒数。默认关闭；短按保持一次 Clicked；长按已经触发连发后，
+  松开不再追加 Clicked。Scene Editor 的检查器步进按钮使用 400 ms / 80 ms，`test_event`
+  覆盖延迟、间隔、松开抑制和短按兼容。
+- TreeView 为场景层级补充节点编辑和上下文入口：`YMGUI_TreeView_SetNodeName` 深拷新名称，
+  `YMGUI_TreeView_RemoveNode` 安全移除节点子树并清理可能悬空的选择，
+  `YMGUI_TreeView_SetContextCb` 在右键命中行时先选中该行，再把节点交给应用创建菜单；
+  `test_treeview` 覆盖右键回调、重命名和删除。TreeView 只提供平台无关的上下文请求，菜单、
+  重命名弹窗和业务权限仍由应用层负责。
+- Scene Editor 中文界面不应把业务词汇追加到精简 `PRESET_CJK`。它复用
+  `Demo/gb2312_glyphs.bin` 和 `YMGUI/CORE/YMGUI_FontDataGB2312.c`：应用自造带
+  `glyph_read` 的 `GYfont`，在创建界面前调用 `YMGUI_Font_SetFallback()`，销毁界面后解除
+  fallback 并关闭 blob。这与 `demo_font_gb2312.c`、`demo_editview.c` 的既有方案一致，
+  本项不产生需要同步回 YMGUI 库的字体代码改动。
+
+同步范围：`SDL_LCD/SDL_LCD.c` 的滚轮输入改动，`YMGUI_TreeView.h/.c` 的节点编辑/上下文 API、
+`YMGUI_Button.h/.c` 的可选连发 API、`Demo/test_treeview.c`、`Demo/test_event.c`，以及下节记录的
+HAL frame-done 接口、SDL 整帧提交实现和对应测试。
+视口透明命中层与 Image invalidate 属于 `project_Demo/scene_editor` 应用代码，不需要合入 YMGUI 库。
+
+---
+
+## 2026-08-26：分块上传与整帧提交分离
+
+- HAL 新增可选的 `YMGUI_Disp_SetFrameDoneCb`，一轮有效 Refresh 完成后只通知一次；
+- SDL `flush_cb` 仅执行每个 band 的纹理上传，`SDL_RenderPresent` 移到 frame-done 回调；
+- 保留小 draw buffer 的分块刷新能力，避免每个 band 单独等待 VSYNC；
+- `test_invalidate` 增加多脏区/多 band 只触发一次 frame-done 的回归检查。
+
 ---
 
 ## 第 0 轮：架构讨论

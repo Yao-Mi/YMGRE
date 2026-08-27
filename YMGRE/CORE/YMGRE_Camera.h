@@ -18,6 +18,10 @@ static inline void YMGRE_UVNCamera_PositionInit(GRE_Camera4d myCam, GRE_Fvector4
 	//根据上述定义计算其他参数
 	gre_fvector4d viewN;
 	YMGRE_Fvector4d_SubToResult(&myCam->traget, &myCam->pos, &viewN); //法向量
+	//位置与目标重合时仍给出可用朝向，避免后续相机基向量退化。
+	if (YMGRE_Fvector4d_Len2(&viewN) < 1e-12f)
+		viewN = (gre_fvector4d){ 0, 0, 1, 0 };
+	YMGRE_Fvector4d_Normalize(&viewN);
 	//默认设置 up 向量朝上，这样设置如果横跨物体，则会产生问题，
 	//如在x=0,z=0，N向量与默认的up向量共线，该处为畸点
 	gre_fvector4d view_up;
@@ -35,20 +39,34 @@ static inline void YMGRE_UVNCamera_PositionInit(GRE_Camera4d myCam, GRE_Fvector4
 		view_up.z = Vreference->z;
 	}
 	view_up.w = 0;
-	//计算U V 平面 ,右手定则
+	//默认 up 与视线平行时改用 Z 轴，保证叉乘能形成正交基。
 	gre_fvector4d viewU;
-	gre_fvector4d viewV;
 	YMGRE_Fvector4d_CrossToResult(&viewN, &view_up, &viewU);// N×v =U ： right向量
+	if (YMGRE_Fvector4d_Len2(&viewU) < 1e-12f)
+	{
+		view_up = (gre_fvector4d){ 0, 0, 1, 0 };
+		YMGRE_Fvector4d_CrossToResult(&viewN, &view_up, &viewU);
+		if (YMGRE_Fvector4d_Len2(&viewU) < 1e-12f)
+		{
+			view_up = (gre_fvector4d){ 1, 0, 0, 0 };
+			YMGRE_Fvector4d_CrossToResult(&viewN, &view_up, &viewU);
+		}
+	}
+	//计算U V 平面 ,右手定则
+	gre_fvector4d viewV;
 	YMGRE_Fvector4d_CrossToResult(&viewU, &viewN, &viewV);//N × U = V : up向量
 	//归一化向量
 	YMGRE_Fvector4d_Normalize(&viewU);
 	YMGRE_Fvector4d_Normalize(&viewV);
-	YMGRE_Fvector4d_Normalize(&viewN);
 	//UV绕 N轴 旋转theta度
 	gre_fmat4x4 camRotate;
 	YMGRE_FMat4x4_RotateTo(&viewN, theta, &camRotate);//必须是绕单位轴旋转
 	YMGRE_Fvector4d_MatMultTo(&camRotate, &viewU, &viewU);
 	YMGRE_Fvector4d_MatMultTo(&camRotate, &viewV, &viewV);
+	//运动接口和变换矩阵必须共享同一组相机基向量。
+	myCam->move.cu = viewU;
+	myCam->move.cv = viewV;
+	myCam->move.cn = viewN;
 
 	//计算相机变换逆矩阵
 	gre_fvector4d mov; //平移向量，将相机平移到原点
@@ -66,11 +84,12 @@ static inline void YMGRE_UVNCamera_PositionInit(GRE_Camera4d myCam, GRE_Fvector4
 //相机初始化：背景色，相机采集图像
 static inline void YMGRE_CameraImage_Init(GRE_Camera4d myCam,GRErgb24 background)
 {
+	GRE_RenderTarget target = (myCam->target != NULL) ? myCam->target : &myCam->img;
 	float32 zfar_val= myCam->frustum.Zfar;
-	for (int i = 0,imgsize= myCam->img.width* myCam->img.height; i < imgsize; i++)
+	for (int i = 0,imgsize= target->width* target->height; i < imgsize; i++)
 	{
-		myCam->img.zbuff[i] = zfar_val;//初始化zbuff为最远距离 zfar
-		myCam->img.data[i] = GRE_FramePixel_From_RGB24(background);//初始化为默认背景色
+		target->zbuff[i] = zfar_val;//初始化zbuff为最远距离 zfar
+		target->data[i] = GRE_FramePixel_From_RGB24(background);//初始化为默认背景色
 	}
 }
 

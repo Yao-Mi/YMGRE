@@ -70,6 +70,7 @@ typedef struct
 	GYtree_expand_cb   expand_cb;
 	GYtree_select_cb   select_cb;
 	GYtree_activate_cb activate_cb;
+	GYtree_context_cb  context_cb;
 	//配色
 	GYcolor bg, sel_bg, txt, dir_txt, mark;
 }GYtree_data;
@@ -388,6 +389,21 @@ static void treeEventCb(GYOBJ obj, GYEvent e)
 			}
 		}
 		break;
+	case GY_EVENT_ContextRequested:
+	{
+		int32 ri = rowAtPointer(obj, d, py);
+		if (ri >= 0)
+		{
+			GYtree_node* n = d->vis[(uint16)ri];
+			d->selected = n;
+			YMGUI_Obj_Invalidate(obj);
+			if (d->select_cb != NULL)
+				d->select_cb(obj, n);
+			if (d->context_cb != NULL)
+				d->context_cb(obj, n);
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -418,6 +434,7 @@ GYOBJ YMGUI_Creat_TreeView_Creat(GYOBJ parent, GYcoord x, GYcoord y, GYcoord w, 
 	d->expand_cb = NULL;
 	d->select_cb = NULL;
 	d->activate_cb = NULL;
+	d->context_cb = NULL;
 	d->bg      = GY_ARGB(0xFF, 0x1C, 0x1C, 0x24);
 	d->sel_bg  = GY_ARGB(0xFF, 0x35, 0x5A, 0x8A);
 	d->txt     = GY_ARGB(0xFF, 0xE8, 0xE8, 0xE8);
@@ -480,6 +497,40 @@ GYTREENODE YMGUI_TreeView_AddNode(GYOBJ tree, GYTREENODE parent_node, const char
 	clampScroll(tree);
 	YMGUI_Obj_Invalidate(tree);
 	return n;
+}
+
+uint8 YMGUI_TreeView_SetNodeName(GYOBJ tree, GYTREENODE node, const char* name)
+{
+	gy_assert(tree && tree->user_data && node && name);
+	if (tree == NULL || tree->user_data == NULL || node == NULL || name == NULL || name[0] == '\0')
+		return 0;
+	uint16 i = 0;
+	while (name[i] != '\0' && i < TV_NAME_MAX - 1) { node->name[i] = name[i]; i++; }
+	node->name[i] = '\0';
+	YMGUI_Obj_Invalidate(tree);
+	return 1;
+}
+
+uint8 YMGUI_TreeView_RemoveNode(GYOBJ tree, GYTREENODE node)
+{
+	gy_assert(tree && tree->user_data && node);
+	if (tree == NULL || tree->user_data == NULL || node == NULL) return 0;
+	GYtree_data* d = (GYtree_data*)tree->user_data;
+	GYtree_node** head = node->parent != NULL ? &node->parent->child_head : &d->root_head;
+	GYtree_node** tail = node->parent != NULL ? &node->parent->child_tail : &d->root_tail;
+	GYtree_node* previous = NULL;
+	GYtree_node* current = *head;
+	while (current != NULL && current != node) { previous = current; current = current->sibling; }
+	if (current == NULL) return 0;
+	if (previous != NULL) previous->sibling = node->sibling;
+	else *head = node->sibling;
+	if (*tail == node) *tail = previous;
+	d->selected = NULL;
+	freeSubtree(node);
+	rebuildVisible(tree);
+	clampScroll(tree);
+	YMGUI_Obj_Invalidate(tree);
+	return 1;
 }
 
 void YMGUI_TreeView_ClearChildren(GYOBJ tree, GYTREENODE node)
@@ -589,6 +640,13 @@ void YMGUI_TreeView_SetActivateCb(GYOBJ tree, GYtree_activate_cb cb)
 	gy_assert(tree && tree->user_data);
 	gy_log_explain((tree == NULL) || (tree->user_data == NULL), GY_LOG_PtrI, "树或数据不存在");
 	((GYtree_data*)tree->user_data)->activate_cb = cb;
+}
+
+void YMGUI_TreeView_SetContextCb(GYOBJ tree, GYtree_context_cb cb)
+{
+	gy_assert(tree && tree->user_data);
+	gy_log_explain((tree == NULL) || (tree->user_data == NULL), GY_LOG_PtrI, "树或数据不存在");
+	((GYtree_data*)tree->user_data)->context_cb = cb;
 }
 
 void YMGUI_TreeView_SetRowHeight(GYOBJ tree, GYcoord row_h)

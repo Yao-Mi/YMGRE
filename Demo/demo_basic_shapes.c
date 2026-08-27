@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Camera.h"
@@ -67,12 +67,14 @@ static GRE_Camera4d creatBasicCamera(void)
 //将渲染结果交给 YMGUI 显示
 static void showCameraImage(GRE_Camera4d camera)
 {
-	LCD_Init(800, 600);
-	LCD_Fill_RgbRect(0, 0, camera->img.width, camera->img.height, camera->img.data);
-	while (LCD_Update(60))
-	{
-	}
-	LCD_Destory();
+	YMGRE_DemoHost host;
+	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(camera);
+	if (!YMGRE_DemoHost_Init(&host, 800, 600, 40))
+		return;
+	if (YMGRE_DemoHost_AddTarget(&host, target, 0, 0,
+		target->width, target->height) != NULL)
+		YMGRE_DemoHost_Run(&host, 60);
+	YMGRE_DemoHost_Destroy(&host);
 }
 
 int main(void)

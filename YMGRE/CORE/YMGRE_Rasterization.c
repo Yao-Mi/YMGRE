@@ -101,6 +101,33 @@ void YMGRE_Img_Line(GRE_FrameBuffer data, uint16 width, uint16 height, int16 x1,
 	}
 }
 
+//已裁剪3D线段的屏幕空间光栅化，使用1/z插值保持透视深度正确
+void YMGRE_Img_LineDepth(GRE_FrameBuffer data, float32* zbuff, uint16 width, uint16 height,
+	int16 x1, int16 y1, float32 z1, int16 x2, int16 y2, float32 z2, GRErgb24 color, uint8 depthTest)
+{
+	gre_log_explain((data == NULL) || (zbuff == NULL), GRE_LOG_PtrIO, "线段颜色或深度缓存不存在");
+	int32 dx = (x2 >= x1) ? x2 - x1 : x1 - x2;
+	int32 dy = (y2 >= y1) ? y2 - y1 : y1 - y2;
+	int32 steps = (dx > dy) ? dx : dy;
+	GRE_FramePixel pixel = GRE_FramePixel_From_RGB24(color);
+	float32 invZ1 = 1.0f / z1;
+	float32 invZ2 = 1.0f / z2;
+	for (int32 i = 0; i <= steps; i++)
+	{
+		float32 t = (steps > 0) ? (float32)i / steps : 0.0f;
+		int32 x = x1 + (int32)((x2 - x1) * t + ((x2 >= x1) ? 0.5f : -0.5f));
+		int32 y = y1 + (int32)((y2 - y1) * t + ((y2 >= y1) ? 0.5f : -0.5f));
+		if (x < 0 || y < 0 || x >= width || y >= height) continue;
+		float32 z = 1.0f / (invZ1 + (invZ2 - invZ1) * t);
+		uint32 index = (uint32)y * width + x;
+		if (!depthTest || z <= zbuff[index] + YMGRE_RASTER_WIRE_DEPTH_EPSILON)
+		{
+			data[index] = pixel;
+			if (depthTest && z < zbuff[index]) zbuff[index] = z;
+		}
+	}
+}
+
 //多边形轮廓与扫描填充统一在像素中心采样，并使用同一平面深度参与遮挡
 static void YMGRE_Img_PolygonLine(GRE_FrameBuffer data, uint16 width, float32* zbuff,
 	GRE_Fvector4d plane, int16 x1, int16 y1, int16 x2, int16 y2)

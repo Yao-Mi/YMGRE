@@ -1,6 +1,7 @@
 # CMake编译输出
 build/
 **/build/
+build-*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake

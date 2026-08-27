@@ -22,10 +22,16 @@ static int fails = 0;
 
 //累计 flush 的像素面积(验证多矩形比单包围盒省)
 static long g_flush_px;
+static int g_frame_done_count;
 static void areaFlushCb(GYdisp* d, const GYrect* area, const GYpx* buf)
 {
 	(void)d; (void)buf;
 	g_flush_px += (long)area->w * area->h;
+}
+static void frameDoneCb(GYdisp* d)
+{
+	(void)d;
+	g_frame_done_count++;
 }
 
 int main(void)
@@ -39,6 +45,7 @@ int main(void)
 	disp.buf2 = NULL;
 	disp.flush_cb = areaFlushCb;
 	disp.user_data = NULL;
+	YMGUI_Disp_SetFrameDoneCb(&disp, frameDoneCb);
 
 	GYCTX ctx = YMGUI_Creat_Ctx_Creat(&disp, SCR_W, SCR_H);
 
@@ -52,9 +59,13 @@ int main(void)
 
 	//关键:多矩形刷新面积 = 2*400 = 800;若塌成单包围盒则是 320*240=76800
 	g_flush_px = 0;
+	g_frame_done_count = 0;
 	YMGUI_Refresh(ctx);
 	CHECK(g_flush_px < 2000, "multi-rect flush area small (~800, not full-screen 76800)");
 	CHECK(ctx->inv_cnt == 0, "refresh clears dirty list");
+	CHECK(g_frame_done_count == 1, "one frame-done after all dirty rects/bands");
+	YMGUI_Refresh(ctx);
+	CHECK(g_frame_done_count == 1, "idle refresh does not emit frame-done");
 
 	//---- 两块接触 → 应合并成 1 块 ----
 	ctx->inv_cnt = 0;
@@ -85,6 +96,7 @@ int main(void)
 	}
 	CHECK(ctx->inv_cnt >= 1 && ctx->inv_cnt <= GY_INV_MAX, "list never exceeds cap");
 
+	YMGUI_Disp_SetFrameDoneCb(&disp, NULL);
 	YMGUI_Free_CtxFree(ctx);
 	GY_free1(disp.buf1);
 

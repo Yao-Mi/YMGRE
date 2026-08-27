@@ -150,6 +150,7 @@ static GRE_Camera4d creatCameraHeader(int16 id, float32 alpha_Lx, float32 alpha_
 
 	mycam->img = (gre_render_target){ 0 };
 	mycam->target = NULL;
+	mycam->ownsImageBuffers = 0;
 	mycam->workspace = NULL;
 	return mycam;
 }
@@ -162,6 +163,7 @@ GRE_Camera4d YMGRE_Creat_Camera(int16 id, uint16 imgW, uint16 imgH, float32 alph
 	mycam->img.data = (GRE_FrameBuffer)GRE_ImageBuff_Malloc((size_t)imgW * imgH * sizeof(GRE_FramePixel));
 	mycam->img.zbuff = (float32*)GRE_ImageBuff_Malloc((size_t)imgW * imgH * sizeof(float32));
 	mycam->target = &mycam->img;
+	mycam->ownsImageBuffers = 1;
 	gre_log_explain((mycam->img.data == NULL) || (mycam->img.zbuff == NULL), GRE_LOG_Mem1, "相机照片内存申请失败");
 	return mycam;
 }
@@ -172,7 +174,11 @@ GRE_Camera4d YMGRE_Creat_CameraFromTarget(int16 id, GRE_RenderTarget target, flo
 	GRE_Camera4d mycam = creatCameraHeader(id, alpha_Lx, alpha_Rx, beta_Uy, beta_Dy);
 	mycam->img.width = target->width;//保留原相机尺寸读取接口
 	mycam->img.height = target->height;
+	//兼容旧的img读取接口，但缓存所有权仍属于调用者提供的RenderTarget
+	mycam->img.data = target->data;
+	mycam->img.zbuff = target->zbuff;
 	mycam->target = target;
+	mycam->ownsImageBuffers = 0;
 	return mycam;
 }
 

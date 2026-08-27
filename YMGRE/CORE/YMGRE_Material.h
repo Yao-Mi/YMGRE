@@ -6,12 +6,12 @@
 static inline GRErgb24 getPixel(GRE_Material mat, float u, float v)
 {
 	static GRErgb24 color = { .R = 128,.G = 128,.B = 128 };
-	if (mat && mat->valid)
+	if (mat && mat->valid && mat->pixel && mat->width > 0 && mat->height > 0)
 	{
 		// 这是一个更精确的方法, 但是效率低一点
 		// 纹理u,v在[0,1]区间
-		int x = YMGRE_Abs(u - (int)u) * mat->width;
-		int y = YMGRE_Abs(v - (int)v) * mat->height;
+		int x = YMGRE_Fabs(u - (int)u) * mat->width;
+		int y = YMGRE_Fabs(v - (int)v) * mat->height;
 		return mat->pixel[y * mat->width + x];
 	}
 	else

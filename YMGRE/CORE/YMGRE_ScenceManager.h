@@ -15,8 +15,23 @@ typedef struct
 	GRE_Terrain curTerrain;
 	gre_list RenderList;//渲染列表
 	uint8 needUpdate;//场景发生改变，需要更新
+	char* resourceRoot;//资源根目录，由场景拥有
+	gre_fvector4d cameraPos;
+	gre_fvector4d cameraTarget;
+	float32 cameraTheta;
+	uint8 initialized;
 }gre_scence;
 typedef gre_scence* GRE_Scence;
+
+typedef struct
+{
+	void* userData;
+	int (*step)(void* userData, int fps);
+	int (*readKey)(void* userData, char* key);
+	int (*readPointer)(void* userData, GRE_Camera4d camera, int* x, int* y);
+	void (*present)(void* userData, GRE_Camera4d camera);
+} gre_scene_host;
+typedef const gre_scene_host* GRE_SceneHost;
 
 
 //材质管理
@@ -36,7 +51,9 @@ void YMGRE_Scence_AddLight(GRE_Scence thisSc, GRE_Light4d thiso);//添加光源
 void YMGRE_SetLight_Pos(GRE_List LightList, int16 Id, gre_fvector4d newPos);//设置灯光位置
 
 //管线渲染
-void YMGRE_Scene_Rendering(GRE_Scence pthisc);
+int YMGRE_Scene_Init(GRE_Scence pthisc, const char* resourceRoot);
+void YMGRE_Scene_Destroy(GRE_Scence pthisc);
+void YMGRE_Scene_Rendering(GRE_Scence pthisc, GRE_SceneHost host);
 
 #endif // !_YMGRE_SCENCEMANAGER_H
 

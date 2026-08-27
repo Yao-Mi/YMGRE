@@ -4,11 +4,35 @@
 #include "./YMGRE_RenderContext.h"
 #include "./YMGRE_CullingAndClipping.h"
 #include "./YMGRE_Rasterization.h"
-#include "../PORT/YMGRE_YMGUI_LCD.h"
+#include "../CONFIG/YMGRE_Mem.h"
+#include <stdio.h>
+#include <string.h>
 
-#ifndef YMGRE_RESOURCE_DIR
-#define YMGRE_RESOURCE_DIR "Resource"
-#endif
+static char* scene_make_path(const char* root, const char* suffix)
+{
+	if (root == NULL || suffix == NULL)
+		return NULL;
+	size_t rootLen = strlen(root);
+	size_t suffixLen = strlen(suffix);
+	uint8 slash = (rootLen > 0 && root[rootLen - 1] != '/');
+	char* path = GRE_malloc1(rootLen + suffixLen + slash + 1);
+	if (path == NULL)
+		return NULL;
+	memcpy(path, root, rootLen);
+	if (slash)
+		path[rootLen++] = '/';
+	memcpy(path + rootLen, suffix, suffixLen + 1);
+	return path;
+}
+
+static int scene_file_exists(const char* path)
+{
+	FILE* file = fopen(path, "rb");
+	if (file == NULL)
+		return 0;
+	fclose(file);
+	return 1;
+}
 
 static char* unum2str(uint32 unum)
 {
@@ -183,22 +207,6 @@ void YMGRE_SetObject_Pos(GRE_Object4d thiso, float32 x, float32 y, float32 z)
 /////////////////////////////材质管理//////////////////////////
 
 //找到对应的材质
-GRE_Material YMGRE_Material_Find(GRE_List MaterialList, char* materialName)
-{
-	GRE_Material which = NULL;
-	int nameLen = strlen(materialName) + 1;
-
-	for (GRE_ListNode curMaterialist = MaterialList->listhead; curMaterialist != NULL; curMaterialist = curMaterialist->next)//遍历物体
-	{
-		GRE_Material thismt = curMaterialist->data;
-		if ((thismt->nameLen == nameLen) && (YMGRE_Memcmp(thismt->name, materialName, nameLen) == 0))
-		{
-			which = thismt;
-			break;
-		}
-	}
-	return which;
-}
 //往场景中添加材质
 void YMGRE_Scence_AddMeterial(GRE_Scence thisSc, GRE_Material thiso)
 {
@@ -259,7 +267,9 @@ void YMGRE_Scence_AddTerrain(GRE_Scence thisSc, GRE_Terrain thiso)
 void gre_terrainInit(GRE_Scence pthisc)
 {
 	//添加地形
-	GRE_Terrain myTerr = YMGRE_Load_SceneTerrainAndMaterial(pthisc, YMGRE_RESOURCE_DIR "/map/map001.map");
+	char* mapPath = scene_make_path(pthisc->resourceRoot, "map/map001.map");
+	GRE_Terrain myTerr = YMGRE_Load_SceneTerrainAndMaterial(pthisc, mapPath);
+	GRE_free1(mapPath);
 	
 	YMGRE_Scence_AddTerrain(pthisc, myTerr);//装载到全局地形库
 
@@ -286,7 +296,9 @@ void gre_lightInit(GRE_Scence pthisc)
 void gre_objInit(GRE_Scence pthisc)
 {
 	//添加物体
-	GRE_Object4d myMesh = YMGRE_LoadOgreMeshAndMaterial(pthisc, YMGRE_RESOURCE_DIR "/obj/Tank1_Body.mesh");
+	char* meshPath = scene_make_path(pthisc->resourceRoot, "obj/Tank1_Body.mesh");
+	GRE_Object4d myMesh = YMGRE_LoadOgreMeshAndMaterial(pthisc, meshPath);
+	GRE_free1(meshPath);
 	YMGRE_Scence_AddObject(pthisc, myMesh);//装载到全局物体库
 	
 }
@@ -357,91 +369,124 @@ void gre_objOpera(GRE_Object4d pthis)
 }
 
 //场景更新
-void gre_camUpdate(GRE_Camera4d pthis)
+void gre_camUpdate(GRE_Scence scene, GRE_Camera4d pthis, GRE_SceneHost host)
 {
 	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(pthis);
-	//初始位置点和注视点 //{ .x = -24,.y = 80 ,.z = 140 ,.w = 1 }
-	static gre_fvector4d campos = { .x = 10,.y = 25 ,.z = 30 ,.w = 1 }, targetpos = {.x = 0, .y = 0, .z = 0, .w = 1};
-	//自旋角
-	static float32 theta = 0;
+	gre_fvector4d* campos = &scene->cameraPos;
+	gre_fvector4d* targetpos = &scene->cameraTarget;
+	float32* theta = &scene->cameraTheta;
 
 	if (pthis->ID == 0)
 	{
 		pthis->isMoved = 1;//相机被移动
 		char a;
-		if (LCD_GetChar(&a))
+		if (host->readKey != NULL && host->readKey(host->userData, &a))
 		{
-			if (a == 'w')campos.z += 10;
-			if (a == 's')campos.z -= 10;
-			if (a == 'd')theta += 10;
-			if (a == 'a')theta -= 10;
+			if (a == 'w')campos->z += 10;
+			if (a == 's')campos->z -= 10;
+			if (a == 'd')*theta += 10;
+			if (a == 'a')*theta -= 10;
 
-			printf("theta=%.5f  ", theta);
-			printf("z=%.5f  \n", campos.z);
+			printf("theta=%.5f  ", *theta);
+			printf("z=%.5f  \n", campos->z);
 		}
 
 		int x, y;
-		if (LCD_GetXY(0, 0, target->width, target->height, &x, &y))
+		if (host->readPointer != NULL &&
+			host->readPointer(host->userData, pthis, &x, &y))
 		{
 			float thx = (x - target->width / 2.0f);
 			float thy = (target->height / 2.0f - y);//反向
-			campos.x = thx;
-			campos.y = thy;
+			campos->x = thx;
+			campos->y = thy;
 			//YMGRE_SetLight_Pos(&mysc.LightList, 1, (gre_fvector4d) { .x = thx, .y = thy, .z = 20, .w = 1 });
 			printf("x=%.5f y=%.5f \n", thx, thy);
 		}
 
 		//空间位置初始化,使用默认的v参考向量
-		YMGRE_UVNCamera_PositionInit(pthis, &campos, &targetpos, NULL, theta);
+		YMGRE_UVNCamera_PositionInit(pthis, campos, targetpos, NULL, *theta);
 	}
 	else if(pthis->ID == 1)
 	{
 		//空间位置初始化,使用默认的v参考向量
-		YMGRE_UVNCamera_PositionInit(pthis, &campos, &targetpos, NULL, theta);
+		YMGRE_UVNCamera_PositionInit(pthis, campos, targetpos, NULL, *theta);
 	}
 }
-
-//显示摄像头采集到的图像
-void gre_camShow(GRE_Camera4d pthis)
-{
-	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(pthis);
-	if (pthis->ID == 0)
-	{
-		LCD_Fill_RgbRect(0, 0, target->width, target->height, target->data);
-	}
-	else if (pthis->ID == 1)
-	{
-		LCD_Fill_RgbRect(500, 0, target->width, target->height, target->data);
-	}
-}
-
 
 //场景渲染管线
-void YMGRE_Scene_Rendering(GRE_Scence pthisc)
+int YMGRE_Scene_Init(GRE_Scence pthisc, const char* resourceRoot)
 {
-	//场景初始化
-	gre_terrainInit(pthisc);//场景加载
-	gre_camInit(pthisc);//相机加载
-	gre_objInit(pthisc);//物体加载
-	gre_lightInit(pthisc);//灯光加载
-
-	//将所有物体Mesh添加到渲染列表中
+	if (pthisc == NULL)
+		return 0;
+	if (pthisc->initialized)
+		return 1;
+	const char* root = (resourceRoot != NULL && resourceRoot[0] != '\0') ?
+		resourceRoot : "Resource";
+	pthisc->resourceRoot = scene_make_path(root, "");
+	if (pthisc->resourceRoot == NULL)
+		return 0;
+	char* mapPath = scene_make_path(pthisc->resourceRoot, "map/map001.map");
+	char* meshPath = scene_make_path(pthisc->resourceRoot, "obj/Tank1_Body.mesh");
+	int resourcesAvailable = mapPath != NULL && meshPath != NULL &&
+		scene_file_exists(mapPath) && scene_file_exists(meshPath);
+	GRE_free1(mapPath);
+	GRE_free1(meshPath);
+	if (!resourcesAvailable)
+	{
+		fprintf(stderr, "YMGRE: resource root '%s' is missing required scene files\n", root);
+		GRE_free1(pthisc->resourceRoot);
+		pthisc->resourceRoot = NULL;
+		return 0;
+	}
+	pthisc->cameraPos = (gre_fvector4d) { .x = 10, .y = 25, .z = 30, .w = 1 };
+	pthisc->cameraTarget = (gre_fvector4d) { .x = 0, .y = 0, .z = 0, .w = 1 };
+	pthisc->cameraTheta = 0;
+	gre_terrainInit(pthisc);
+	gre_camInit(pthisc);
+	gre_objInit(pthisc);
+	gre_lightInit(pthisc);
 	gre_RenderListInit(pthisc);
+	for (GRE_ListNode node = pthisc->RenderList.listhead; node != NULL; node = node->next)
+	{
+		GRE_Object4d object = node->data;
+		do { YMGRE_Object_LocalToWorld(object); }
+		while ((object = object->nextObject) != NULL);
+	}
+	pthisc->initialized = 1;
+	return 1;
+}
+
+void YMGRE_Scene_Destroy(GRE_Scence pthisc)
+{
+	if (pthisc == NULL)
+		return;
+	gre_RenderListClear(pthisc);
+	YMGRE_List_Clear(&pthisc->CamList, YMGRE_Free_Camera);
+	YMGRE_List_Clear(&pthisc->ObjList, YMGRE_Free_Object);
+	YMGRE_List_Clear(&pthisc->LightList, YMGRE_Free_Light);
+	YMGRE_List_Clear(&pthisc->MaterialList, YMGRE_Free_Material);
+	YMGRE_List_Clear(&pthisc->TerrainList, YMGRE_Free_Terrain);
+	GRE_free1(pthisc->resourceRoot);
+	pthisc->resourceRoot = NULL;
+	pthisc->curTerrain = NULL;
+	pthisc->cameraPos = (gre_fvector4d) { 0 };
+	pthisc->cameraTarget = (gre_fvector4d) { 0 };
+	pthisc->cameraTheta = 0;
+	pthisc->initialized = 0;
+}
+
+void YMGRE_Scene_Rendering(GRE_Scence pthisc, GRE_SceneHost host)
+{
+	gre_log_explain((pthisc == NULL) || (host == NULL) ||
+		(host->step == NULL) || (host->present == NULL),
+		GRE_LOG_PtrI, "场景或应用宿主不存在");
+	if (!pthisc->initialized && !YMGRE_Scene_Init(pthisc, NULL))
+		return;
 	//多个相机顺序渲染时共享一份临时工作区，各自保留独立图像
 	GRE_RenderWorkspace renderWorkspace = YMGRE_Creat_RenderWorkspace();
 
-	//物理空间变换到世界空间
-	for (GRE_ListNode curObjlist = pthisc->RenderList.listhead; curObjlist != NULL; curObjlist = curObjlist->next)//遍历物体
-	{
-		GRE_Object4d thisobj = curObjlist->data;
-		//遍历该物体所有的subMesh
-		do
-		{
-			YMGRE_Object_LocalToWorld(thisobj);
-		} while ((thisobj = thisobj->nextObject) != NULL);
-	}
-
-	while (LCD_Update(100))
+	int running = 1;
+	while (running)
 	{
 		//遍历所有物体,更新对物体的操作
 		for (GRE_ListNode curObjlist = pthisc->RenderList.listhead; curObjlist != NULL; curObjlist = curObjlist->next)
@@ -455,7 +500,7 @@ void YMGRE_Scene_Rendering(GRE_Scence pthisc)
 			GRE_Camera4d thiscam = curCamlist->data;
 
 			//对相机参数进行更新
-			gre_camUpdate(thiscam);
+			gre_camUpdate(pthisc, thiscam, host);
 
 			//相机被移到 或者 场景更新
 			if (thiscam->isMoved || pthisc->needUpdate)
@@ -466,7 +511,7 @@ void YMGRE_Scene_Rendering(GRE_Scence pthisc)
 					&pthisc->MaterialList, renderWorkspace);
 
 				//显示相机画面
-				gre_camShow(thiscam);
+				host->present(host->userData, thiscam);
 				//相机移动更新完毕
 			    thiscam->isMoved = 0;
 			}
@@ -474,17 +519,11 @@ void YMGRE_Scene_Rendering(GRE_Scence pthisc)
 		
 		//场景更新完毕
 		pthisc->needUpdate = 0;
+		running = host->step(host->userData, 100);
 	}
 
-	//释放场景内存
-	YMGRE_Free_RenderWorkspace(renderWorkspace);//释放相机共享工作区
-	gre_RenderListClear(pthisc);//渲染列表只释放节点，不释放物体
-	YMGRE_List_Clear(&pthisc->CamList, YMGRE_Free_Camera);//释放相机内存
-	YMGRE_List_Clear(&pthisc->ObjList, YMGRE_Free_Object);//释放物体内存
-	YMGRE_List_Clear(&pthisc->LightList, YMGRE_Free_Light);//释放灯光内存
-	YMGRE_List_Clear(&pthisc->MaterialList, YMGRE_Free_Material);//释放材质内存
-	YMGRE_List_Clear(&pthisc->TerrainList, YMGRE_Free_Terrain);//释放地形内存
-	pthisc->curTerrain = NULL;
+	YMGRE_Free_RenderWorkspace(renderWorkspace);
+	YMGRE_Scene_Destroy(pthisc);
 }
 
 

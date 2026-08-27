@@ -31,8 +31,11 @@ void YMGRE_Free_Camera(void* data)
 {
 	GRE_Camera4d pthis = data;
 	if (pthis == NULL)return;
-	GRE_ImageBuff_Free(pthis->img.zbuff);//z - buff
-	GRE_ImageBuff_Free(pthis->img.data);//图像
+	//创建方式决定所有权；后续重新绑定RenderTarget不会改变释放责任
+	if (pthis->ownsImageBuffers) {
+		GRE_ImageBuff_Free(pthis->img.zbuff);//z - buff
+		GRE_ImageBuff_Free(pthis->img.data);//图像
+	}
 	GRE_free0(pthis);
 }
 

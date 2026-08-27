@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Camera.h"
@@ -131,7 +131,7 @@ static GRErgb24 scaleLightColor(GRErgb24 color, float32 strength)
 
 static void renderPanel(GRE_Camera4d camera, GRE_List objects, GRE_List lights,
 	GRE_RenderWorkspace workspace, GRE_Light4d marker, GRErgb24 markerColor,
-	uint8 showSpotCone, int x, int y)
+	uint8 showSpotCone)
 {
 	gre_list materials = { 0 };
 	YMGRE_Camera_TanglePipline_RenderingWithWorkspace(camera, lights, objects,
@@ -156,7 +156,6 @@ static void renderPanel(GRE_Camera4d camera, GRE_List objects, GRE_List lights,
 			drawSpotCone(camera, marker, displayColor, innerAngleDeg);
 		}
 	}
-	LCD_Fill_RgbRect(x, y, camera->img.width, camera->img.height, camera->img.data);
 }
 
 int main(void)
@@ -189,13 +188,7 @@ int main(void)
 		float32 d = spot->proper.spot.cs_inner_angle - spot->proper.spot.cs_outer_angle;
 		spot->proper.spot.cs_div_ = 1.0f / d;
 	}
-	// The pipeline evaluates normals, positions and directions in camera space.
-	{
-		gre_fvector4d worldDirection = spot->proper.spot.direct;
-		YMGRE_Fvector4d_MatMultTo(&spotCamera->move.TMat, &worldDirection,
-			&spot->proper.spot.direct);
-		spot->proper.spot.direct.w = 0;
-	}
+	// 工作区渲染管线会按当前相机转换世界空间灯光位置和方向。
 	gre_list globalLights = { 0 };
 	gre_list pointLights = { 0 };
 	gre_list spotLights = { 0 };
@@ -203,15 +196,18 @@ int main(void)
 	YMGRE_List_Append(&pointLights, sizeof(gre_light4d), point);
 	YMGRE_List_Append(&spotLights, sizeof(gre_light4d), spot);
 
-	LCD_Init(900, 300);
 	renderPanel(globalCamera, &objects, &globalLights, workspace, NULL,
-		(GRErgb24){ 255, 255, 255 }, 0, 0, 0);
+		(GRErgb24){ 255, 255, 255 }, 0);
 	renderPanel(pointCamera, &objects, &pointLights, workspace, point,
-		(GRErgb24){ 255, 210, 80 }, 0, 300, 0);
+		(GRErgb24){ 255, 210, 80 }, 0);
 	renderPanel(spotCamera, &objects, &spotLights, workspace, spot,
-		(GRErgb24){ 80, 220, 255 }, 1, 600, 0);
-	while (LCD_Update(60)) { }
-	LCD_Destory();
+		(GRErgb24){ 80, 220, 255 }, 1);
+	YMGRE_DemoView views[] = {
+		{ YMGRE_Camera_GetRenderTarget(globalCamera), 0, 0, 300, 300 },
+		{ YMGRE_Camera_GetRenderTarget(pointCamera), 300, 0, 300, 300 },
+		{ YMGRE_Camera_GetRenderTarget(spotCamera), 600, 0, 300, 300 }
+	};
+	YMGRE_DemoHost_Show(900, 300, views, 3, 60);
 
 	YMGRE_Free_RenderWorkspace(workspace);
 	YMGRE_Free_Camera(globalCamera);

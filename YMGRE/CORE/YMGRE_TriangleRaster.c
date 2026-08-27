@@ -23,7 +23,7 @@ static inline int YMGRE_Raster_Floor(float32 value)
 //获取贴图材质的颜色
 static inline GRErgb24 EMaterial_GetPixel(GRErgb24* bitmap, uint16 width, uint16 height, float32 u, float32 v)
 {
-	if (bitmap)
+	if (bitmap && width > 0 && height > 0)
 	{
 		// 这是一个更精确的方法, 但是效率低一点
 		int x = YMGRE_Fabs(u - (int)u) * width;
@@ -503,5 +503,4 @@ void YMGRE_TriangleRaster_Fill(GRE_Vertex4d vertexList, GRE_Polygon4d polygon,
 			planecolor, material, camera);
 	}
 }
-
 

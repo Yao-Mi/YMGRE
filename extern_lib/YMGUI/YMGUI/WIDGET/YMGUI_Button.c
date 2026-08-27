@@ -28,6 +28,11 @@ typedef struct
 	char             text[GY_BTN_TEXT_MAX];//标题文字
 	GYIMG            src;     //图源(不拥有;非 NULL 则贴图不画文字)
 	uint8            draw_bg; //底色+边框是否画(默认 1)
+	uint16           repeat_delay;
+	uint16           repeat_interval;
+	uint16           repeat_elapsed;
+	uint8            repeat_active;
+	uint8            repeat_fired;
 }GYbtn_data;
 
 /**
@@ -80,13 +85,26 @@ static void btnEventCb(GYOBJ obj, GYEvent e)
 	switch (e)
 	{
 	case GY_EVENT_Pressed:
+		d->repeat_elapsed = 0;
+		d->repeat_active = 0;
+		d->repeat_fired = 0;
+		YMGUI_Obj_Invalidate(obj);//状态变了,重绘
+		break;
 	case GY_EVENT_Released:
+		d->repeat_elapsed = 0;
+		d->repeat_active = 0;
+		YMGUI_Obj_Invalidate(obj);//状态变了,重绘
+		break;
 	case GY_EVENT_ReleasedOff:
+		d->repeat_elapsed = 0;
+		d->repeat_active = 0;
+		d->repeat_fired = 0;
 		YMGUI_Obj_Invalidate(obj);//状态变了,重绘
 		break;
 	case GY_EVENT_Clicked:
-		if (d->clicked != NULL)
+		if (!d->repeat_fired && d->clicked != NULL)
 			d->clicked(obj);
+		d->repeat_fired = 0;
 		break;
 	default:
 		break;
@@ -125,6 +143,11 @@ GYOBJ YMGUI_Creat_Button_Creat(GYOBJ parent, GYcoord x, GYcoord y, GYcoord w, GY
 	d->text[0] = '\0';
 	d->src     = NULL;
 	d->draw_bg = 1;
+	d->repeat_delay = 0;
+	d->repeat_interval = 0;
+	d->repeat_elapsed = 0;
+	d->repeat_active = 0;
+	d->repeat_fired = 0;
 
 	btn->type = GY_OBJ_Button;
 	btn->user_data = d;
@@ -156,6 +179,41 @@ void YMGUI_Button_SetClicked(GYOBJ btn, GYbtn_clicked_cb cb)
 	gy_assert(btn && btn->user_data);
 	gy_log_explain((btn == NULL) || (btn->user_data == NULL), GY_LOG_PtrI, "按钮或其数据不存在");
 	((GYbtn_data*)btn->user_data)->clicked = cb;
+}
+
+void YMGUI_Button_SetRepeat(GYOBJ btn, uint16 delay_ms, uint16 interval_ms)
+{
+	gy_assert(btn && btn->user_data);
+	gy_log_explain((btn == NULL) || (btn->user_data == NULL), GY_LOG_PtrI, "按钮或其数据不存在");
+	if (btn == NULL || btn->user_data == NULL) return;
+	GYbtn_data* d = (GYbtn_data*)btn->user_data;
+	d->repeat_delay = delay_ms;
+	d->repeat_interval = interval_ms;
+	d->repeat_elapsed = 0;
+	d->repeat_active = 0;
+	d->repeat_fired = 0;
+}
+
+uint8 YMGUI_Button_Tick(GYOBJ btn, uint16 elapsed_ms)
+{
+	gy_assert(btn && btn->user_data);
+	gy_log_explain((btn == NULL) || (btn->user_data == NULL), GY_LOG_PtrI, "按钮或其数据不存在");
+	if (btn == NULL || btn->user_data == NULL || !(btn->state & GY_STATE_Pressed)) return 0;
+	GYbtn_data* d = (GYbtn_data*)btn->user_data;
+	uint16 threshold = d->repeat_active ? d->repeat_interval : d->repeat_delay;
+	if (threshold == 0 || d->repeat_delay == 0 || d->repeat_interval == 0) return 0;
+	uint32 total = (uint32)d->repeat_elapsed + elapsed_ms;
+	if (total < threshold) {
+		d->repeat_elapsed = (uint16)total;
+		return 0;
+	}
+	d->repeat_elapsed = (uint16)(total - threshold);
+	if (d->repeat_elapsed >= d->repeat_interval)
+		d->repeat_elapsed %= d->repeat_interval;
+	d->repeat_active = 1;
+	d->repeat_fired = 1;
+	if (d->clicked != NULL) d->clicked(btn);
+	return 1;
 }
 
 /**

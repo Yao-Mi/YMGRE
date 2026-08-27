@@ -72,6 +72,10 @@ void YMGUI_Refresh(GYCTX ctx);                           // 刷新一帧(无脏�
 
 改控件属性的 Set 函数都会自动标脏，通常不用手动 Invalidate。
 
+显示端口的 `flush_cb` 可能在一次 Refresh 中被调用多次，每次只传一个 band。需要整帧
+提交的桌面后端使用 `YMGUI_Disp_SetFrameDoneCb()` 注册回调，在所有脏区和 band 完成后
+统一 Present；无脏区的 Refresh 不触发该回调。真实 LCD 不需要整帧动作时可以不注册。
+
 ## 事件 / 焦点 / 输入注入（GUI + HAL）
 
 ```c
@@ -95,6 +99,8 @@ void  YMGUI_SetFocus(GYCTX ctx, GYOBJ obj);              // 设焦点(派发 Foc
 鼠标右键和触摸长按统一为上下文语义，不等价于普通 `Clicked`，也不自动改变焦点。右键短点击只派一次 `ContextRequested`；右键拖动和长按后拖动走 `ContextRequested → ContextDragging* → ContextReleased/ContextCancelled`，捕获对象保存在 `ctx->context_obj`。`PointerCancel` 会清除普通按下状态并派 `ReleasedOff`，但不会派 `Clicked`。
 坐标/键值从 `ctx->point_x`、`ctx->point_y`、`ctx->last_key` 读。SDL 触摸长按依靠周期调用 `SDL_LCD_PumpEvents()` 检查超时。
 
+SDL 桌面端当前把鼠标滚轮向上/向下分别转换为字符键 `+`/`-`，派给焦点对象。该映射用于 YMGRE 场景编辑器视口缩放；裸机端可按设备输入能力直接注入等效键值。
+
 ## 控件目录
 
 每个控件都是 `GYOBJ`，都用 `YMGUI_Creat_XXX_Creat(parent, x, y, w, h)` 创建、`YMGUI_Free_ObjFree` 释放。下面只列各自的专有函数。
@@ -113,10 +119,12 @@ GYOBJ YMGUI_Creat_Button_Creat(parent, x,y,w,h);
 void  YMGUI_Button_SetText(GYOBJ btn, const char* text);    // 居中标题
 void  YMGUI_Button_SetColors(GYOBJ btn, GYcolor normal, GYcolor pressed);
 void  YMGUI_Button_SetClicked(GYOBJ btn, void(*cb)(GYOBJ)); // 点击回调
+void  YMGUI_Button_SetRepeat(GYOBJ btn, uint16 delay_ms, uint16 interval_ms); // 可选按住连发;任一为0关闭
+uint8 YMGUI_Button_Tick(GYOBJ btn, uint16 elapsed_ms);       // 主循环喂经过时间;本次触发返回1
 void  YMGUI_Button_SetImage(GYOBJ btn, GYIMG src);          // 居中贴图(不拥有像素;NULL=清图回退文字)。有图则不画文字
 void  YMGUI_Button_SetBgVisible(GYOBJ btn, uint8 on);       // 底色+边框是否画(默认1;关掉=纯图标/透明按钮)
 ```
-> 图优先:设了图源就居中 blit 图、不画文字。状态切换(如播放↔暂停)由 app 调 `SetImage` 换图(同 `SetText` 换字);异形图标靠 `GYimg.use_key + key` colorkey 抠形。
+> 图优先:设了图源就居中 blit 图、不画文字。状态切换(如播放↔暂停)由 app 调 `SetImage` 换图(同 `SetText` 换字);异形图标靠 `GYimg.use_key + key` colorkey 抠形。连发默认关闭且不依赖系统时钟；短按仍在松开时触发一次，发生过连发后松开不会额外触发。
 
 ### Checkbox 复选框
 ```c
@@ -159,6 +167,10 @@ GYOBJ YMGUI_Creat_Image_Creat(parent, x,y,w,h);
 void  YMGUI_Image_SetSrc(GYOBJ img, GYIMG src);            // 居中 blit,不复制像素
 // GYimg 描述符: { const GYpx* data; GYcoord w,h; uint8 use_key; GYpx key; }
 ```
+
+Image 不复制也不拥有 `GYimg` 和像素缓存。外部渲染器原地更新像素后，需要调用
+`YMGUI_Obj_Invalidate(img)` 请求重新 blit。若在 Image 上叠加只接收事件的基础 Obj，应将
+该 Obj 的 `draw_cb` 设为 `NULL`；基础 Obj 默认绘制不透明背景。
 
 ### Arc 环形进度
 ```c
@@ -266,6 +278,8 @@ GYcoord YMGUI_List_GetScroll(GYOBJ list);
 GYOBJ YMGUI_Creat_TreeView_Creat(parent, x,y,w,h);                 // 空树
 // --- 建树(节点是轻量结构,非 GYOBJ;深拷名字≤63 字节)---
 GYTREENODE YMGUI_TreeView_AddNode(GYOBJ tree, GYTREENODE parent_node, const char* name, uint8 is_dir); // parent=NULL→根
+uint8 YMGUI_TreeView_SetNodeName(GYOBJ tree, GYTREENODE node, const char* name); // 深拷新名字并标脏
+uint8 YMGUI_TreeView_RemoveNode(GYOBJ tree, GYTREENODE node);       // 删除节点及子树,成功返回 1
 void  YMGUI_TreeView_ClearChildren(GYOBJ tree, GYTREENODE node);   // 清子树(保留 node);清选区防悬空
 void  YMGUI_TreeView_Clear(GYOBJ tree);                            // 清空整棵树
 // --- 展开态 ---
@@ -284,6 +298,7 @@ void  YMGUI_TreeView_SetSelectedNode(GYOBJ tree, GYTREENODE node);
 void  YMGUI_TreeView_SetExpandCb(GYOBJ tree, GYtree_expand_cb cb);   // 懒加载:首次展开目录时填子节点
 void  YMGUI_TreeView_SetSelectCb(GYOBJ tree, GYtree_select_cb cb);   // 单击选中
 void  YMGUI_TreeView_SetActivateCb(GYOBJ tree, GYtree_activate_cb cb);// 双击文件(目录双击=切展开)
+void  YMGUI_TreeView_SetContextCb(GYOBJ tree, GYtree_context_cb cb); // 右键选中行后请求上下文操作
 // --- 外观/滚动 ---
 void  YMGUI_TreeView_SetRowHeight(GYOBJ tree, GYcoord row_h);
 void  YMGUI_TreeView_SetIndent(GYOBJ tree, GYcoord indent);         // 每层缩进像素(默认 16)
@@ -291,7 +306,7 @@ void  YMGUI_TreeView_SetScroll(GYOBJ tree, GYcoord scroll_y);       // 钳到内
 GYcoord YMGUI_TreeView_GetScroll(GYOBJ tree);
 uint16  YMGUI_TreeView_GetVisibleCount(GYOBJ tree);                 // 当前展开态下的可见行数
 // 节点树(child_head/sibling 链)+ 展平可见数组(展开/收起时重建);只画可见行。
-// 单击标记(▶/▼)切展开;单击名字选中;双击目录切展开、双击文件触发 activate。拖动即滚动。
+// 单击标记(▶/▼)切展开;单击名字选中;右键先选中再触发 context;双击目录切展开、双击文件触发 activate。拖动即滚动。
 // 目录名暖黄、文件浅灰;懒加载 loaded 标志防重入。编译期总开关 YMGUI_TREEVIEW(0=整控件裁空)
 ```
 

@@ -34,9 +34,10 @@ static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvect
 	case GRE_GlobalLight://全局光照
 	{
 		// I = Ia*ka
-		r =((lightI->R * (uint32)thispoly->planeColor.R) >> 8);
-		g =((lightI->G * (uint32)thispoly->planeColor.G) >> 8);
-		b =((lightI->B * (uint32)thispoly->planeColor.B) >> 8);
+		float32 strength = GREMax(thislight->proper.strength, 0.0f);
+		r = (int)(lightI->R * thispoly->planeColor.R * strength / 255.0f);
+		g = (int)(lightI->G * thispoly->planeColor.G * strength / 255.0f);
+		b = (int)(lightI->B * thispoly->planeColor.B * strength / 255.0f);
 		break;
 	}
 	case GRE_SpotLight://聚光灯 实现参考：https://zhuanlan.zhihu.com/p/149774959
@@ -51,16 +52,17 @@ static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvect
 		// 这里使用灯光方向的逆方向作为与面发现夹角的向量, 这样当夹角小于90时, 其点积大于零
 		float32 dotval = YMGRE_Fvector4d_Dot(&Dvec, pN); // 受光点指向光源与法线的点积
 
-		if (dotval > 0.0f)
+		if (dotval > 0.0f && Dlen > 1e-6f)
 		{
 			float32 Llen = YMGRE_Fvector4d_Len1(&thislight->proper.spot.direct);// |L|
 			float32 Nlen = YMGRE_Fvector4d_Len1(pN);// |N|
+			if (Llen <= 1e-6f || Nlen <= 1e-6f) break;
 
 			//夹角衰减公式 atten = ( (cos(θ) - cos(θo))/(cos(θ)i - cos(θo)) )^2
 			// 使用项目现有 kc0/kc1/kc2 标定模型，避免世界坐标距离改变强度语义。
-			float32 distanceAttenuation = 1.0f /
-				(thislight->proper.kc0 + thislight->proper.kc1 * Dlen +
-				 thislight->proper.kc2 * Dlen * Dlen);
+			float32 denominator = thislight->proper.kc0 + thislight->proper.kc1 * Dlen +
+				thislight->proper.kc2 * Dlen * Dlen;
+			float32 distanceAttenuation = denominator > 1e-6f ? 1.0f / denominator : 0.0f;
 			// Dvec 指向“光源减去受光点”，与灯光照射方向相反。
 			float32 cs_theta_ = -YMGRE_Fvector4d_Dot(&thislight->proper.spot.direct, &Dvec)/(Llen * Dlen);
 			float32 atten_k = 0.0f;
@@ -130,9 +132,9 @@ static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvect
 					spotShadow = t * t;
 				}
 			}
-			float32 distanceAttenuation = 1.0f /
-				(thislight->proper.kc0 + thislight->proper.kc1 * Dlen +
-				 thislight->proper.kc2 * Dlen * Dlen);
+			float32 denominator = thislight->proper.kc0 + thislight->proper.kc1 * Dlen +
+				thislight->proper.kc2 * Dlen * Dlen;
+			float32 distanceAttenuation = denominator > 1e-6f ? 1.0f / denominator : 0.0f;
 			float32 shadow = thislight->proper.shadowK * spotShadow * distanceAttenuation / 255.0f;
 			r += (uint32)(lightI->R * thispoly->planeColor.R * shadow);
 			g += (uint32)(lightI->G * thispoly->planeColor.G * shadow);
@@ -154,12 +156,14 @@ static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvect
 		{
 			float32 Llen = YMGRE_Fvector4d_Len1(&Lvec);// |L|
 			float32 Nlen = YMGRE_Fvector4d_Len1(pN);// |N|
+			if (Llen <= 1e-6f || Nlen <= 1e-6f) break;
 			// 点光源的光照模型
 			//					IOpoint * Clpoint
 			// I(d)point = --------------------------
 			//				kc + kl * d + kq * d * d
 			// 其中d = |p-s| 即点光源到多边形的距离
-			float32 atten_k =1.0f/( thislight->proper.kc0 + thislight->proper.kc1* Llen + thislight->proper.kc2* Llen* Llen);//衰减系数 1/(c0 + c1*d + c2*d^2)
+			float32 denominator = thislight->proper.kc0 + thislight->proper.kc1 * Llen + thislight->proper.kc2 * Llen * Llen;
+			float32 atten_k = denominator > 1e-6f ? 1.0f / denominator : 0.0f;//衰减系数 1/(c0 + c1*d + c2*d^2)
 			float32 cos_k = dotval / (Llen * Nlen * 255);
 
 			atten_k *= thislight->proper.strength;
@@ -274,9 +278,10 @@ static inline void YMGRE_ObjectLighting_Color(GRE_Object4d myobj, GRE_List Light
 
 //物体光照结果写入外部缓存
 static inline void YMGRE_ObjectLighting_ColorTo(GRE_Object4d myobj, GRE_Vertex4d tpoints, GRE_List LightList,
-	gre_fvector4d* lightPos, GRErgb24* polygonColor)
+	gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera, GRErgb24* polygonColor)
 {
-	gre_log_explain((myobj == NULL) || (tpoints == NULL) || (polygonColor == NULL), GRE_LOG_PtrIO, "输入的物体、顶点或颜色缓存不存在");
+	gre_log_explain((myobj == NULL) || (tpoints == NULL) || (worldToCamera == NULL) ||
+		(polygonColor == NULL), GRE_LOG_PtrIO, "输入的物体、顶点或颜色缓存不存在");
 	for (int i = 0; i < myobj->polygonNum; i++)
 	{
 		GRE_Polygon4d thispoly = &myobj->polygonList[i];
@@ -296,6 +301,11 @@ static inline void YMGRE_ObjectLighting_ColorTo(GRE_Object4d myobj, GRE_Vertex4d
 		{
 			gre_light4d light = *(GRE_Light4d)curLightlist->data;
 			light.proper.pos_ = lightPos[lightIndex++];
+			if (light.type == GRE_SpotLight) {
+				gre_fvector4d worldDirection = light.proper.spot.direct;
+				YMGRE_Fvector4d_MatMultTo(worldToCamera, &worldDirection, &light.proper.spot.direct);
+				light.proper.spot.direct.w = 0;
+			}
 			YMGRE_PolygonLighting_Color(thispoly, &tpoints[i1].pos, &pN, &light, &planeColor, myobj->mirrorKs, 30);//平面光照计算
 		}
 		polygonColor[i] = planeColor;

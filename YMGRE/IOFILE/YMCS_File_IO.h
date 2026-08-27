@@ -7,6 +7,7 @@
 
 GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc, const char* meshpath);//加载网格模型及材质
 GRE_Terrain YMGRE_Load_SceneTerrainAndMaterial(GRE_Scence mysc, const char* mapPath);//加载地形及材质
+void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName);//加载材质脚本及其引用的贴图
 
 //加载BMP文件
 void YMGRE_Bmp_File_LoadTo_Image(const char* file_path, GRErgb24** image, uint16* col, uint16* row);

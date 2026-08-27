@@ -124,6 +124,7 @@ int main(void)
 	//---- 抬起(仍在按钮上):触发 Clicked,清 pressed ----
 	YMGUI_Inject_Pointer(110, 100, 0);
 	CHECK(!(btn->state & GY_STATE_Pressed), "button pressed cleared on release");
+
 	CHECK(ctx->pressed_obj == NULL, "ctx.pressed_obj cleared");
 	CHECK(g_clicked == 1, "clicked callback fired once");
 
@@ -131,6 +132,19 @@ int main(void)
 	YMGUI_Inject_Pointer(110, 100, 1);//按下
 	YMGUI_Inject_Pointer(10, 10, 0);  //移出后抬起
 	CHECK(g_clicked == 1, "release off-button does NOT click");
+
+	//---- Button 可选按住连发:延迟前不触发,延迟后按间隔触发,松开不重复 Click ----
+	g_clicked = 0;
+	YMGUI_Button_SetRepeat(btn, 400, 80);
+	YMGUI_Inject_Pointer(110, 100, 1);
+	CHECK(!YMGUI_Button_Tick(btn, 399) && g_clicked == 0, "button repeat waits for delay");
+	CHECK(YMGUI_Button_Tick(btn, 1) && g_clicked == 1, "button repeat fires at delay");
+	CHECK(YMGUI_Button_Tick(btn, 80) && g_clicked == 2, "button repeat fires at interval");
+	YMGUI_Inject_Pointer(110, 100, 0);
+	CHECK(g_clicked == 2, "release after repeat does not add click");
+	YMGUI_Inject_Pointer(110, 100, 1);
+	YMGUI_Inject_Pointer(110, 100, 0);
+	CHECK(g_clicked == 3, "short press still clicks once");
 
 	//---- 上下文请求:只命中派发,不改变焦点/按下状态 ----
 	GYOBJ target = YMGUI_Creat_Obj_Creat(ctx->root, 10, 10, 50, 40);

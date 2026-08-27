@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_Rasterization.h"
 #include "YMGRE_CullingAndClipping.h"
 #include "YMGRE_Camera.h"
@@ -103,12 +103,9 @@ static void drawFrustumCases(GRE_Camera4d camera)
 //将视景体裁剪结果交给 YMGUI 显示
 static void showFrustumImage(GRE_Camera4d camera)
 {
-	LCD_Init(800, 600);
-	LCD_Fill_RgbRect(0, 0, camera->img.width, camera->img.height, camera->img.data);
-	while (LCD_Update(60))
-	{
-	}
-	LCD_Destory();
+	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(camera);
+	YMGRE_DemoView view = { target, 0, 0, target->width, target->height };
+	YMGRE_DemoHost_Show(800, 600, &view, 1, 60);
 }
 
 int main(void)

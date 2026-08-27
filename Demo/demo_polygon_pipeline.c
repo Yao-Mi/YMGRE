@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Camera.h"
@@ -29,10 +29,10 @@ int main(void)
 	GRE_RenderWorkspace workspace = YMGRE_Creat_RenderWorkspace();
 	YMGRE_Camera_PolygonPipline_RenderingWithWorkspace(camera, &lights, &objects,
 		&materials, workspace);
-	LCD_Init(500, 500);
-	LCD_Fill_RgbRect(0, 0, 500, 500, camera->img.data);
-	while (LCD_Update(60)) { }
-	LCD_Destory();
+	GRE_RenderTarget targetView = YMGRE_Camera_GetRenderTarget(camera);
+	YMGRE_DemoView view = { targetView, 0, 0,
+		targetView->width, targetView->height };
+	YMGRE_DemoHost_Show(500, 500, &view, 1, 60);
 	YMGRE_Free_RenderWorkspace(workspace);
 	YMGRE_Free_Camera(camera);
 	YMGRE_List_Clear(&lights, YMGRE_Free_Light);

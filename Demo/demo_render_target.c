@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_RenderContext.h"
@@ -39,11 +39,17 @@ int main(void)
 	YMGRE_Camera_TanglePipline_RenderingWithWorkspace(right, &lights, &objects,
 		&materials, workspace);
 
-	LCD_Init(800, 300);
-	LCD_Fill_RgbRect(0, 0, 300, 300, leftTarget->data);
-	LCD_Fill_RgbRect(500, 0, 300, 300, rightTarget->data);
-	while (LCD_Update(60)) { }
-	LCD_Destory();
+	YMGRE_DemoHost host;
+	if (!YMGRE_DemoHost_Init(&host, 800, 300, 40))
+		return 1;
+	if (YMGRE_DemoHost_AddTarget(&host, leftTarget, 0, 0, 300, 300) == NULL ||
+		YMGRE_DemoHost_AddTarget(&host, rightTarget, 500, 0, 300, 300) == NULL)
+	{
+		YMGRE_DemoHost_Destroy(&host);
+		return 1;
+	}
+	YMGRE_DemoHost_Run(&host, 60);
+	YMGRE_DemoHost_Destroy(&host);
 
 	YMGRE_Free_RenderWorkspace(workspace);
 	YMGRE_Free_Camera(left);

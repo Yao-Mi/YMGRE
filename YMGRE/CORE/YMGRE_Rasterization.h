@@ -5,6 +5,8 @@
 //基础直线光栅化，不包含窗口裁剪
 void YMGRE_Img_SetBrushColor(GRErgb24 color);
 void YMGRE_Img_Line(GRE_FrameBuffer data, uint16 width, uint16 height, int16 x1, int16 y1, int16 x2, int16 y2);
+void YMGRE_Img_LineDepth(GRE_FrameBuffer data, float32* zbuff, uint16 width, uint16 height,
+	int16 x1, int16 y1, float32 z1, int16 x2, int16 y2, float32 z2, GRErgb24 color, uint8 depthTest);
 //多边形扫描线填充，输入边必须已经位于图像范围内
 void YMGRE_Img_Scanline_AreaFill(GRE_FrameBuffer data, uint16 width, uint16 height, GRE_LinesList ring,
 	GRE_Fvector4d plane, float32* zbuff, GRErgb24 fillColor);

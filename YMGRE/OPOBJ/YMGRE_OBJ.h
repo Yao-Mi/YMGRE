@@ -114,6 +114,15 @@ typedef struct gre_object4d_
 }gre_object4d;
 typedef gre_object4d* GRE_Object4d;
 
+//独立3D线段图元，用于编辑器网格、坐标轴等双面辅助几何
+typedef struct gre_line3d_
+{
+	gre_fvector4d start;
+	gre_fvector4d end;
+	GRErgb24 color;
+}gre_line3d;
+typedef gre_line3d* GRE_Line3d;
+
 ////三角形，基于顶点索引
 //typedef struct gre_trigon4d_
 //{
@@ -253,6 +262,7 @@ typedef struct gre_camera4d_
 	//硬件参数，采集图形的大小
 	gre_render_target img;//兼容原有相机图像接口
 	GRE_RenderTarget target;//实际输出目标，NULL时使用相机自带的img
+	uint8 ownsImageBuffers;//由Creat_Camera置1，Free_Camera只释放相机创建的缓存
 	GRE_RenderWorkspace workspace;//渲染工作区，顺序多相机可以共享
 }gre_camera4d;
 typedef gre_camera4d* GRE_Camera4d;

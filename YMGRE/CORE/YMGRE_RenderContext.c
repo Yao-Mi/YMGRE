@@ -128,6 +128,9 @@ void YMGRE_Camera_BindRenderTarget(GRE_Camera4d camera, GRE_RenderTarget target)
 {
 	gre_log_explain((camera == NULL) || (target == NULL), GRE_LOG_PtrI, "相机或渲染目标不存在");
 	camera->target = target;
+	//外部目标相机的img只是兼容视图；普通相机则保留自己创建的img以便最终释放
+	if (!camera->ownsImageBuffers)
+		camera->img = *target;
 }
 
 //给相机绑定共享或独立工作区，同一工作区不能被多个渲染任务并行使用

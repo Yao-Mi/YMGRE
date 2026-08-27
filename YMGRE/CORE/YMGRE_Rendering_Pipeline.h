@@ -4,12 +4,16 @@
 #include "YMGRE_RenderContext.h"
 #include"./YMGRE_List.h"
 
+GRE_Material YMGRE_Material_Find(GRE_List MaterialList, char* materialName);
+
 void YMGRE_Camera_PolygonPipline_Rendering(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList);//多边形物体
 void YMGRE_Camera_PolygonPipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList,
 	GRE_List MaterialList, GRE_RenderWorkspace workspace);//使用共享或独立工作区渲染多边形物体
 void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList);//三角形物体
 void YMGRE_Camera_TanglePipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList,
 	GRE_List MaterialList, GRE_RenderWorkspace workspace);//使用共享或独立工作区渲染三角形物体
+void YMGRE_Camera_LineList_Rendering(GRE_Camera4d camera, const gre_line3d* lines,
+	uint32 lineNum, uint8 depthTest);//渲染独立3D线段，不清除目标
 
 #endif // !YMGRE_RENDERING_PIPELINE_H
 

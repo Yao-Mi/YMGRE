@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_Rasterization.h"
 #include "YMGRE_PolygonTriangulation.h"
 #include "YMGRE_Camera.h"
@@ -71,11 +71,11 @@ int main(void)
 	uint16 triangleNum = YMGRE_Polygon_Triangulate(points, 6, triangles, 4);
 	drawOriginal(left, points, 6, (GRErgb24){ 75, 155, 215 });
 	drawPolygon(right, points, 6, triangles, triangleNum, (GRErgb24){ 75, 155, 215 }, 1);
-	LCD_Init(PANEL_W * 2, PANEL_H);
-	LCD_Fill_RgbRect(0, 0, PANEL_W, PANEL_H, left->img.data);
-	LCD_Fill_RgbRect(PANEL_W, 0, PANEL_W, PANEL_H, right->img.data);
-	while (LCD_Update(60)) { }
-	LCD_Destory();
+	YMGRE_DemoView views[] = {
+		{ YMGRE_Camera_GetRenderTarget(left), 0, 0, PANEL_W, PANEL_H },
+		{ YMGRE_Camera_GetRenderTarget(right), PANEL_W, 0, PANEL_W, PANEL_H }
+	};
+	YMGRE_DemoHost_Show(PANEL_W * 2, PANEL_H, views, 2, 60);
 	YMGRE_Free_Camera(left);
 	YMGRE_Free_Camera(right);
 	return triangleNum == 4 ? 0 : 1;

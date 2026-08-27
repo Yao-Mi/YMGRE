@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Camera.h"
@@ -39,13 +39,17 @@ static GRE_Camera4d creatStereoCamera(int16 id, float32 x)
 //并排显示两个相机的独立画面
 static void showStereoImage(GRE_Camera4d left, GRE_Camera4d right)
 {
-	LCD_Init(800, 600);
-	LCD_Fill_RgbRect(0, 0, left->img.width, left->img.height, left->img.data);
-	LCD_Fill_RgbRect(500, 0, right->img.width, right->img.height, right->img.data);
-	while (LCD_Update(60))
-	{
-	}
-	LCD_Destory();
+	YMGRE_DemoHost host;
+	GRE_RenderTarget leftTarget = YMGRE_Camera_GetRenderTarget(left);
+	GRE_RenderTarget rightTarget = YMGRE_Camera_GetRenderTarget(right);
+	if (!YMGRE_DemoHost_Init(&host, 800, 600, 40))
+		return;
+	if (YMGRE_DemoHost_AddTarget(&host, leftTarget, 0, 0,
+		leftTarget->width, leftTarget->height) != NULL &&
+		YMGRE_DemoHost_AddTarget(&host, rightTarget, 500, 0,
+		rightTarget->width, rightTarget->height) != NULL)
+		YMGRE_DemoHost_Run(&host, 60);
+	YMGRE_DemoHost_Destroy(&host);
 }
 
 int main(void)

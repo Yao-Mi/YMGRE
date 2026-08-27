@@ -1,4 +1,4 @@
-#include "YMGRE_YMGUI_LCD.h"
+#include "demo_host.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Camera.h"
@@ -56,13 +56,17 @@ static GRE_Camera4d creatPortraitCamera(void)
 //将不同尺寸的两个相机目标交给 YMGUI 显示
 static void showViewportImages(GRE_Camera4d wide, GRE_Camera4d portrait)
 {
-	LCD_Init(800, 600);
-	LCD_Fill_RgbRect(0, 0, wide->img.width, wide->img.height, wide->img.data);
-	LCD_Fill_RgbRect(500, 0, portrait->img.width, portrait->img.height, portrait->img.data);
-	while (LCD_Update(60))
-	{
-	}
-	LCD_Destory();
+	YMGRE_DemoHost host;
+	GRE_RenderTarget wideTarget = YMGRE_Camera_GetRenderTarget(wide);
+	GRE_RenderTarget portraitTarget = YMGRE_Camera_GetRenderTarget(portrait);
+	if (!YMGRE_DemoHost_Init(&host, 800, 600, 40))
+		return;
+	if (YMGRE_DemoHost_AddTarget(&host, wideTarget, 0, 0,
+		wideTarget->width, wideTarget->height) != NULL &&
+		YMGRE_DemoHost_AddTarget(&host, portraitTarget, 500, 0,
+		portraitTarget->width, portraitTarget->height) != NULL)
+		YMGRE_DemoHost_Run(&host, 60);
+	YMGRE_DemoHost_Destroy(&host);
 }
 
 int main(void)

@@ -82,7 +82,7 @@ static inline char* GetMeshNameFromPath(const char* path)
 }
 
 //解析材质脚本
-void ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
+void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 {
 	YMGRE_FILE* file = YMGRE_fopen(scriptName, "r"); //打开文件
 	gre_log_explain(file == NULL, GRE_LOG_FILE, "该文件打开失败");
@@ -260,7 +260,7 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 {
 	// 加载材质
 	char* materialPath = GetMaterialFromSamePath(meshpath);
-    ParseMaterialScript(mysc, materialPath);//加载材质
+	YMGRE_ParseMaterialScript(mysc, materialPath);//加载材质
 
 	//打开文件
 	YMGRE_FILE* file = YMGRE_fopen(meshpath, "rb"); //必须以二进制方式打开，不然fread遇到换行符会终止

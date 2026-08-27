@@ -4,6 +4,7 @@
 #include "YMGRE_Creat.h"
 #include "YMGRE_Free.h"
 #include "YMGRE_List.h"
+#include <math.h>
 #include <stdio.h>
 
 #define WIDE_WIDTH 80
@@ -106,6 +107,26 @@ int main(void)
 		25.0f, 25.0f, 55.0f, 55.0f);
 	YMGRE_Camera_Frustum_Init(wide, 1.0f, 500.0f);
 	YMGRE_Camera_Frustum_Init(tall, 1.0f, 500.0f);
+	gre_fvector4d cameraPosition = { 12.0f, 18.0f, -30.0f, 1.0f };
+	gre_fvector4d cameraTarget = { 0.0f, 2.0f, 5.0f, 1.0f };
+	YMGRE_UVNCamera_PositionInit(wide, &cameraPosition, &cameraTarget, NULL, 0.0f);
+	float32 basisLengths = YMGRE_Fvector4d_Len1(&wide->move.cu) +
+		YMGRE_Fvector4d_Len1(&wide->move.cv) + YMGRE_Fvector4d_Len1(&wide->move.cn);
+	if (!isfinite(basisLengths) || fabsf(basisLengths - 3.0f) > 0.001f)
+	{
+		printf("test_camera_viewport: camera basis was not synchronized FAILED\n");
+		return 1;
+	}
+	gre_fvector4d verticalPosition = { 0.0f, 10.0f, 0.0f, 1.0f };
+	gre_fvector4d verticalTarget = { 0.0f, 0.0f, 0.0f, 1.0f };
+	YMGRE_UVNCamera_PositionInit(wide, &verticalPosition, &verticalTarget, NULL, 0.0f);
+	basisLengths = YMGRE_Fvector4d_Len1(&wide->move.cu) +
+		YMGRE_Fvector4d_Len1(&wide->move.cv) + YMGRE_Fvector4d_Len1(&wide->move.cn);
+	if (!isfinite(basisLengths) || fabsf(basisLengths - 3.0f) > 0.001f)
+	{
+		printf("test_camera_viewport: vertical camera basis degenerated FAILED\n");
+		return 1;
+	}
 	matrixIdentity(&wide->move.TMat);
 	matrixIdentity(&tall->move.TMat);
 	GRE_Object4d object = creatTriangle();
