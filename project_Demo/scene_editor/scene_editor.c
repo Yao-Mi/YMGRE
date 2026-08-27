@@ -67,7 +67,8 @@ static uint32 g_lineCount, g_baseLineCount;
 static uint8 g_referenceVisible=1;
 static int8 g_rotateAxis=-1;
 static float32 g_rotateStartAngle;
-static int g_rotateStartX;
+static float32 g_rotateStartPointerAngle;
+static float32 g_rotateCenterX, g_rotateCenterY;
 static GYOBJ g_referenceToggle;
 static GYOBJ g_transformButtons[3];
 static TransformMode g_transformMode=TRANSFORM_NONE;
@@ -648,7 +649,7 @@ static void dragSelectedAxis(ViewDragMode mode,float32 deltaX,float32 deltaY)
 		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);
 		/* 屏幕水平拖动在 Y 环与 X/Z 环上的正方向相反。 */
 		float32 direction = axis == 1 ? -1.0f : 1.0f;
-		SceneEditorObject_SetRotationAxis(g_selected, axis, g_rotateStartAngle + direction * deltaX * 0.6f);
+		SceneEditorObject_SetRotationAxis(g_selected, axis, g_rotateStartAngle + direction * deltaX);
 	}else if(mode==VIEW_DRAG_SCALE&&g_selected->kind==SCENE_OBJECT_MESH){
 		float32 scale=g_selected->scale*expf((deltaX-deltaY)*0.01f);
 		if(scale<0.01f)scale=0.01f;if(scale>1000.0f)scale=1000.0f;SceneEditorObject_SetScale(g_selected,scale);
@@ -679,7 +680,13 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 		g_ui->pointerX=x; g_ui->pointerY=y;g_ui->dragChanged=0;
 		ViewDragMode gizmoMode=gizmoDragMode(object,x,y);
 		if(gizmoMode!=VIEW_DRAG_NONE){g_ui->dragMode=gizmoMode;
-			if(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z){g_rotateAxis=(int8)(gizmoMode-VIEW_DRAG_ROTATE_X);g_rotateStartX=x;g_rotateStartAngle=g_rotateAxis==0?g_selected->rotX:(g_rotateAxis==1?g_selected->rotY:g_selected->rotZ);}
+			if(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z){
+				g_rotateAxis=(int8)(gizmoMode-VIEW_DRAG_ROTATE_X);
+				g_rotateStartAngle=g_rotateAxis==0?g_selected->rotX:(g_rotateAxis==1?g_selected->rotY:g_selected->rotZ);
+				float32 depth; gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1};
+				if(projectPoint(&center,&g_rotateCenterX,&g_rotateCenterY,&depth))
+					g_rotateStartPointerAngle=atan2f((float32)y-g_rotateCenterY,(float32)x-g_rotateCenterX);
+			}
 			setStatus(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z?"拖动旋转参考轴":
 			(gizmoMode==VIEW_DRAG_SCALE?"拖动操作轴统一缩放":"拖动操作轴约束移动"));}
 		else{SceneEditorObject* picked=pickObject(object,x,y);
@@ -690,8 +697,12 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 		if (g_ui->dragMode==VIEW_DRAG_OBJECT) { dragSelected(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在移动选中对象"); }
 		else if (g_ui->dragMode==VIEW_DRAG_PAN) { panCamera(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;refreshCameraInspector();setStatus("正在平移视图"); }
 		else if(g_ui->dragMode>=VIEW_DRAG_MOVE_X){
-			if(g_ui->dragMode>=VIEW_DRAG_ROTATE_X&&g_ui->dragMode<=VIEW_DRAG_ROTATE_Z)
-				dragSelectedAxis(g_ui->dragMode,(float32)(x-g_rotateStartX),dy);
+			if(g_ui->dragMode>=VIEW_DRAG_ROTATE_X&&g_ui->dragMode<=VIEW_DRAG_ROTATE_Z){
+				float32 currentAngle=atan2f((float32)y-g_rotateCenterY,(float32)x-g_rotateCenterX);
+				float32 deltaAngle=(currentAngle-g_rotateStartPointerAngle)/YMGRE_Deg2Rad;
+				while(deltaAngle>180.0f)deltaAngle-=360.0f; while(deltaAngle<-180.0f)deltaAngle+=360.0f;
+				dragSelectedAxis(g_ui->dragMode,deltaAngle,dy);
+			}
 			else dragSelectedAxis(g_ui->dragMode,dx,dy);
 			g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在使用变换操作轴");}
 		g_ui->pointerX=x; g_ui->pointerY=y; YMGUI_Obj_Invalidate(object);
