@@ -304,7 +304,8 @@ static float32 transformGizmoSize(void)
 			size=gizmoExtent;
 		}
 	}
-	if(size<24.0f)size=24.0f;if(size>240.0f)size=240.0f;return size;
+	if(g_selected==NULL||g_selected->kind!=SCENE_OBJECT_MESH){if(size<24.0f)size=24.0f;}
+	if(size>240.0f)size=240.0f;return size;
 }
 
 static void addTransformGizmo(void)
@@ -664,9 +665,9 @@ static void dragSelectedAxis(ViewDragMode mode,float32 deltaX,float32 deltaY)
 	if(g_selected==NULL||g_selected->fixed)return;
 	if(mode>=VIEW_DRAG_ROTATE_X&&mode<=VIEW_DRAG_ROTATE_Z&&g_selected->kind==SCENE_OBJECT_MESH){
 		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);
-		/* 屏幕水平拖动在 Y 环与 X/Z 环上的正方向相反。 */
+		/* 绝对定位：鼠标当前极角就是轴的目标角度，不再累加拖动变化量。 */
 		float32 direction = axis == 1 ? -1.0f : 1.0f;
-		SceneEditorObject_SetRotationAxis(g_selected, axis, g_rotateStartAngle + direction * deltaX);
+		SceneEditorObject_SetRotationAxis(g_selected, axis, direction * deltaX);
 	}else if(mode==VIEW_DRAG_SCALE&&g_selected->kind==SCENE_OBJECT_MESH){
 		float32 scale=g_selected->scale*expf((deltaX-deltaY)*0.01f);
 		if(scale<0.01f)scale=0.01f;if(scale>1000.0f)scale=1000.0f;SceneEditorObject_SetScale(g_selected,scale);
@@ -725,9 +726,9 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 		else if(g_ui->dragMode>=VIEW_DRAG_MOVE_X){
 			if(g_ui->dragMode>=VIEW_DRAG_ROTATE_X&&g_ui->dragMode<=VIEW_DRAG_ROTATE_Z){
 				float32 currentAngle=rotatePointerAngle((float32)x,(float32)y);
-				float32 deltaAngle=(currentAngle-g_rotateStartPointerAngle)/YMGRE_Deg2Rad;
-				while(deltaAngle>180.0f)deltaAngle-=360.0f; while(deltaAngle<-180.0f)deltaAngle+=360.0f;
-				dragSelectedAxis(g_ui->dragMode,deltaAngle,dy);
+				float32 targetAngle=currentAngle/YMGRE_Deg2Rad;
+				while(targetAngle>180.0f)targetAngle-=360.0f; while(targetAngle<-180.0f)targetAngle+=360.0f;
+				dragSelectedAxis(g_ui->dragMode,targetAngle,dy);
 			}
 			else dragSelectedAxis(g_ui->dragMode,dx,dy);
 			g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在使用变换操作轴");}
