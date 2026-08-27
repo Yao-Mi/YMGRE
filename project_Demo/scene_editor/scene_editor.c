@@ -379,9 +379,9 @@ static void addTransformGizmo(void)
 		}
 		if(g_selected!=NULL){
 			gre_fvector4d hit;
-			uint8 displayAxis=(uint8)(g_rotateAxis>=0?g_rotateAxis:0);
-			if(projectMouseToRotationPlane(displayAxis,center,&hit)){
-				GRErgb24 guide={255,220,90}; float32 marker=GREMax(size*0.04f,1.5f);
+			/* 调试阶段固定投影到 Z 环的 XY 平面，避免其它两个平面干扰判断。 */
+			if(projectMouseToRotationPlane(2,center,&hit)){
+				GRErgb24 guide={255,255,255}; float32 marker=GREMax(size*0.04f,1.5f);
 				addProjectionLine(center,hit,guide);
 				addProjectionLine((gre_fvector4d){hit.x-marker,hit.y,hit.z,1},(gre_fvector4d){hit.x+marker,hit.y,hit.z,1},guide);
 				addProjectionLine((gre_fvector4d){hit.x,hit.y-marker,hit.z,1},(gre_fvector4d){hit.x,hit.y+marker,hit.z,1},guide);
