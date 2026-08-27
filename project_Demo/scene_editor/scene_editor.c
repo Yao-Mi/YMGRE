@@ -105,6 +105,7 @@ static void historyCommit(void);
 static void historyReset(void);
 static void undoClicked(GYOBJ button);
 static void redoClicked(GYOBJ button);
+static int projectPoint(const gre_fvector4d* world, float32* screenX, float32* screenY, float32* depth);
 
 static void setStatus(const char* text)
 {
@@ -135,6 +136,16 @@ static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fve
 	GRE_Camera4d camera=g_activeCamera->camera;
 	float32 px=(float32)(g_ui->pointerX-area.x), py=(float32)(g_ui->pointerY-area.y);
 	float32 viewW=camera->perspectPlane.pR-camera->perspectPlane.pL, viewH=camera->perspectPlane.pU-camera->perspectPlane.pD;
+	if(axis==2){
+		float32 centerX,centerY,depth;
+		if(!projectPoint(&center,&centerX,&centerY,&depth))return 0;
+		float32 sx=(px-(float32)g_target.width*0.5f)*viewW*depth/(camera->perspectPlane.Dis*g_target.width);
+		float32 sy=((float32)g_target.height*0.5f-py)*viewH*depth/(camera->perspectPlane.Dis*g_target.height);
+		hit->x=camera->pos.x+camera->move.cu.x*sx+camera->move.cv.x*sy+camera->move.cn.x*depth;
+		hit->y=camera->pos.y+camera->move.cu.y*sx+camera->move.cv.y*sy+camera->move.cn.y*depth;
+		hit->z=center.z; hit->w=1;
+		return isfinite(hit->x)&&isfinite(hit->y);
+	}
 	float32 cx=(px-(float32)g_target.width*0.5f)*viewW/(camera->perspectPlane.Dis*g_target.width);
 	float32 cy=((float32)g_target.height*0.5f-py)*viewH/(camera->perspectPlane.Dis*g_target.height);
 	gre_fvector4d origin=camera->pos;
