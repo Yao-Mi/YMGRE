@@ -121,6 +121,28 @@ static void addGizmoLine(gre_fvector4d start, gre_fvector4d end, GRErgb24 color)
 		g_lines[g_lineCount++] = (gre_line3d){ start, end, color, 4 };
 }
 
+static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fvector4d* hit)
+{
+	if(g_ui==NULL||g_activeCamera==NULL||g_activeCamera->camera==NULL||hit==NULL)return 0;
+	GYrect area; YMGUI_Obj_GetAbsArea(g_ui->viewport,&area);
+	GRE_Camera4d camera=g_activeCamera->camera;
+	float32 px=(float32)(g_ui->pointerX-area.x), py=(float32)(g_ui->pointerY-area.y);
+	float32 viewW=camera->perspectPlane.pR-camera->perspectPlane.pL, viewH=camera->perspectPlane.pU-camera->perspectPlane.pD;
+	float32 cx=(px-(float32)g_target.width*0.5f)*viewW/(camera->perspectPlane.Dis*g_target.width);
+	float32 cy=((float32)g_target.height*0.5f-py)*viewH/(camera->perspectPlane.Dis*g_target.height);
+	gre_fvector4d origin=camera->pos;
+	gre_fvector4d direction={camera->move.cu.x*cx+camera->move.cv.x*cy+camera->move.cn.x*camera->perspectPlane.Dis,
+		camera->move.cu.y*cx+camera->move.cv.y*cy+camera->move.cn.y*camera->perspectPlane.Dis,
+		camera->move.cu.z*cx+camera->move.cv.z*cy+camera->move.cn.z*camera->perspectPlane.Dis,0};
+	YMGRE_Fvector4d_Normalize(&direction);
+	gre_fvector4d normal={axis==0?1.0f:0.0f,axis==1?1.0f:0.0f,axis==2?1.0f:0.0f,0};
+	gre_fvector4d toCenter={center.x-origin.x,center.y-origin.y,center.z-origin.z,0};
+	float32 denominator=YMGRE_Fvector4d_Dot(&direction,&normal); if(fabsf(denominator)<0.0001f)return 0;
+	float32 t=YMGRE_Fvector4d_Dot(&toCenter,&normal)/denominator; if(t<=0.0f||!isfinite(t))return 0;
+	hit->x=origin.x+direction.x*t;hit->y=origin.y+direction.y*t;hit->z=origin.z+direction.z*t;hit->w=1;
+	return isfinite(hit->x)&&isfinite(hit->y)&&isfinite(hit->z);
+}
+
 static void addSpotConeLines(const SceneEditorObject* object, GRErgb24 color)
 {
 	if (object == NULL || object->light == NULL || object->lightType != GRE_SpotLight) return;
@@ -341,6 +363,15 @@ static void addTransformGizmo(void)
 					if(axis==0){point.y+=cosf(a)*size;point.z+=sinf(a)*size;} else if(axis==1){point.x+=cosf(a)*size;point.z+=sinf(a)*size;} else {point.x+=cosf(a)*size;point.y+=sinf(a)*size;}
 					addGizmoLine(center,point,(GRErgb24){245,210,70});
 				}
+			}
+		}
+		if(g_rotateAxis>=0){
+			gre_fvector4d hit;
+			if(projectMouseToRotationPlane((uint8)g_rotateAxis,center,&hit)){
+				GRErgb24 guide={255,220,90}; float32 marker=GREMax(size*0.04f,1.5f);
+				addGizmoLine(center,hit,guide);
+				addGizmoLine((gre_fvector4d){hit.x-marker,hit.y,hit.z,1},(gre_fvector4d){hit.x+marker,hit.y,hit.z,1},guide);
+				addGizmoLine((gre_fvector4d){hit.x,hit.y-marker,hit.z,1},(gre_fvector4d){hit.x,hit.y+marker,hit.z,1},guide);
 			}
 		}
 		return;
