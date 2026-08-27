@@ -300,7 +300,7 @@ static float32 transformGizmoSize(void)
 		float32 base=g_selected->gizmoBaseExtent;
 		if(base>0.0f){
 			float32 gizmoExtent=base*1.3f;
-			if(g_transformMode==TRANSFORM_SCALE)gizmoExtent*=g_selected->scale>0.001f?g_selected->scale:1.0f;
+			gizmoExtent*=g_selected->scale>0.001f?g_selected->scale:1.0f;
 			size=gizmoExtent;
 		}
 	}
@@ -1373,6 +1373,10 @@ static int runSelfTest(void)
 	#define SELF_CHECK(condition) do { if(!(condition)) { \
 		fprintf(stderr, "scene_editor self-test failed at line %d: %s\n", __LINE__, #condition); \
 		failures++; } } while(0)
+	/* 固定中心和参考轴，验证屏幕极角：向上、向下应分别得到 ±90 度。 */
+	g_rotateCenterX=100.0f; g_rotateCenterY=100.0f; g_rotateBasisUX=1.0f; g_rotateBasisUY=0.0f;
+	SELF_CHECK(fabsf(rotatePointerAngle(100.0f, 200.0f) - (float32)(YMGRE_Pai * 0.5f)) < 0.001f);
+	SELF_CHECK(fabsf(rotatePointerAngle(100.0f, 0.0f) + (float32)(YMGRE_Pai * 0.5f)) < 0.001f);
 	const char* longPath="/tmp/ymgre/scenes/a_directory_name_longer_than_the_old_limit/blender_export.scene";
 	GYOBJ pathInput=YMGUI_Creat_TextInput_Creat(g_ui->host.context->root,0,0,320,28,255);
 	YMGUI_TextInput_SetText(pathInput,longPath);
