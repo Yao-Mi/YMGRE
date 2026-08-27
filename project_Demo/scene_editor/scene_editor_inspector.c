@@ -17,7 +17,7 @@ typedef struct {
 } SubmeshControl;
 
 typedef enum {
-	VALUE_X, VALUE_Y, VALUE_Z, VALUE_SCALE, VALUE_ROTATION_Y,
+	VALUE_X, VALUE_Y, VALUE_Z, VALUE_SCALE, VALUE_ROTATION_X, VALUE_ROTATION_Y, VALUE_ROTATION_Z,
 	VALUE_TARGET_X, VALUE_TARGET_Y, VALUE_TARGET_Z, VALUE_STRENGTH,
 	VALUE_COUNT
 } InspectorValue;
@@ -75,7 +75,9 @@ static float32* objectValue(InspectorValue value)
 	case VALUE_Y: return &object->y;
 	case VALUE_Z: return &object->z;
 	case VALUE_SCALE: return &object->scale;
+	case VALUE_ROTATION_X: return &object->rotX;
 	case VALUE_ROTATION_Y: return &object->rotY;
+	case VALUE_ROTATION_Z: return &object->rotZ;
 	case VALUE_TARGET_X: return &object->targetX;
 	case VALUE_TARGET_Y: return &object->targetY;
 	case VALUE_TARGET_Z: return &object->targetZ;
@@ -100,9 +102,9 @@ static int applyValue(InspectorValue value, float32 next)
 	if (value == VALUE_SCALE) {
 		if (object->kind != SCENE_OBJECT_MESH || next <= 0.001f) return 0;
 		SceneEditorObject_SetScale(object, next);
-	} else if (value == VALUE_ROTATION_Y) {
+	} else if (value >= VALUE_ROTATION_X && value <= VALUE_ROTATION_Z) {
 		if (object->kind != SCENE_OBJECT_MESH) return 0;
-		SceneEditorObject_SetRotationY(object, next);
+		SceneEditorObject_SetRotationAxis(object, (uint8)(value - VALUE_ROTATION_X), next);
 	} else if (value <= VALUE_Z) {
 		float32 delta = next - *current;
 		SceneEditorObject_Translate(object,
@@ -116,7 +118,7 @@ static int applyValue(InspectorValue value, float32 next)
 	}
 	notifyChanged(value == VALUE_STRENGTH ? "灯光强度已更新" :
 		(value >= VALUE_TARGET_X && value <= VALUE_TARGET_Z ? "相机注视目标已更新" :
-		(value == VALUE_ROTATION_Y ? "Y 轴旋转已更新" :
+		(value >= VALUE_ROTATION_X && value <= VALUE_ROTATION_Z ? "旋转已更新" :
 		(value == VALUE_SCALE ? "缩放已更新" : "位置已更新"))));
 	return 1;
 }
@@ -134,7 +136,9 @@ INPUT_CB(xChanged, VALUE_X)
 INPUT_CB(yChanged, VALUE_Y)
 INPUT_CB(zChanged, VALUE_Z)
 INPUT_CB(scaleChanged, VALUE_SCALE)
+INPUT_CB(rotationXChanged, VALUE_ROTATION_X)
 INPUT_CB(rotationYChanged, VALUE_ROTATION_Y)
+INPUT_CB(rotationZChanged, VALUE_ROTATION_Z)
 INPUT_CB(targetXChanged, VALUE_TARGET_X)
 INPUT_CB(targetYChanged, VALUE_TARGET_Y)
 INPUT_CB(targetZChanged, VALUE_TARGET_Z)
@@ -152,7 +156,9 @@ STEP_CB(xPlus, VALUE_X, 1.0f) STEP_CB(xMinus, VALUE_X, -1.0f)
 STEP_CB(yPlus, VALUE_Y, 1.0f) STEP_CB(yMinus, VALUE_Y, -1.0f)
 STEP_CB(zPlus, VALUE_Z, 1.0f) STEP_CB(zMinus, VALUE_Z, -1.0f)
 STEP_CB(scalePlus, VALUE_SCALE, 0.1f) STEP_CB(scaleMinus, VALUE_SCALE, -0.1f)
+STEP_CB(rotationXPlus, VALUE_ROTATION_X, 5.0f) STEP_CB(rotationXMinus, VALUE_ROTATION_X, -5.0f)
 STEP_CB(rotationPlus, VALUE_ROTATION_Y, 5.0f) STEP_CB(rotationMinus, VALUE_ROTATION_Y, -5.0f)
+STEP_CB(rotationZPlus, VALUE_ROTATION_Z, 5.0f) STEP_CB(rotationZMinus, VALUE_ROTATION_Z, -5.0f)
 STEP_CB(txPlus, VALUE_TARGET_X, 1.0f) STEP_CB(txMinus, VALUE_TARGET_X, -1.0f)
 STEP_CB(tyPlus, VALUE_TARGET_Y, 1.0f) STEP_CB(tyMinus, VALUE_TARGET_Y, -1.0f)
 STEP_CB(tzPlus, VALUE_TARGET_Z, 1.0f) STEP_CB(tzMinus, VALUE_TARGET_Z, -1.0f)
@@ -314,13 +320,17 @@ void SceneEditorInspector_Build(GYOBJ parent, SceneEditorInspectorChangedCb chan
 	valueRow(g_inspector.positionGroup, VALUE_Y, 60, "Y", GY_ARGB(0xFF,0x52,0xCD,0x70), yPlus, yMinus, yChanged);
 	valueRow(g_inspector.positionGroup, VALUE_Z, 92, "Z", GY_ARGB(0xFF,0x46,0x87,0xEB), zPlus, zMinus, zChanged);
 
-	g_inspector.scaleGroup = transparentGroup(parent, 250, 96);
+	g_inspector.scaleGroup = transparentGroup(parent, 250, 160);
 	inspectorLabel(g_inspector.scaleGroup, 16, 0, 180, 20, "变换", cyan);
 	valueRow(g_inspector.scaleGroup, VALUE_SCALE, 28, "S", muted, scalePlus, scaleMinus, scaleChanged);
-	valueRow(g_inspector.scaleGroup, VALUE_ROTATION_Y, 60, "R", GY_ARGB(0xFF,0x52,0xCD,0x70),
+	valueRow(g_inspector.scaleGroup, VALUE_ROTATION_X, 60, "Rx", GY_ARGB(0xFF,0xE0,0x48,0x48),
+		rotationXPlus, rotationXMinus, rotationXChanged);
+	valueRow(g_inspector.scaleGroup, VALUE_ROTATION_Y, 92, "Ry", GY_ARGB(0xFF,0x52,0xCD,0x70),
 		rotationPlus, rotationMinus, rotationYChanged);
+	valueRow(g_inspector.scaleGroup, VALUE_ROTATION_Z, 124, "Rz", GY_ARGB(0xFF,0x46,0x87,0xEB),
+		rotationZPlus, rotationZMinus, rotationZChanged);
 
-	g_inspector.topologyGroup = transparentGroup(parent, 356, 96);
+	g_inspector.topologyGroup = transparentGroup(parent, 420, 96);
 	inspectorLabel(g_inspector.topologyGroup, 16, 0, 180, 20, "网格细分", cyan);
 	for (int i = 0; i < 2; ++i) {
 		g_inspector.detailLabels[i] = inspectorLabel(g_inspector.topologyGroup, 12, 30 + i * 32,
@@ -330,7 +340,7 @@ void SceneEditorInspector_Build(GYOBJ parent, SceneEditorInspectorChangedCb chan
 		YMGUI_TextInput_SetChanged(g_inspector.detailInputs[i], detailChanged);
 	}
 
-	g_inspector.materialGroup = transparentGroup(parent, 458, 162);
+	g_inspector.materialGroup = transparentGroup(parent, 522, 162);
 	inspectorLabel(g_inspector.materialGroup, 16, 0, 180, 20, "材质", cyan);
 	inspectorLabel(g_inspector.materialGroup, 12, 34, 54, 26, "颜色", muted);
 	g_inspector.meshSwatch = YMGUI_Creat_Button_Creat(g_inspector.materialGroup, 70, 32, 88, 28);
@@ -407,7 +417,7 @@ void SceneEditorInspector_SetObject(SceneEditorObject* object)
 		object->kind != SCENE_OBJECT_LIGHT || object->lightType == GRE_GlobalLight);
 	for (int i = 0; i < VALUE_COUNT; ++i) setInputValue((InspectorValue)i);
 	if (object->kind == SCENE_OBJECT_MESH) {
-		g_inspector.materialGroup->area.y = hasTopology ? 458 : 356;
+		g_inspector.materialGroup->area.y = hasTopology ? 522 : 420;
 		if (hasTopology) {
 			char value[16];
 			snprintf(value, sizeof(value), "%u", object->detailA);

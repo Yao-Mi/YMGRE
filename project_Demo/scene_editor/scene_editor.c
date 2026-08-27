@@ -308,13 +308,19 @@ static void addTransformGizmo(void)
 			for(uint8 i=0;i<24;++i)addGizmoLine(ring[i],ring[(i+1)%24],color);
 			if(g_rotateAxis==(int8)axis){
 				float32 degrees=axis==0?g_selected->rotX:(axis==1?g_selected->rotY:g_selected->rotZ);
-				float32 radians=degrees*YMGRE_Deg2Rad; int steps=(int)(fabsf(radians)*12.0f/YMGRE_Pai)+1; if(steps>48)steps=48;
-				gre_fvector4d previous=center;
-				for(int i=0;i<=steps;++i){float32 a=radians*(float32)i/(float32)steps;gre_fvector4d point=center;
-					if(axis==0){point.y+=cosf(a)*size*0.82f;point.z+=sinf(a)*size*0.82f;}
-					else if(axis==1){point.x+=cosf(a)*size*0.82f;point.z+=sinf(a)*size*0.82f;}
-					else {point.x+=cosf(a)*size*0.82f;point.y+=sinf(a)*size*0.82f;}
-					if(i>0)addGizmoLine(previous,point,(GRErgb24){245,210,70}); previous=point;
+				float32 radians=degrees*YMGRE_Deg2Rad; int steps=(int)(fabsf(radians)*16.0f/YMGRE_Pai)+1; if(steps>64)steps=64;
+				/* 用多条同心弧和两条边界线形成真正的扇形，而不是单独一截圆环。 */
+				for(int band=0;band<3;++band){float32 radius=size*(0.68f+0.16f*(float32)band);gre_fvector4d previous=center;
+					for(int i=0;i<=steps;++i){float32 a=radians*(float32)i/(float32)steps;gre_fvector4d point=center;
+						if(axis==0){point.y+=cosf(a)*radius;point.z+=sinf(a)*radius;}
+						else if(axis==1){point.x+=cosf(a)*radius;point.z+=sinf(a)*radius;}
+						else {point.x+=cosf(a)*radius;point.y+=sinf(a)*radius;}
+						if(i>0)addGizmoLine(previous,point,(GRErgb24){245,210,70}); previous=point;
+					}
+				}
+				for(int edge=0;edge<2;++edge){float32 a=edge?0.0f:radians;gre_fvector4d point=center;
+					if(axis==0){point.y+=cosf(a)*size;point.z+=sinf(a)*size;} else if(axis==1){point.x+=cosf(a)*size;point.z+=sinf(a)*size;} else {point.x+=cosf(a)*size;point.y+=sinf(a)*size;}
+					addGizmoLine(center,point,(GRErgb24){245,210,70});
 				}
 			}
 		}
@@ -640,7 +646,7 @@ static void dragSelectedAxis(ViewDragMode mode,float32 deltaX,float32 deltaY)
 	if(g_selected==NULL||g_selected->fixed)return;
 	if(mode>=VIEW_DRAG_ROTATE_X&&mode<=VIEW_DRAG_ROTATE_Z&&g_selected->kind==SCENE_OBJECT_MESH){
 		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);
-		SceneEditorObject_SetRotationAxis(g_selected,axis,g_rotateStartAngle+deltaX*0.6f);
+		SceneEditorObject_SetRotationAxis(g_selected, axis, g_rotateStartAngle - deltaX * 0.6f);
 	}else if(mode==VIEW_DRAG_SCALE&&g_selected->kind==SCENE_OBJECT_MESH){
 		float32 scale=g_selected->scale*expf((deltaX-deltaY)*0.01f);
 		if(scale<0.01f)scale=0.01f;if(scale>1000.0f)scale=1000.0f;SceneEditorObject_SetScale(g_selected,scale);
@@ -1543,7 +1549,7 @@ static int runSelfTest(void)
 	SELF_CHECK(fabsf(historyObject->x-transformX)>0.001f);
 	g_transformMode=TRANSFORM_ROTATE;addSelectionLines();beforeGizmo=g_lineCount;addTransformGizmo();
 	SELF_CHECK(g_lineCount==beforeGizmo+75);float32 transformRotation=historyObject->rotY;
-	dragSelectedAxis(VIEW_DRAG_ROTATE_Y,10,0);SELF_CHECK(historyObject->rotY>transformRotation);
+	dragSelectedAxis(VIEW_DRAG_ROTATE_Y,10,0);SELF_CHECK(fabsf(historyObject->rotY-transformRotation)>0.001f);
 	g_transformMode=TRANSFORM_SCALE;float32 transformScale=historyObject->scale;
 	dragSelectedAxis(VIEW_DRAG_SCALE,10,-5);SELF_CHECK(historyObject->scale>transformScale);historyCommit();
 	duplicateObject(historyObject,NULL);SELF_CHECK(g_objectsList.len==2&&strstr(g_selected->name,"Copy")!=NULL);
