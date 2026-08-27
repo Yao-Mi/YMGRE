@@ -89,17 +89,17 @@ void  YMGUI_Inject_ContextMove(GYcoord x, GYcoord y);
 void  YMGUI_Inject_ContextEnd(GYcoord x, GYcoord y);
 void  YMGUI_Inject_ContextCancel(void);
 void  YMGUI_Inject_Key(uint32 key, uint8 pressed);
+void  YMGUI_Inject_Wheel(GYcoord x, GYcoord y, int32 delta_x, int32 delta_y);
+void  YMGUI_Inject_Tick(uint32 elapsed_ms);               // SDL 自动注入;裸机主循环调用
 // 内部/进阶
 GYOBJ YMGUI_HitTest(GYCTX ctx, GYcoord x, GYcoord y);    // 命中最上层对象
 void  YMGUI_SetFocus(GYCTX ctx, GYOBJ obj);              // 设焦点(派发 FocusLost/Got)
 ```
 
 键码：可打印字符用 ASCII；控制键用 `GY_KEY_BACKSPACE/ENTER/LEFT/RIGHT/UP/DOWN/DEL`。
-事件类型（控件 event_cb 收）：`GY_EVENT_Pressed/Pressing/Released/ReleasedOff/Clicked/DoubleClicked/ContextRequested/ContextDragging/ContextReleased/ContextCancelled/FocusGot/FocusLost/Key`。
+事件类型（控件 event_cb 收）：`GY_EVENT_Pressed/Pressing/Released/ReleasedOff/Clicked/DoubleClicked/ContextRequested/ContextDragging/ContextReleased/ContextCancelled/FocusGot/FocusLost/Key/Wheel/Tick`。
 鼠标右键和触摸长按统一为上下文语义，不等价于普通 `Clicked`，也不自动改变焦点。右键短点击只派一次 `ContextRequested`；右键拖动和长按后拖动走 `ContextRequested → ContextDragging* → ContextReleased/ContextCancelled`，捕获对象保存在 `ctx->context_obj`。`PointerCancel` 会清除普通按下状态并派 `ReleasedOff`，但不会派 `Clicked`。
-坐标/键值从 `ctx->point_x`、`ctx->point_y`、`ctx->last_key` 读。SDL 触摸长按依靠周期调用 `SDL_LCD_PumpEvents()` 检查超时。
-
-SDL 桌面端当前把鼠标滚轮向上/向下分别转换为字符键 `+`/`-`，派给焦点对象。该映射用于 YMGRE 场景编辑器视口缩放；裸机端可按设备输入能力直接注入等效键值。
+坐标/键值从 `ctx->point_x`、`ctx->point_y`、`ctx->last_key` 读。滚轮事件发给指针位置命中的对象，横纵有符号增量从 `ctx->wheel_x/y` 读。SDL 触摸长按依靠周期调用 `SDL_LCD_PumpEvents()` 检查超时。
 
 ## 控件目录
 
@@ -119,12 +119,11 @@ GYOBJ YMGUI_Creat_Button_Creat(parent, x,y,w,h);
 void  YMGUI_Button_SetText(GYOBJ btn, const char* text);    // 居中标题
 void  YMGUI_Button_SetColors(GYOBJ btn, GYcolor normal, GYcolor pressed);
 void  YMGUI_Button_SetClicked(GYOBJ btn, void(*cb)(GYOBJ)); // 点击回调
-void  YMGUI_Button_SetRepeat(GYOBJ btn, uint16 delay_ms, uint16 interval_ms); // 可选按住连发;任一为0关闭
-uint8 YMGUI_Button_Tick(GYOBJ btn, uint16 elapsed_ms);       // 主循环喂经过时间;本次触发返回1
+void  YMGUI_Button_SetRepeat(GYOBJ btn, uint32 delay_ms, uint32 interval_ms); // 任一参数为0关闭
 void  YMGUI_Button_SetImage(GYOBJ btn, GYIMG src);          // 居中贴图(不拥有像素;NULL=清图回退文字)。有图则不画文字
 void  YMGUI_Button_SetBgVisible(GYOBJ btn, uint8 on);       // 底色+边框是否画(默认1;关掉=纯图标/透明按钮)
 ```
-> 图优先:设了图源就居中 blit 图、不画文字。状态切换(如播放↔暂停)由 app 调 `SetImage` 换图(同 `SetText` 换字);异形图标靠 `GYimg.use_key + key` colorkey 抠形。连发默认关闭且不依赖系统时钟；短按仍在松开时触发一次，发生过连发后松开不会额外触发。
+> 图优先:设了图源就居中 blit 图、不画文字。状态切换(如播放↔暂停)由 app 调 `SetImage` 换图(同 `SetText` 换字);异形图标靠 `GYimg.use_key + key` colorkey 抠形。连发默认关闭，不创建系统定时器；显式启用后，Button 自己响应上下文 Tick 并累计时间，发生过连发的按压在松开时不会额外触发 Clicked。
 
 ### Checkbox 复选框
 ```c
@@ -152,6 +151,25 @@ int32 YMGUI_Slider_GetValue(GYOBJ sld);
 void  YMGUI_Slider_SetChanged(GYOBJ sld, void(*cb)(GYOBJ, int32 value));
 ```
 
+### Joystick 二维虚拟摇杆
+```c
+#define GY_JOYSTICK_VALUE_MAX 100
+GYOBJ YMGUI_Creat_Joystick_Creat(parent, x,y,w,h);          // 默认死区8,松手回中
+void  YMGUI_Joystick_SetValue(GYOBJ joy, int16 x, int16 y); // 圆形钳位,-100..100;不触发 changed
+void  YMGUI_Joystick_GetValue(GYOBJ joy, int16* x, int16* y);
+void  YMGUI_Joystick_SetDeadzone(GYOBJ joy, uint16 deadzone);// 0..100
+uint16 YMGUI_Joystick_GetDeadzone(GYOBJ joy);
+void  YMGUI_Joystick_SetAutoCenter(GYOBJ joy, uint8 enabled);// 0=松手保持;空闲时切回1立即回中
+uint8 YMGUI_Joystick_GetAutoCenter(GYOBJ joy);
+uint8 YMGUI_Joystick_IsActive(GYOBJ joy);
+void  YMGUI_Joystick_SetChangedCb(GYOBJ joy, GYjoystick_changed_cb cb);
+void  YMGUI_Joystick_SetReleasedCb(GYOBJ joy, GYjoystick_released_cb cb);// 参数为松手前最终值
+void  YMGUI_Joystick_SetDrawCb(GYOBJ joy, GYjoystick_draw_cb cb);// 完全替换外观,NULL恢复默认
+```
+控件负责指针捕获、圆形限位、死区和标脏。自定义绘制回调通过 `GetValue/IsActive`
+读取稳定状态，不替换控件的事件处理。松手时先按 `AutoCenter` 配置处理，再调用
+`released_cb`；因此回调可以实现自定义吸附或归位。编译期可用 `YMGUI_JOYSTICK=0` 裁掉。
+
 ### Bar 进度条（只显示）
 ```c
 GYOBJ YMGUI_Creat_Bar_Creat(parent, x,y,w,h);
@@ -167,10 +185,6 @@ GYOBJ YMGUI_Creat_Image_Creat(parent, x,y,w,h);
 void  YMGUI_Image_SetSrc(GYOBJ img, GYIMG src);            // 居中 blit,不复制像素
 // GYimg 描述符: { const GYpx* data; GYcoord w,h; uint8 use_key; GYpx key; }
 ```
-
-Image 不复制也不拥有 `GYimg` 和像素缓存。外部渲染器原地更新像素后，需要调用
-`YMGUI_Obj_Invalidate(img)` 请求重新 blit。若在 Image 上叠加只接收事件的基础 Obj，应将
-该 Obj 的 `draw_cb` 设为 `NULL`；基础 Obj 默认绘制不透明背景。
 
 ### Arc 环形进度
 ```c
@@ -204,13 +218,65 @@ void  YMGUI_Meter_SetTicks(GYOBJ m, uint8 count);          // 刻度数
 
 ### TextInput 文本输入框（可聚焦编辑）
 ```c
-GYOBJ YMGUI_Creat_TextInput_Creat(parent, x,y,w,h);        // 自带 Focusable
+GYOBJ YMGUI_Creat_TextInput_Creat(parent, x,y,w,h, size_t capacity);// capacity=最大文本字节数,内部申请 capacity+1
 void  YMGUI_TextInput_SetText(GYOBJ ti, const char* text); // 光标移末尾
 const char* YMGUI_TextInput_GetText(GYOBJ ti);
 void  YMGUI_TextInput_SetChanged(GYOBJ ti, GYti_changed_cb cb);// 内容变才触发
-// 点击聚焦后,Inject_Key 自动处理插入/退格/Del/左右移光标
+void  YMGUI_TextInput_SetSubmitted(GYOBJ ti, GYti_submitted_cb cb);// Enter 前先退出编辑;NULL=默认轮转
+uint8 YMGUI_TextInput_HasSelection(GYOBJ ti);
+void  YMGUI_TextInput_GetSelection(GYOBJ ti, size_t* start, size_t* end);
+void  YMGUI_TextInput_SelectAll(GYOBJ ti);
+void  YMGUI_TextInput_ClearSelection(GYOBJ ti);
+size_t YMGUI_TextInput_GetSelectionText(GYOBJ ti, char* out, size_t out_cap);
+void  YMGUI_TextInput_Copy(GYOBJ ti);
+void  YMGUI_TextInput_Cut(GYOBJ ti);
+void  YMGUI_TextInput_Paste(GYOBJ ti);                    // 过滤 CR/LF
+int32 YMGUI_TextInput_GetScrollX(GYOBJ ti);               // 自动水平视口偏移(px)
+// 点击聚焦后自动处理插入/退格/Del/Home/End/方向键、Shift 选择、鼠标拖选和 Ctrl+A/C/X/V
 // 中文(UTF-8)可输入:SDL 逐字节注入,按整码点插入/退格/移光标,光标像素定位支持中英混排
 ```
+
+长文本超过输入框可视宽度时，控件会自动水平滚动，保证光标、选区与文字都不会画出边框。
+选区字节位置始终落在 UTF-8 码点边界。剪贴板走 `YMGUI_Clipboard_*` HAL，平台未提供时为空操作。
+
+### FileDialog 文件对话框（复合模态控件）
+```c
+typedef enum {
+    GY_FILE_DIALOG_OPEN_FILE,
+    GY_FILE_DIALOG_SAVE_FILE,
+    GY_FILE_DIALOG_SELECT_DIRECTORY
+} GYfiledialog_mode;
+
+GYOBJ YMGUI_Creat_FileDialog_Creat(GYCTX ctx, GYcoord width, GYcoord height,
+        size_t path_capacity, size_t name_capacity, uint16 entry_capacity);// 尺寸按实例指定
+void  YMGUI_FileDialog_SetFS(GYOBJ fd, const GYfiledialog_fs* fs, void* fs_user);
+void  YMGUI_FileDialog_SetResultCb(GYOBJ fd, GYfiledialog_result_cb cb, void* user);
+void  YMGUI_FileDialog_SetOverwriteCb(GYOBJ fd, GYfiledialog_overwrite_cb cb);
+void  YMGUI_FileDialog_SetFilterCb(GYOBJ fd, GYfiledialog_filter_cb cb, void* user);
+uint8 YMGUI_FileDialog_Show(GYOBJ fd, GYfiledialog_mode mode,
+        const char* initial_path, const char* initial_name);
+void  YMGUI_FileDialog_Close(GYOBJ fd);
+uint8 YMGUI_FileDialog_Refresh(GYOBJ fd);
+uint8 YMGUI_FileDialog_Navigate(GYOBJ fd, const char* path);
+uint8 YMGUI_FileDialog_Up(GYOBJ fd);
+uint8 YMGUI_FileDialog_Go(GYOBJ fd);                       // 进入选中目录;无目录选中时提交路径栏
+uint8 YMGUI_FileDialog_Confirm(GYOBJ fd);
+uint8 YMGUI_FileDialog_NewDirectory(GYOBJ fd, const char* name);
+```
+
+三个容量均在创建时确定且不含结尾 `\0`，控件不会因目录内容临时扩容；条目数默认上限为
+`GY_FILEDIALOG_MAX_ENTRIES=1024`，可在配置中调小。`GYfiledialog_fs`
+注入 `open_dir/read_dir/close_dir/stat_path/make_dir`，因此库本体不包含 `dirent/stat` 依赖；
+SDL/POSIX 适配示例见 `Demo/demo_filedialog.c`。`read_dir` 返回 `1=读到条目、0=结束、-1=错误`。
+可选过滤回调对当前目录和 TreeView 懒加载目录同时生效，返回 `1` 显示、`0` 隐藏；
+它只控制显示，不限制手动输入的路径、文件名或最终确认结果，传 `NULL` 可关闭过滤。
+`OPEN_FILE` 只返回已有普通文件，`SAVE_FILE` 只返回目标路径且不写文件，已有目标需可选覆盖回调确认，
+`SELECT_DIRECTORY` 返回当前或选中目录。删除、复制、粘贴、重命名不属于基础控件，按项目需求在应用层组合。
+目录树按需展开下一级；`Go` 与 `Up` 对称，优先进入树中选中的目录，没有选中目录时则提交
+顶部手工路径；路径编辑态按 Enter 也会先退出编辑再跳转。三种模式的结果回调都返回完整路径，
+语义分别为已有文件、保存目标和目录。宽高在创建时按实例指定，当前要求不小于 `280x220` 且不超过屏幕。
+编译期可用 `YMGUI_FILEDIALOG=0` 裁掉；
+FileDialog 复用 TreeView，因此 `YMGUI_TREEVIEW=0` 时会自动一并裁掉 FileDialog。
 
 ### EditView 可编辑多行文本框（光标 + 换行 + 中文）
 ```c
@@ -278,8 +344,8 @@ GYcoord YMGUI_List_GetScroll(GYOBJ list);
 GYOBJ YMGUI_Creat_TreeView_Creat(parent, x,y,w,h);                 // 空树
 // --- 建树(节点是轻量结构,非 GYOBJ;深拷名字≤63 字节)---
 GYTREENODE YMGUI_TreeView_AddNode(GYOBJ tree, GYTREENODE parent_node, const char* name, uint8 is_dir); // parent=NULL→根
-uint8 YMGUI_TreeView_SetNodeName(GYOBJ tree, GYTREENODE node, const char* name); // 深拷新名字并标脏
-uint8 YMGUI_TreeView_RemoveNode(GYOBJ tree, GYTREENODE node);       // 删除节点及子树,成功返回 1
+uint8 YMGUI_TreeView_SetNodeName(GYOBJ tree, GYTREENODE node, const char* name); // 改名并标脏
+uint8 YMGUI_TreeView_RemoveNode(GYOBJ tree, GYTREENODE node);       // 删除节点及子树
 void  YMGUI_TreeView_ClearChildren(GYOBJ tree, GYTREENODE node);   // 清子树(保留 node);清选区防悬空
 void  YMGUI_TreeView_Clear(GYOBJ tree);                            // 清空整棵树
 // --- 展开态 ---
@@ -298,7 +364,7 @@ void  YMGUI_TreeView_SetSelectedNode(GYOBJ tree, GYTREENODE node);
 void  YMGUI_TreeView_SetExpandCb(GYOBJ tree, GYtree_expand_cb cb);   // 懒加载:首次展开目录时填子节点
 void  YMGUI_TreeView_SetSelectCb(GYOBJ tree, GYtree_select_cb cb);   // 单击选中
 void  YMGUI_TreeView_SetActivateCb(GYOBJ tree, GYtree_activate_cb cb);// 双击文件(目录双击=切展开)
-void  YMGUI_TreeView_SetContextCb(GYOBJ tree, GYtree_context_cb cb); // 右键选中行后请求上下文操作
+void  YMGUI_TreeView_SetContextCb(GYOBJ tree, GYtree_context_cb cb); // 上下文请求先选中再回调
 // --- 外观/滚动 ---
 void  YMGUI_TreeView_SetRowHeight(GYOBJ tree, GYcoord row_h);
 void  YMGUI_TreeView_SetIndent(GYOBJ tree, GYcoord indent);         // 每层缩进像素(默认 16)
@@ -306,7 +372,7 @@ void  YMGUI_TreeView_SetScroll(GYOBJ tree, GYcoord scroll_y);       // 钳到内
 GYcoord YMGUI_TreeView_GetScroll(GYOBJ tree);
 uint16  YMGUI_TreeView_GetVisibleCount(GYOBJ tree);                 // 当前展开态下的可见行数
 // 节点树(child_head/sibling 链)+ 展平可见数组(展开/收起时重建);只画可见行。
-// 单击标记(▶/▼)切展开;单击名字选中;右键先选中再触发 context;双击目录切展开、双击文件触发 activate。拖动即滚动。
+// 单击标记(▶/▼)切展开;单击名字选中;上下文请求先选中行再回调;双击目录切展开、双击文件触发 activate。拖动即滚动。
 // 目录名暖黄、文件浅灰;懒加载 loaded 标志防重入。编译期总开关 YMGUI_TREEVIEW(0=整控件裁空)
 ```
 
@@ -456,6 +522,35 @@ app 自造 GYfont(`bitmap=NULL`,填 `glyph_read` 回调)引用固件内的码点
 生成的 `YMGUI_GB2312_cps[]`),`YMGUI_Font_SetFallback(&it)` 一句即让所有控件遇任意 GB2312
 汉字自动走外部 flash。代价仅 `.bss` 一个指针,字体数据本身全 const。见 `demo_font_gb2312.c`。
 
+## 插件系统（PLUGIN）
+
+插件描述符包含 `id/name/api_version` 和 `init/tick/deinit` 生命周期回调。宿主填充
+`YMGUI_PluginHost` 后静态注册并加载：
+
+```c
+YMGUI_PluginRegistry_Add(YMGUI_Plugin_Get());
+YMGUI_PluginRegistry_LoadAll(&host);
+YMGUI_PluginRegistry_Tick(elapsed_ms);
+YMGUI_PluginRegistry_UnloadAll();
+```
+
+重复 `LoadAll` 不会再次初始化已激活或失败的插件。`UnloadAll` 逆序释放活跃插件，
+静态插件保留注册信息并可再次加载；动态插件关闭共享库后从注册表移除。
+`Reset` 会先安全卸载再清空全部注册。插件 `init` 失败时宿主立即调用其 `deinit`
+作为部分初始化资源的回滚钩子。
+
+动态 UI 插件不应直接引用宿主可执行文件中的 YMGUI 符号，而应使用
+`YMGUI_PluginHost` 尾部的对象、Label、Button 函数表。插件卸载前必须先销毁自己创建
+的对象树，尤其是回调函数位于动态库中的 Button；否则关闭动态库后会留下失效回调。
+`YMGUI_PLUGIN_HOST_UI_SIZE` 可用于检查宿主是否提供完整 UI 能力。
+
+有操作系统的平台可用 `YMGUI_Plugin_LoadDynamic(path, &host)` 加载导出
+`YMGUI_Plugin_Get` 的动态库：Linux/Android 为 `.so`，Windows 为 `.dll`，macOS
+为 `.dylib`；裸机直接使用静态注册路径。插件管理器可先调用
+`YMGUI_Plugin_InspectDynamic(path, &info)` 读取复制后的 `id/name/api_version`，只有入口、
+结构大小、API 版本、ID/名称和必需生命周期回调均合法时才展示候选。探测需要临时打开
+动态库，属于兼容性过滤而不是不可信本机代码的安全沙箱。
+
 ## 颜色 / 常用宏（CONFIG）
 
 ```c
@@ -483,9 +578,10 @@ int16 GY_Sin(int32 deg);   int16 GY_Cos(int32 deg);      // Q15(值=实际*32768
 | 文本输入 + 焦点 | Demo/demo_textinput.c |
 | 可滚动列表 | Demo/demo_list.c |
 | 可绘制位图画布(缩放/绘制回调) | Demo/demo_canvas.c |
+| 虚拟摇杆(鼠标/触摸、限位、可选回中、自定义皮肤) | Demo/demo_joystick.c |
 | HSV 取色器 | Demo/demo_colorpicker.c |
 | 居中高亮平滑滚动列表(歌词/时间/日历) | Demo/demo_roller.c |
 | 通用柱状图(频谱/直方图/统计) | Demo/demo_barchart.c |
 | 类 PS 图层画板(图层/融合/工具全 app 侧) | project_Demo/image_edit/ |
 | 音乐播放器(ffmpeg 解码/SDL2 声卡/歌词/频谱全 app 侧) | project_Demo/music_player/ |
-| 任意机制的精确行为 | 对应 Demo/test_*.c（断言即规格） |
+| 任意机制的精确行为 | 对应 tests/test_*.c（断言即规格） |

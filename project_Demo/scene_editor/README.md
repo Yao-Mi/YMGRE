@@ -3,16 +3,36 @@
 场景编辑器是 YMGRE 的系统级验收 ProjectDemo，用来同时验证网格生成、对象/灯光/相机生命周期、
 实时场景编辑、RenderTarget、3D 辅助线以及 YMGUI 输入和控件组合。
 
+## 开发记录（2026-08-27）
+
+- 完成场景编辑闭环：新建、打开、保存、未保存确认、退出保护和资源错误弹窗；
+- 接入 Mini-XML 的 Ogre/DotScene 风格 XML，并支持 Blender 导出插件；
+- 增加缺失网格、材质、材质引用和贴图的具体错误提示，以及可选的错误物体过滤；
+- 增加 24 级撤销/重做、对象克隆和 `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` 快捷键；
+- 增加移动、旋转、缩放模式，支持二次点击取消约束；移动轴和三轴旋转参考环采用动态 Stack 菜单与加宽命中区域；
+- 层级右键菜单改用 `YMGUI_Layout_Stack`，根据对象类型动态排列重命名、删除、切换相机和克隆命令；
+- 正式构建目录和无头自测均通过：`build/project_Demo/scene_editor/scene_editor`。
+
 ## 当前功能
 
 - 中文顶部工具栏、场景层级、检查器、状态栏和中央视口；
-- 编辑菜单可切换左右侧栏、复位视图，并保留打开/保存场景的后续命令入口；
+- 编辑菜单可打开/保存 Ogre DotScene 风格的 `.scene` XML、切换左右侧栏、复位视图，并控制
+  坐标轴和参考网格的显示，默认开启；
+- 新建、打开其他场景或退出程序时，如果当前场景有未保存修改，会统一询问保存、不保存或取消；
+  保存失败或取消文件选择时不会丢弃当前场景；
+- 编辑菜单提供 24 级撤销/重做；场景层级右键菜单提供“克隆”选中对象；视口聚焦时可用 `Ctrl+Z` 撤销，
+  `Ctrl+Shift+Z` 或 `Ctrl+Y` 重做，历史恢复沿用场景序列化和资源校验链路；
+- 场景文件使用 DotScene 常用的 `environment/nodes/node/entity/light/camera` 结构，由仓库内置的 Mini-XML 4.0.5 读写，保存基本网格参数、导入网格的相对资源路径、灯光、相机、当前视口相机和可编辑属性；
+- 打开场景时会先校验文件并在临时场景中创建全部资源，成功后才替换当前场景；
 - 收起侧栏后，视口、Image、鼠标命中层和 YMGRE RenderTarget 自动占用释放出的宽度；
 - YMGRE 实时渲染空场景参考网格，以及红色 X、绿色 Y、蓝色 Z 三轴；
 - 网格和坐标轴使用独立 3D 线段图元，不是三角平面线框，从网格下方观察仍然可见；
 - 左键点中对象会选中并在相机视平面内拖动物体；左击空白区域取消选择，继续拖动则平移视图；
-- 右键拖动绕选中对象旋转，无选择时绕当前相机目标旋转；滚轮连续缩放，编辑 / 重置视图
+- 右键拖动在有选中对象时绕对象旋转，否则绕世界原点旋转；滚轮连续缩放，编辑 / 重置视图
   恢复初始视角；
+- 顶部提供可切换的移动、旋转、缩放三种变换模式，再次点击当前按钮可取消约束并恢复自由移动；
+  移动操作轴按红色 X、绿色 Y、蓝色 Z 约束位置，三轴旋转环分别绕 X/Y/Z 旋转，灰色原始坐标轴
+  与彩色当前旋转参考环同时显示，缩放操作轴执行统一缩放；轴线命中区域加宽，一次拖动对应一次撤销记录；
 - 视口按投影中心和包围半径拾取对象；选中网格显示橙色世界空间包围盒，灯光与相机显示
   橙色三轴十字标记；
 - 选中聚光灯显示由灯位、照射目标和实际内锥角生成的橙色线框光锥，并显示灯位到目标的中心线
@@ -36,11 +56,12 @@
   相机显示位置与注视目标；修改全局光照颜色会直接更新参与渲染的 YMGRE Light；
 - 点光源和聚光灯可选择“启用阴影”，默认关闭；当前开关控制 YMGRE 已有的背光面近似补偿
   `shadowK`，不是基于遮挡关系的 shadow map 或真实投影阴影；
-- 顶部“导入”使用 YMGUI TreeView 文件管理模式按需展开真实目录，只显示目录和 `.mesh` 文件；
+- 顶部“导入”使用 YMGUI FileDialog 浏览真实目录，通过显示过滤回调只显示目录和 `.mesh` 文件
+  （扩展名大小写不敏感）；材质或贴图缺失不会隐藏 mesh，而是在选择后弹出具体错误；
   选中的 Ogre 二进制 `.mesh` 会通过 YMGRE 资源读取器加载，材质加入编辑器材质列表，网格加入
   场景对象列表并以最低顶点贴合 `Y=0`。
-- 导入浏览器支持“上一级”，目录可双击进入，也可选中后点击“进入目录”；导入前可选择是否
-  “显示渲染线框”，默认关闭。该线框是实际可见模型的三角网格叠加，不是碰撞网格；当前
+- 导入对话框支持路径编辑、上一级、目录树展开和新建目录；底部嵌入“显示渲染线框”选项，
+  默认关闭。该线框是实际可见模型的三角网格叠加，不是碰撞网格；当前
   YMGRE Scene Editor 尚未建立独立碰撞体或碰撞网格系统。
 - 导入前会预检同目录同名 `.material` 以及材质脚本中每条 `texture` 引用；缺失时在导入窗口
   显示具体文件名并停止加载，避免把不完整资源交给旧加载器导致进程退出。
@@ -75,12 +96,42 @@ cmake --build build/project_Demo/scene_editor -j
 YMGRE_IMPORT_ROOT=/path/to/assets ./build/project_Demo/scene_editor/scene_editor
 ```
 
+打开/保存场景使用 YMGUI FileDialog：可在目录树中选择路径，再在底部输入文件名；
+保存时未填写 `.scene` 后缀会自动补齐。默认目标为当前目录的 `scene.scene`，也可指定默认路径：
+
+```bash
+YMGRE_SCENE_PATH=/path/to/example.scene ./build/project_Demo/scene_editor/scene_editor
+```
+
+打开场景对话框底部的“强制忽略资源错误”默认关闭。启用后，缺少网格、材质或贴图的对象会被
+过滤，其他对象继续加载，并在完成后弹窗列出被过滤的对象；损坏的 XML、相机或灯光仍会阻止打开。
+
+## Blender 导出
+
+`tools/blender_ymgre_exporter` 是 Blender 3.6+ Add-on。Blender 3.6 可安装源码目录，Blender 4.2+
+可通过 Extensions / Install from Disk 安装仓库提供的 `tools/ymgre_scene_exporter.zip`。启用后使用
+`File > Export > YMGRE Scene (.scene)`。
+
+推荐流程：
+
+1. 使用 Blender2Ogre 将网格导出为同目录的 `.mesh`、`.material` 和 BMP 贴图；
+2. 网格资源默认取对象名，例如 Blender 对象 `Tank` 对应 `Tank.mesh`；资源名不同时，在对象的
+   Custom Properties 中添加字符串 `ymgre_mesh_file`，值可为绝对路径、相对导出目录路径或 Blender
+   的 `//` 相对路径；
+3. 从 YMGRE 导出面板选择 `.scene` 目标。导出器会转换 Blender Z-up 坐标到 YMGRE Y-up，写出网格、
+   相机、点光、聚光、活动相机和环境光，并检查 Ogre 资源依赖；
+4. 在场景编辑器中直接打开生成的 `.scene`。资源警告会显示在 Blender 状态栏并输出到控制台。
+
+对象 Custom Properties 还支持 `ymgre_fixed`、`ymgre_wireframe`、`ymgre_detail_a`、
+`ymgre_detail_b`。设置 `ymgre_primitive` 为 `plane/cube/box/sphere/cylinder/cone/torus/capsule`
+之一时，会导出为编辑器内置基本体，不依赖外部 `.mesh`。
+
 当前导入格式要求：
 
 - 文件为 YMGRE 已支持的 Ogre 二进制 `.mesh`，不是 Wavefront OBJ、FBX 或 glTF；
 - 同目录存在同名 `.material`，例如 `model.mesh` 对应 `model.material`；
 - `.material` 引用的 BMP 贴图位于同目录；
-- 文件选择器只读取文件，不提供删除、重命名等写操作。
+- 文件选择器不删除或重命名已有文件；可使用 FileDialog 的“New dir”创建资源目录。
 
 有限帧无头验证：
 
@@ -114,8 +165,7 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
 
 ## 当前边界与后续验收项
 
-- 实现场景 Open/Save、对象复制和完整序列化；当前“保存场景”和“打开场景”仍只是入口；
-- 网格拾取使用所有可见 submesh 的投影顶点屏幕包围区，不是逐三角形射线拾取；对象拖动约束
-  在相机视平面，后续增加平移/旋转/缩放 Gizmo 与轴向约束；
+- 场景格式尚未保存每个导入子网格的独立显隐状态；
+- 网格拾取使用所有可见 submesh 的投影顶点屏幕包围区，不是逐三角形射线拾取；
 - 补充 `.map` 场景导入；当前外部导入已覆盖 `.mesh`、同名 `.material` 和 BMP 贴图预检；
 - 为相机轨道、动态视口和辅助线遮挡增加可自动判定的 framebuffer 回归测试。

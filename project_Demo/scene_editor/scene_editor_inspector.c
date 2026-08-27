@@ -33,8 +33,6 @@ typedef struct {
 	uint16 submeshCount;
 	SceneEditorObject* submeshObject;
 	GRE_Object4d submeshMesh;
-	GYOBJ repeatButtons[16];
-	uint8 repeatButtonCount;
 	uint8 updating;
 	SceneEditorObject* object;
 	SceneEditorInspectorChangedCb changedCb;
@@ -287,8 +285,6 @@ static GYOBJ smallButton(GYOBJ parent, GYcoord x, GYcoord y, const char* text,
 	YMGUI_Button_SetText(button, text);
 	YMGUI_Button_SetClicked(button, clicked);
 	YMGUI_Button_SetRepeat(button, 400, 80);
-	if (g_inspector.repeatButtonCount < sizeof(g_inspector.repeatButtons) / sizeof(g_inspector.repeatButtons[0]))
-		g_inspector.repeatButtons[g_inspector.repeatButtonCount++] = button;
 	return button;
 }
 
@@ -297,7 +293,7 @@ static void valueRow(GYOBJ parent, InspectorValue value, GYcoord y, const char* 
 {
 	inspectorLabel(parent, 12, y + 4, 18, 20, axis, axisColor);
 	smallButton(parent, 34, y, "+", plus);
-	g_inspector.inputs[value] = YMGUI_Creat_TextInput_Creat(parent, 66, y, 92, 26);
+	g_inspector.inputs[value] = YMGUI_Creat_TextInput_Creat(parent, 66, y, 92, 26, 31);
 	YMGUI_TextInput_SetChanged(g_inspector.inputs[value], changed);
 	smallButton(parent, 162, y, "-", minus);
 }
@@ -330,7 +326,7 @@ void SceneEditorInspector_Build(GYOBJ parent, SceneEditorInspectorChangedCb chan
 		g_inspector.detailLabels[i] = inspectorLabel(g_inspector.topologyGroup, 12, 30 + i * 32,
 			62, 24, i == 0 ? "网格 A" : "网格 B", muted);
 		g_inspector.detailInputs[i] = YMGUI_Creat_TextInput_Creat(g_inspector.topologyGroup,
-			78, 28 + i * 32, 112, 26);
+			78, 28 + i * 32, 112, 26, 31);
 		YMGUI_TextInput_SetChanged(g_inspector.detailInputs[i], detailChanged);
 	}
 
@@ -354,7 +350,7 @@ void SceneEditorInspector_Build(GYOBJ parent, SceneEditorInspectorChangedCb chan
 	g_inspector.lightSwatch = YMGUI_Creat_Button_Creat(g_inspector.lightGroup, 70, 32, 88, 28);
 	YMGUI_Button_SetClicked(g_inspector.lightSwatch, colorClicked);
 	inspectorLabel(g_inspector.lightGroup, 12, 78, 52, 24, "强度", muted);
-	g_inspector.inputs[VALUE_STRENGTH] = YMGUI_Creat_TextInput_Creat(g_inspector.lightGroup, 70, 74, 120, 28);
+	g_inspector.inputs[VALUE_STRENGTH] = YMGUI_Creat_TextInput_Creat(g_inspector.lightGroup, 70, 74, 120, 28, 31);
 	YMGUI_TextInput_SetChanged(g_inspector.inputs[VALUE_STRENGTH], strengthChanged);
 	g_inspector.shadows = YMGUI_Creat_Checkbox_Creat(g_inspector.lightGroup, 12, 110, 180, 26);
 	YMGUI_Checkbox_SetText(g_inspector.shadows, "启用阴影");
@@ -465,10 +461,4 @@ void SceneEditorInspector_Shutdown(void)
 	free(g_inspector.submeshes);
 	g_inspector.submeshes = NULL;
 	g_inspector.submeshCount = 0;
-}
-
-void SceneEditorInspector_Tick(uint16 elapsedMs)
-{
-	for (uint8 i = 0; i < g_inspector.repeatButtonCount; ++i)
-		YMGUI_Button_Tick(g_inspector.repeatButtons[i], elapsedMs);
 }

@@ -40,6 +40,9 @@ static GYcoord       s_right_start_x = 0, s_right_start_y = 0;
 //退出时若设了环境变量 YMGUI_SHOT=<path.bmp> 就存图(所有 demo 零改动即可截屏)。
 static GYpx*         s_frame = NULL;
 static GYDISP        s_disp = NULL;
+static Uint32        s_last_tick = 0;
+static SDL_LCD_QuitRequestCb s_quit_request_cb = NULL;
+static void*         s_quit_request_user = NULL;
 
 #define SDL_LCD_LONG_PRESS_MS   600u
 #define SDL_LCD_LONG_PRESS_SLOP 10
@@ -200,6 +203,7 @@ int SDL_LCD_Init(GYDISP disp, int scale)
 
 	if (SDL_Init(SDL_INIT_VIDEO) != 0)
 		return -1;
+	s_last_tick = SDL_GetTicks();
 	s_win = SDL_CreateWindow("YMGUI SDL_LCD",
 		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 		s_w * scale, s_h * scale, SDL_WINDOW_SHOWN);
@@ -285,7 +289,21 @@ void SDL_LCD_Destroy(void)
 	sdlRightReset();
 	s_w = 0;
 	s_h = 0;
+	s_last_tick = 0;
+	s_quit_request_cb = NULL;
+	s_quit_request_user = NULL;
 	SDL_Quit();
+}
+
+void SDL_LCD_SetQuitRequestCb(SDL_LCD_QuitRequestCb callback, void* userData)
+{
+	s_quit_request_cb = callback;
+	s_quit_request_user = userData;
+}
+
+static int sdlQuitAllowed(void)
+{
+	return s_quit_request_cb == NULL || s_quit_request_cb(s_quit_request_user);
 }
 
 /**
@@ -294,6 +312,9 @@ void SDL_LCD_Destroy(void)
   */
 int SDL_LCD_PumpEvents(void)
 {
+	Uint32 now = SDL_GetTicks();
+	YMGUI_Inject_Tick((uint32)(now - s_last_tick));
+	s_last_tick = now;
 	SDL_Event e;
 	while (SDL_PollEvent(&e))
 	{
@@ -302,7 +323,8 @@ int SDL_LCD_PumpEvents(void)
 			sdlTouchCancel();
 			sdlRightCancel();
 			YMGUI_Inject_PointerCancel();
-			return 0;
+			if (sdlQuitAllowed()) return 0;
+			continue;
 		}
 		if (e.type == SDL_APP_WILLENTERBACKGROUND ||
 		    e.type == SDL_APP_DIDENTERBACKGROUND ||
@@ -418,7 +440,19 @@ int SDL_LCD_PumpEvents(void)
 		         (e.motion.state & SDL_BUTTON_LMASK))
 			YMGUI_Inject_Pointer((GYcoord)(e.motion.x / s_scale), (GYcoord)(e.motion.y / s_scale), 1);//按住拖动
 		else if (e.type == SDL_MOUSEWHEEL)
-			YMGUI_Inject_Key((uint32)(e.wheel.y > 0 ? '+' : '-'), 1);
+		{
+			int mouse_x = 0, mouse_y = 0;
+			int32 wheel_x = e.wheel.x;
+			int32 wheel_y = e.wheel.y;
+			if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
+			{
+				wheel_x = -wheel_x;
+				wheel_y = -wheel_y;
+			}
+			SDL_GetMouseState(&mouse_x, &mouse_y);
+			YMGUI_Inject_Wheel((GYcoord)(mouse_x / s_scale), (GYcoord)(mouse_y / s_scale),
+			                   wheel_x, wheel_y);
+		}
 		//文本输入(可打印字符,已处理布局/大小写)→ 按字符注入
 		else if (e.type == SDL_TEXTINPUT)
 		{
@@ -434,22 +468,24 @@ int SDL_LCD_PumpEvents(void)
 			int          ctrl = (mod & KMOD_CTRL)  != 0;
 			int          shft = (mod & KMOD_SHIFT) != 0;
 
-			if (k == SDLK_ESCAPE)
-			{
+				if (k == SDLK_ESCAPE)
+				{
 				sdlTouchCancel();
 				sdlRightCancel();
 				YMGUI_Inject_PointerCancel();
-				return 0;
+					if (sdlQuitAllowed()) return 0;
+					continue;
 			}
 			else if (ctrl)
 			{
-				//Ctrl+组合键:剪贴板/全选/撤销/查找 + Ctrl+Home/End 文首尾
+					//Ctrl+组合键:剪贴板/全选/撤销/重做/查找 + Ctrl+Home/End 文首尾
 				switch (k)
 				{
 				case SDLK_c:    YMGUI_Inject_Key(GY_KEY_COPY, 1);     break;
 				case SDLK_x:    YMGUI_Inject_Key(GY_KEY_CUT, 1);      break;
 				case SDLK_v:    YMGUI_Inject_Key(GY_KEY_PASTE, 1);    break;
-				case SDLK_z:    YMGUI_Inject_Key(GY_KEY_UNDO, 1);     break;
+					case SDLK_z:    YMGUI_Inject_Key(shft ? GY_KEY_REDO : GY_KEY_UNDO, 1); break;
+					case SDLK_y:    YMGUI_Inject_Key(GY_KEY_REDO, 1);     break;
 				case SDLK_a:    YMGUI_Inject_Key(GY_KEY_SEL_ALL, 1);  break;
 				case SDLK_f:    YMGUI_Inject_Key(GY_KEY_FIND, 1);     break;
 				case SDLK_HOME: YMGUI_Inject_Key(GY_KEY_DOC_HOME, 1); break;
@@ -458,7 +494,8 @@ int SDL_LCD_PumpEvents(void)
 				}
 			}
 			else if (k == SDLK_BACKSPACE) YMGUI_Inject_Key(GY_KEY_BACKSPACE, 1);
-			else if (k == SDLK_RETURN)    YMGUI_Inject_Key(GY_KEY_ENTER, 1);
+			else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
+				YMGUI_Inject_Key(GY_KEY_ENTER, 1);
 			else if (k == SDLK_DELETE)    YMGUI_Inject_Key(GY_KEY_DEL, 1);
 			else if (k == SDLK_LEFT)      YMGUI_Inject_Key(shft ? GY_KEY_SHIFT_LEFT  : GY_KEY_LEFT, 1);
 			else if (k == SDLK_RIGHT)     YMGUI_Inject_Key(shft ? GY_KEY_SHIFT_RIGHT : GY_KEY_RIGHT, 1);

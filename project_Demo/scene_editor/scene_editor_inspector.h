@@ -11,7 +11,6 @@ typedef uint8 (*SceneEditorInspectorRemeshCb)(SceneEditorObject* object,
 void SceneEditorInspector_Build(GYOBJ parent, SceneEditorInspectorChangedCb changedCb,
 	SceneEditorInspectorRemeshCb remeshCb, void* userData);
 void SceneEditorInspector_SetObject(SceneEditorObject* object);
-void SceneEditorInspector_Tick(uint16 elapsedMs);
 void SceneEditorInspector_Shutdown(void);
 
 #endif

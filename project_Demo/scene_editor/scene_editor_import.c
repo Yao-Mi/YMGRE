@@ -1,39 +1,33 @@
 #include "scene_editor_import.h"
+#include "scene_editor_file_dialog.h"
+#include "scene_editor_model.h"
 
-#include "YMGUI_Button.h"
 #include "YMGUI_Checkbox.h"
-#include "YMGUI_Label.h"
-#include "YMGUI_TreeView.h"
-#include <dirent.h>
+#include "YMGUI_FileDialog.h"
+#include "YMGUI_MsgBox.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
 
+#define IMPORT_DIALOG_WIDTH 760
+#define IMPORT_DIALOG_HEIGHT 600
+
 typedef struct {
-	GYOBJ modal, tree, pathLabel, status, wireframe;
-	char root[PATH_MAX];
-	char selected[PATH_MAX];
+	GYOBJ dialog, wireframe, errorBox;
+	char root[SCENE_EDITOR_PATH_CAPACITY];
+	char lastPath[SCENE_EDITOR_PATH_CAPACITY];
 	SceneEditorImportCb importCb;
 	void* userData;
 } ImportState;
 
 static ImportState g_import;
-static void loadDirectory(GYTREENODE parent, const char* path);
-
-static void reloadCurrentDirectory(void)
-{
-	g_import.selected[0] = '\0';
-	YMGUI_Label_SetText(g_import.pathLabel, g_import.root);
-	YMGUI_TreeView_Clear(g_import.tree);
-	loadDirectory(NULL, g_import.root);
-}
+static void openImport(uint8 resetOptions);
 
 static void joinPath(char* output, size_t capacity, const char* directory, const char* name)
 {
@@ -46,23 +40,39 @@ static void joinPath(char* output, size_t capacity, const char* directory, const
 	output[length] = '\0';
 }
 
-static void buildPath(GYTREENODE node, char* output, size_t capacity)
-{
-	if (node == NULL) { snprintf(output, capacity, "%s", g_import.root); return; }
-	buildPath(YMGUI_TreeView_NodeParent(node), output, capacity);
-	char path[PATH_MAX];
-	joinPath(path, sizeof(path), output, YMGUI_TreeView_NodeName(node));
-	snprintf(output, capacity, "%s", path);
-}
-
 static uint8 isMeshFile(const char* name)
 {
 	const char* extension = strrchr(name, '.');
-	return extension != NULL && strcmp(extension, ".mesh") == 0;
+	if (extension == NULL || strlen(extension) != 5) return 0;
+	const char expected[] = ".mesh";
+	for (uint8 i = 0; i < 5; ++i) {
+		char value = extension[i];
+		if (value >= 'A' && value <= 'Z') value = (char)(value - 'A' + 'a');
+		if (value != expected[i]) return 0;
+	}
+	return 1;
 }
 
-static uint8 validateDependencies(const char* meshPath, char* message, size_t capacity)
+static void materialPathForMesh(const char* meshPath, char* materialPath, size_t capacity)
 {
+	size_t length = strlen(meshPath);
+	snprintf(materialPath, capacity, "%s", meshPath);
+	if (length >= 5 && length + 4 < capacity)
+		snprintf(materialPath + length - 5, capacity - length + 5, ".material");
+}
+
+static const char* pathName(const char* path)
+{
+	const char* slash = strrchr(path, '/');
+	return slash != NULL ? slash + 1 : path;
+}
+
+uint8 SceneEditorImport_Validate(const char* meshPath, char* message, size_t capacity)
+{
+	if (meshPath == NULL || !isMeshFile(meshPath)) {
+		snprintf(message, capacity, "请选择 Ogre .mesh 文件");
+		return 0;
+	}
 	if (access(meshPath, R_OK) != 0) {
 		snprintf(message, capacity, "无法读取网格文件：%.48s", strrchr(meshPath, '/') != NULL ? strrchr(meshPath, '/') + 1 : meshPath);
 		return 0;
@@ -72,23 +82,29 @@ static uint8 validateDependencies(const char* meshPath, char* message, size_t ca
 		snprintf(message, capacity, "网格文件路径无效");
 		return 0;
 	}
-	char materialPath[PATH_MAX];
-	snprintf(materialPath, sizeof(materialPath), "%s", meshPath);
-	snprintf(materialPath + length - 5, sizeof(materialPath) - length + 5, ".material");
+	char materialPath[PATH_MAX]; materialPathForMesh(meshPath, materialPath, sizeof(materialPath));
 	FILE* material = fopen(materialPath, "r");
 	if (material == NULL) {
-		const char* name = strrchr(materialPath, '/');
-		snprintf(message, capacity, "缺少或无法读取同名材质：%.48s", name != NULL ? name + 1 : materialPath);
+		snprintf(message, capacity, "材质文件不存在或无法读取：%.72s", pathName(materialPath));
 		return 0;
 	}
 	char directory[PATH_MAX];
 	snprintf(directory, sizeof(directory), "%s", materialPath);
 	char* slash = strrchr(directory, '/');
 	if (slash != NULL) *slash = '\0'; else snprintf(directory, sizeof(directory), ".");
-	char line[1024];
+	char line[1024], currentMaterial[96] = "未命名材质";
 	while (fgets(line, sizeof(line), material) != NULL) {
 		char* cursor = line;
 		while (*cursor == ' ' || *cursor == '\t') cursor++;
+		if (strncmp(cursor, "material", 8) == 0 && (cursor[8] == ' ' || cursor[8] == '\t')) {
+			cursor += 8; while (*cursor == ' ' || *cursor == '\t') cursor++;
+			size_t count = 0;
+			while (*cursor != '\0' && *cursor != '\r' && *cursor != '\n' &&
+				*cursor != ' ' && *cursor != '\t' && *cursor != ':' && count + 1 < sizeof(currentMaterial))
+				currentMaterial[count++] = *cursor++;
+			currentMaterial[count] = '\0';
+			continue;
+		}
 		if (strncmp(cursor, "texture", 7) != 0 || (cursor[7] != ' ' && cursor[7] != '\t')) continue;
 		cursor += 7;
 		while (*cursor == ' ' || *cursor == '\t') cursor++;
@@ -103,7 +119,8 @@ static uint8 validateDependencies(const char* meshPath, char* message, size_t ca
 		else joinPath(texturePath, sizeof(texturePath), directory, texture);
 		if (access(texturePath, R_OK) != 0) {
 			fclose(material);
-			snprintf(message, capacity, "材质引用的贴图不存在：%.48s", texture);
+			snprintf(message, capacity, "材质「%.48s」（%.48s）引用的贴图不存在：%.72s",
+				currentMaterial, pathName(materialPath), texture);
 			return 0;
 		}
 	}
@@ -116,112 +133,83 @@ static uint8 validateDependencies(const char* meshPath, char* message, size_t ca
 	return 1;
 }
 
-static void loadDirectory(GYTREENODE parent, const char* path)
+static uint8 materialScriptDefines(FILE* material, const char* requiredName)
 {
-	DIR* directory = opendir(path);
-	if (directory == NULL) return;
-	struct dirent* entry;
-	while ((entry = readdir(directory)) != NULL) {
-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-		char full[PATH_MAX]; struct stat info;
-		joinPath(full, sizeof(full), path, entry->d_name);
-		if (stat(full, &info) == 0 && S_ISDIR(info.st_mode))
-			YMGUI_TreeView_AddNode(g_import.tree, parent, entry->d_name, 1);
+	char line[1024]; rewind(material);
+	while (fgets(line, sizeof(line), material) != NULL) {
+		char* cursor = line; while (*cursor == ' ' || *cursor == '\t') cursor++;
+		if (strncmp(cursor, "material", 8) != 0 || (cursor[8] != ' ' && cursor[8] != '\t')) continue;
+		cursor += 8; while (*cursor == ' ' || *cursor == '\t') cursor++;
+		char name[128]; size_t count = 0;
+		while (*cursor != '\0' && *cursor != '\r' && *cursor != '\n' &&
+			*cursor != ' ' && *cursor != '\t' && *cursor != ':' && count + 1 < sizeof(name))
+			name[count++] = *cursor++;
+		name[count] = '\0';
+		if (strcmp(name, requiredName) == 0) return 1;
 	}
-	rewinddir(directory);
-	while ((entry = readdir(directory)) != NULL) {
-		if (!isMeshFile(entry->d_name)) continue;
-		char full[PATH_MAX]; struct stat info;
-		joinPath(full, sizeof(full), path, entry->d_name);
-		if (stat(full, &info) == 0 && S_ISREG(info.st_mode))
-			YMGUI_TreeView_AddNode(g_import.tree, parent, entry->d_name, 0);
+	return 0;
+}
+
+uint8 SceneEditorImport_ValidateLoadedMaterials(const char* meshPath, GRE_Object4d mesh,
+	char* message, size_t capacity)
+{
+	if (meshPath == NULL || mesh == NULL) {
+		snprintf(message, capacity, "无法检查网格使用的材质"); return 0;
 	}
-	closedir(directory);
-}
-
-static void treeExpanded(GYOBJ tree, GYTREENODE node)
-{
-	(void)tree;
-	char path[PATH_MAX]; buildPath(node, path, sizeof(path));
-	loadDirectory(node, path);
-}
-
-static void treeSelected(GYOBJ tree, GYTREENODE node)
-{
-	(void)tree;
-	buildPath(node, g_import.selected, sizeof(g_import.selected));
-	YMGUI_Label_SetText(g_import.pathLabel, g_import.selected);
-	YMGUI_Label_SetText(g_import.status,
-		YMGUI_TreeView_NodeIsDir(node) ? "展开目录并选择 .mesh 文件" : "已选择 Ogre .mesh 文件");
-}
-
-static void treeActivated(GYOBJ tree, GYTREENODE node)
-{
-	(void)tree;
-	if (YMGUI_TreeView_NodeIsDir(node)) {
-		char path[PATH_MAX];
-		buildPath(node, path, sizeof(path));
-		snprintf(g_import.root, sizeof(g_import.root), "%s", path);
-		reloadCurrentDirectory();
-		YMGUI_Label_SetText(g_import.status, "已进入目录；可用上一级返回");
+	char materialPath[PATH_MAX]; materialPathForMesh(meshPath, materialPath, sizeof(materialPath));
+	FILE* material = fopen(materialPath, "r");
+	if (material == NULL) {
+		snprintf(message, capacity, "材质文件不存在或无法读取：%.72s", pathName(materialPath)); return 0;
 	}
-}
-
-static void upClicked(GYOBJ button)
-{
-	(void)button;
-	if (strcmp(g_import.root, "/") != 0) {
-		size_t length = strlen(g_import.root);
-		while (length > 1 && g_import.root[length - 1] == '/') g_import.root[--length] = '\0';
-		char* slash = strrchr(g_import.root, '/');
-		if (slash == g_import.root) g_import.root[1] = '\0';
-		else if (slash != NULL) *slash = '\0';
-		else snprintf(g_import.root, sizeof(g_import.root), ".");
+	for (GRE_Object4d part = mesh; part != NULL; part = part->nextObject) {
+		if (part->materiaName == NULL || part->materiaName[0] == '\0') continue;
+		if (!materialScriptDefines(material, part->materiaName)) {
+			snprintf(message, capacity, "材质「%.72s」未在材质文件 %.72s 中定义",
+				part->materiaName, pathName(materialPath));
+			fclose(material); return 0;
+		}
 	}
-	reloadCurrentDirectory();
-	YMGUI_Label_SetText(g_import.status, "已返回上一级目录");
+	fclose(material); return 1;
 }
 
-static void enterClicked(GYOBJ button)
+static uint8 visibleMeshEntry(GYOBJ dialog, GYfiledialog_mode mode,
+	const char* parentPath, const GYfiledialog_entry* entry, void* user)
 {
-	(void)button;
-	GYTREENODE selected = YMGUI_TreeView_GetSelectedNode(g_import.tree);
-	if (selected == NULL || !YMGUI_TreeView_NodeIsDir(selected)) {
-		YMGUI_Label_SetText(g_import.status, "请先选择一个目录");
-		return;
+	(void)dialog; (void)mode; (void)parentPath; (void)user;
+	/* Dependency validation belongs to importResult; orphan meshes remain visible. */
+	return entry->is_dir || isMeshFile(entry->name);
+}
+
+static void reopenImport(GYOBJ messageBox, int index)
+{
+	(void)messageBox; (void)index; openImport(0);
+}
+
+static void showImportError(const char* message)
+{
+	if (g_import.errorBox == NULL) {
+		fprintf(stderr, "scene editor import: %s\n", message); return;
 	}
-	treeActivated(g_import.tree, selected);
+	YMGUI_MsgBox_ClearButtons(g_import.errorBox);
+	YMGUI_MsgBox_SetTitle(g_import.errorBox, "无法导入网格");
+	YMGUI_MsgBox_SetText(g_import.errorBox, message);
+	YMGUI_MsgBox_AddButton(g_import.errorBox, "返回", reopenImport);
+	YMGUI_MsgBox_Show(g_import.errorBox);
 }
 
-static void closeClicked(GYOBJ button)
+static void importResult(GYOBJ dialog, uint8 accepted, const char* path, void* user)
 {
-	(void)button; YMGUI_Obj_SetHidden(g_import.modal, 1);
-}
-
-static void importClicked(GYOBJ button)
-{
-	(void)button;
-	if (!isMeshFile(g_import.selected)) {
-		YMGUI_Label_SetText(g_import.status, "请先选择 .mesh 文件");
-		return;
-	}
+	(void)dialog; (void)user;
+	if (!accepted || path == NULL) return;
+	snprintf(g_import.lastPath, sizeof(g_import.lastPath), "%s", path);
 	char message[160];
-	if (!validateDependencies(g_import.selected, message, sizeof(message))) {
-		YMGUI_Label_SetText(g_import.status, message);
-		return;
+	if (!SceneEditorImport_Validate(path, message, sizeof(message))) {
+		showImportError(message); return;
 	}
-	uint8 wireframe = YMGUI_Checkbox_GetChecked(g_import.wireframe);
-	if (g_import.importCb != NULL && g_import.importCb(g_import.selected, wireframe, g_import.userData))
-		YMGUI_Obj_SetHidden(g_import.modal, 1);
-	else
-		YMGUI_Label_SetText(g_import.status, "资源完整，但网格解析失败；文件可能损坏或格式不受支持");
-}
-
-static GYOBJ dialogButton(GYOBJ parent, GYcoord x, const char* text, GYbtn_clicked_cb callback)
-{
-	GYOBJ button = YMGUI_Creat_Button_Creat(parent, x, 504, 104, 30);
-	YMGUI_Button_SetText(button, text); YMGUI_Button_SetClicked(button, callback);
-	return button;
+	uint8 wireframe = g_import.wireframe != NULL ?
+		YMGUI_Checkbox_GetChecked(g_import.wireframe) : 0;
+	if (g_import.importCb == NULL || !g_import.importCb(path, wireframe, g_import.userData))
+		showImportError("资源完整，但网格解析失败；文件可能损坏或格式不受支持");
 }
 
 void SceneEditorImport_Build(GYCTX context, SceneEditorImportCb importCb, void* userData)
@@ -229,37 +217,48 @@ void SceneEditorImport_Build(GYCTX context, SceneEditorImportCb importCb, void* 
 	memset(&g_import, 0, sizeof(g_import));
 	g_import.importCb = importCb; g_import.userData = userData;
 	const char* configured = getenv("YMGRE_IMPORT_ROOT");
-	if (configured != NULL && configured[0] != '\0') snprintf(g_import.root, sizeof(g_import.root), "%s", configured);
-	else if (getcwd(g_import.root, sizeof(g_import.root)) == NULL) snprintf(g_import.root, sizeof(g_import.root), ".");
-	GYOBJ top = YMGUI_Ctx_GetTopLayer(context);
-	g_import.modal = YMGUI_Creat_Obj_Creat(top, 0, 0, 1024, 680);
-	YMGUI_Obj_SetBgColor(g_import.modal, GY_ARGB(0xFF,0x10,0x14,0x1C));
-	GYOBJ dialog = YMGUI_Creat_Obj_Creat(g_import.modal, 112, 54, 800, 570);
-	YMGUI_Obj_SetBgColor(dialog, GY_ARGB(0xFF,0x27,0x31,0x42));
-	GYOBJ title = YMGUI_Creat_Label_Creat(dialog, 20, 16, 760, 24);
-	YMGUI_Label_SetText(title, "导入外部 Ogre 网格");
-	dialogButton(dialog, 20, "上一级", upClicked)->area.y = 46;
-	dialogButton(dialog, 136, "进入目录", enterClicked)->area.y = 46;
-	g_import.pathLabel = YMGUI_Creat_Label_Creat(dialog, 252, 50, 528, 24);
-	g_import.tree = YMGUI_Creat_TreeView_Creat(dialog, 20, 82, 760, 348);
-	YMGUI_TreeView_SetRowHeight(g_import.tree, 27); YMGUI_TreeView_SetIndent(g_import.tree, 18);
-	YMGUI_TreeView_SetExpandCb(g_import.tree, treeExpanded);
-	YMGUI_TreeView_SetSelectCb(g_import.tree, treeSelected);
-	YMGUI_TreeView_SetActivateCb(g_import.tree, treeActivated);
-	g_import.wireframe = YMGUI_Creat_Checkbox_Creat(dialog, 20, 442, 260, 26);
-	YMGUI_Checkbox_SetText(g_import.wireframe, "显示渲染线框");
-	GYOBJ dependencyHint = YMGUI_Creat_Label_Creat(dialog, 294, 444, 486, 22);
-	YMGUI_Label_SetText(dependencyHint, "要求：同目录同名 .material，且其引用贴图必须存在");
-	g_import.status = YMGUI_Creat_Label_Creat(dialog, 20, 474, 760, 24);
-	dialogButton(dialog, 560, "取消", closeClicked);
-	dialogButton(dialog, 676, "导入", importClicked);
-	YMGUI_Obj_SetHidden(g_import.modal, 1);
+	if (configured != NULL && configured[0] != '\0')
+		snprintf(g_import.root, sizeof(g_import.root), "%s", configured);
+	else if (getcwd(g_import.root, sizeof(g_import.root)) == NULL)
+		snprintf(g_import.root, sizeof(g_import.root), ".");
+	g_import.dialog = YMGUI_Creat_FileDialog_Creat(context, IMPORT_DIALOG_WIDTH,
+		IMPORT_DIALOG_HEIGHT, SCENE_EDITOR_PATH_CAPACITY - 1, 255, 256);
+	if (g_import.dialog == NULL) return;
+	YMGUI_FileDialog_SetFS(g_import.dialog, SceneEditorFileDialog_PosixFS(), NULL);
+	YMGUI_FileDialog_SetResultCb(g_import.dialog, importResult, NULL);
+	YMGUI_FileDialog_SetFilterCb(g_import.dialog, visibleMeshEntry, NULL);
+	GYcoord cardX = (context->top_layer->area.w - IMPORT_DIALOG_WIDTH) / 2;
+	GYcoord cardY = (context->top_layer->area.h - IMPORT_DIALOG_HEIGHT) / 2;
+	g_import.wireframe = YMGUI_Creat_Checkbox_Creat(g_import.dialog,
+		cardX + 16, cardY + IMPORT_DIALOG_HEIGHT - 30, 260, 28);
+	if (g_import.wireframe != NULL)
+		YMGUI_Checkbox_SetText(g_import.wireframe, "显示渲染线框");
+	g_import.errorBox = YMGUI_Creat_MsgBox_Creat(context);
 }
 
-void SceneEditorImport_Open(void)
+static void openImport(uint8 resetOptions)
 {
-	reloadCurrentDirectory();
-	YMGUI_Label_SetText(g_import.status, "请选择 .mesh；同目录必须有同名 .material 及其引用贴图");
-	YMGUI_Checkbox_SetChecked(g_import.wireframe, 0);
-	YMGUI_Obj_SetHidden(g_import.modal, 0);
+	if (g_import.dialog == NULL) return;
+	char directory[SCENE_EDITOR_PATH_CAPACITY], name[256] = "";
+	if (g_import.lastPath[0] != '\0') {
+		snprintf(directory, sizeof(directory), "%s", g_import.lastPath);
+		char* slash = strrchr(directory, '/');
+		if (slash != NULL) {
+			snprintf(name, sizeof(name), "%s", slash + 1);
+			if (slash == directory) directory[1] = '\0'; else *slash = '\0';
+		} else {
+			size_t length = strlen(directory);
+			if (length >= sizeof(name)) length = sizeof(name) - 1;
+			memcpy(name, directory, length); name[length] = '\0';
+			snprintf(directory, sizeof(directory), ".");
+		}
+	} else snprintf(directory, sizeof(directory), "%s", g_import.root);
+	if (resetOptions && g_import.wireframe != NULL)
+		YMGUI_Checkbox_SetChecked(g_import.wireframe, 0);
+	if (!YMGUI_FileDialog_Show(g_import.dialog, GY_FILE_DIALOG_OPEN_FILE, directory, name)) {
+		if (getcwd(directory, sizeof(directory)) != NULL)
+			YMGUI_FileDialog_Show(g_import.dialog, GY_FILE_DIALOG_OPEN_FILE, directory, "");
+	}
 }
+
+void SceneEditorImport_Open(void) { openImport(1); }

@@ -45,7 +45,7 @@ int main(void)
 	GYCTX ctx = YMGUI_Creat_Ctx_Creat(&disp, SCR_W, SCR_H);
 	YMGUI_Inject_SetCtx(ctx);
 
-	GYOBJ ti = YMGUI_Creat_TextInput_Creat(ctx->root, 20, 40, 200, 26);//y=40..66
+	GYOBJ ti = YMGUI_Creat_TextInput_Creat(ctx->root, 20, 40, 200, 26, 12);//y=40..66
 
 	//---- 未聚焦时按键不应改变文本 ----
 	typeStr("no");

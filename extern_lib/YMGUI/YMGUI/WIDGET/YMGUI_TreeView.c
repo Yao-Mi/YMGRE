@@ -45,6 +45,7 @@ struct GYtree_node
 	uint8  expanded;   //是否展开
 	uint8  loaded;     //目录子节点是否已加载(懒加载标记)
 	uint16 depth;      //层级深度(根层级=0),缓存供绘制缩进
+	GYOBJ  owner;      //所属 TreeView,供修改型 API 防止跨树误操作
 	struct GYtree_node* parent;     //父(根层级节点为 NULL)
 	struct GYtree_node* child_head; //子链表头
 	struct GYtree_node* child_tail; //子链表尾(尾插 O(1))
@@ -106,6 +107,22 @@ static void freeChildren(GYtree_node* n)
 	}
 	n->child_head = NULL;
 	n->child_tail = NULL;
+}
+
+static uint8 nodeBelongsTo(GYOBJ tree, GYtree_node* node)
+{
+	return node != NULL && node->owner == tree;
+}
+
+static uint8 nodeContains(GYtree_node* root, GYtree_node* node)
+{
+	while (node != NULL)
+	{
+		if (node == root)
+			return 1;
+		node = node->parent;
+	}
+	return 0;
 }
 
 /**
@@ -421,6 +438,7 @@ GYOBJ YMGUI_Creat_TreeView_Creat(GYOBJ parent, GYcoord x, GYcoord y, GYcoord w, 
 	gy_assert(d);
 	gy_log_explain(d == NULL, GY_LOG_Mem0, "树形视图数据内存申请失败");
 	if (d == NULL) { YMGUI_Free_ObjFree(tree); return NULL; }
+	GY_memset(d, 0, sizeof(GYtree_data));
 	d->root_head = NULL;
 	d->root_tail = NULL;
 	d->vis = NULL;
@@ -455,6 +473,9 @@ GYTREENODE YMGUI_TreeView_AddNode(GYOBJ tree, GYTREENODE parent_node, const char
 {
 	gy_assert(tree && tree->user_data && name);
 	gy_log_explain((tree == NULL) || (tree->user_data == NULL) || (name == NULL), GY_LOG_PtrI, "树/数据/名称不存在");
+	if (tree == NULL || tree->user_data == NULL || name == NULL ||
+	    (parent_node != NULL && !nodeBelongsTo(tree, parent_node)))
+		return NULL;
 	GYtree_data* d = (GYtree_data*)tree->user_data;
 
 	GYtree_node* n = (GYtree_node*)GY_malloc0(sizeof(GYtree_node));
@@ -462,12 +483,14 @@ GYTREENODE YMGUI_TreeView_AddNode(GYOBJ tree, GYTREENODE parent_node, const char
 	gy_log_explain(n == NULL, GY_LOG_Mem0, "树节点内存申请失败");
 	if (n == NULL)
 		return NULL;
+	GY_memset(n, 0, sizeof(GYtree_node));
 	uint16 i = 0;
 	while (name[i] != '\0' && i < TV_NAME_MAX - 1) { n->name[i] = name[i]; i++; }
 	n->name[i] = '\0';
 	n->is_dir = is_dir ? 1 : 0;
 	n->expanded = 0;
 	n->loaded = 0;
+	n->owner = tree;
 	n->parent = parent_node;
 	n->child_head = NULL;
 	n->child_tail = NULL;
@@ -502,7 +525,8 @@ GYTREENODE YMGUI_TreeView_AddNode(GYOBJ tree, GYTREENODE parent_node, const char
 uint8 YMGUI_TreeView_SetNodeName(GYOBJ tree, GYTREENODE node, const char* name)
 {
 	gy_assert(tree && tree->user_data && node && name);
-	if (tree == NULL || tree->user_data == NULL || node == NULL || name == NULL || name[0] == '\0')
+	if (tree == NULL || tree->user_data == NULL || !nodeBelongsTo(tree, node) ||
+	    name == NULL || name[0] == '\0')
 		return 0;
 	uint16 i = 0;
 	while (name[i] != '\0' && i < TV_NAME_MAX - 1) { node->name[i] = name[i]; i++; }
@@ -514,18 +538,21 @@ uint8 YMGUI_TreeView_SetNodeName(GYOBJ tree, GYTREENODE node, const char* name)
 uint8 YMGUI_TreeView_RemoveNode(GYOBJ tree, GYTREENODE node)
 {
 	gy_assert(tree && tree->user_data && node);
-	if (tree == NULL || tree->user_data == NULL || node == NULL) return 0;
+	if (tree == NULL || tree->user_data == NULL || !nodeBelongsTo(tree, node))
+		return 0;
 	GYtree_data* d = (GYtree_data*)tree->user_data;
 	GYtree_node** head = node->parent != NULL ? &node->parent->child_head : &d->root_head;
 	GYtree_node** tail = node->parent != NULL ? &node->parent->child_tail : &d->root_tail;
 	GYtree_node* previous = NULL;
 	GYtree_node* current = *head;
 	while (current != NULL && current != node) { previous = current; current = current->sibling; }
-	if (current == NULL) return 0;
+	if (current == NULL)
+		return 0;
 	if (previous != NULL) previous->sibling = node->sibling;
 	else *head = node->sibling;
 	if (*tail == node) *tail = previous;
-	d->selected = NULL;
+	if (nodeContains(node, d->selected))
+		d->selected = NULL;
 	freeSubtree(node);
 	rebuildVisible(tree);
 	clampScroll(tree);
@@ -537,6 +564,9 @@ void YMGUI_TreeView_ClearChildren(GYOBJ tree, GYTREENODE node)
 {
 	gy_assert(tree && tree->user_data);
 	gy_log_explain((tree == NULL) || (tree->user_data == NULL), GY_LOG_PtrI, "树或数据不存在");
+	if (tree == NULL || tree->user_data == NULL ||
+	    (node != NULL && !nodeBelongsTo(tree, node)))
+		return;
 	GYtree_data* d = (GYtree_data*)tree->user_data;
 
 	if (node != NULL)
@@ -572,7 +602,8 @@ void YMGUI_TreeView_SetExpanded(GYOBJ tree, GYTREENODE node, uint8 expanded)
 {
 	gy_assert(tree && tree->user_data);
 	gy_log_explain((tree == NULL) || (tree->user_data == NULL), GY_LOG_PtrI, "树或数据不存在");
-	doSetExpanded(tree, node, expanded);
+	if (tree != NULL && tree->user_data != NULL && nodeBelongsTo(tree, node))
+		doSetExpanded(tree, node, expanded);
 }
 
 uint8 YMGUI_TreeView_IsExpanded(GYTREENODE node)
@@ -617,6 +648,8 @@ void YMGUI_TreeView_SetSelectedNode(GYOBJ tree, GYTREENODE node)
 {
 	gy_assert(tree && tree->user_data);
 	gy_log_explain((tree == NULL) || (tree->user_data == NULL), GY_LOG_PtrI, "树或数据不存在");
+	if (tree == NULL || tree->user_data == NULL || (node != NULL && !nodeBelongsTo(tree, node)))
+		return;
 	((GYtree_data*)tree->user_data)->selected = node;
 	YMGUI_Obj_Invalidate(tree);
 }
@@ -646,6 +679,8 @@ void YMGUI_TreeView_SetContextCb(GYOBJ tree, GYtree_context_cb cb)
 {
 	gy_assert(tree && tree->user_data);
 	gy_log_explain((tree == NULL) || (tree->user_data == NULL), GY_LOG_PtrI, "树或数据不存在");
+	if (tree == NULL || tree->user_data == NULL)
+		return;
 	((GYtree_data*)tree->user_data)->context_cb = cb;
 }
 

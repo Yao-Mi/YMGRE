@@ -4,6 +4,7 @@
 #include "scene_editor_hierarchy.h"
 #include "scene_editor_import.h"
 #include "scene_editor_inspector.h"
+#include "scene_editor_io.h"
 #include "scene_editor_place.h"
 
 #include "SDL_LCD.h"
@@ -12,7 +13,10 @@
 #include "YMGUI_Image.h"
 #include "YMGUI_Invalidate.h"
 #include "YMGUI_Label.h"
+#include "YMGUI_Layout.h"
+#include "YMGUI_MsgBox.h"
 #include "YMGUI_Obj.h"
+#include "YMGUI_TextInput.h"
 #include "YMGUI_TreeView.h"
 #include "YMGRE_Camera.h"
 #include "YMGRE_BasicMesh_Gener.h"
@@ -29,17 +33,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
-typedef enum { VIEW_DRAG_NONE, VIEW_DRAG_PAN, VIEW_DRAG_OBJECT } ViewDragMode;
+typedef enum {
+	VIEW_DRAG_NONE, VIEW_DRAG_PAN, VIEW_DRAG_OBJECT,
+	VIEW_DRAG_MOVE_X, VIEW_DRAG_MOVE_Y, VIEW_DRAG_MOVE_Z,
+	VIEW_DRAG_ROTATE_X, VIEW_DRAG_ROTATE_Y, VIEW_DRAG_ROTATE_Z, VIEW_DRAG_SCALE
+} ViewDragMode;
+typedef enum { TRANSFORM_NONE=-1, TRANSFORM_MOVE, TRANSFORM_ROTATE, TRANSFORM_SCALE } TransformMode;
+typedef enum { PENDING_NONE, PENDING_NEW, PENDING_OPEN, PENDING_EXIT } PendingAction;
 
 typedef struct {
 	YMGRE_DemoHost host;
 	GYOBJ viewport, viewportBrand, viewportCamera, status, tree;
 	int pointerX, pointerY, frames, frameLimit;
 	ViewDragMode dragMode;
+	uint8 dragChanged;
 } EditorUi;
+
+#define SCENE_HISTORY_CAPACITY 24
 
 static EditorUi* g_ui;
 static gre_list g_objectsList, g_lightsList;
@@ -50,14 +62,35 @@ static float32 g_depthBuffer[1024 * 540];
 static gre_render_target g_target;
 static GYOBJ g_image, g_editMenu, g_leftPanel, g_rightPanel, g_centerPanel;
 static GYimg g_imageSource;
-static gre_line3d g_lines[96];
+static gre_line3d g_lines[160];
 static uint32 g_lineCount, g_baseLineCount;
+static uint8 g_referenceVisible=1;
+static GYOBJ g_referenceToggle;
+static GYOBJ g_transformButtons[3];
+static TransformMode g_transformMode=TRANSFORM_NONE;
 static SceneEditorObject g_scene[32];
 static SceneEditorObject* g_selected;
 static SceneEditorObject* g_mainCamera;
 static SceneEditorObject* g_activeCamera;
 static SceneEditorObject* g_globalLight;
 static GYTREENODE g_objectsNode, g_lightsNode, g_camerasNode;
+static GYOBJ g_unsavedPrompt;
+static GYOBJ g_sceneOpenError;
+static uint8 g_sceneDirty;
+static uint8 g_shouldExit;
+static PendingAction g_pendingAction;
+static char g_currentScenePath[SCENE_EDITOR_PATH_CAPACITY];
+static char g_historyPaths[SCENE_HISTORY_CAPACITY][192];
+static uint32 g_historyCount,g_historyIndex,g_historySerial;
+static int32 g_historySavedIndex=-1;
+static uint8 g_historyReady,g_historyRestoring,g_historyBatch;
+
+static void createNewScene(void);
+static void completePendingAction(void);
+static void historyCommit(void);
+static void historyReset(void);
+static void undoClicked(GYOBJ button);
+static void redoClicked(GYOBJ button);
 
 static void setStatus(const char* text)
 {
@@ -185,7 +218,7 @@ static void buildReferenceLines(void)
 
 static void addSelectionLines(void)
 {
-	g_lineCount = g_baseLineCount;
+	g_lineCount = g_referenceVisible ? g_baseLineCount : 0;
 	if (g_selected == NULL || !g_selected->active) return;
 	GRErgb24 orange = { 255, 145, 35 };
 	if (g_selected->kind == SCENE_OBJECT_MESH && g_selected->mesh != NULL) {
@@ -222,6 +255,50 @@ static void addSelectionLines(void)
 		addLine((gre_fvector4d){center.x,center.y,center.z-size,1}, (gre_fvector4d){center.x,center.y,center.z+size,1}, orange);
 		addSpotConeLines(g_selected, orange);
 		addCameraGizmoLines(g_selected, orange);
+	}
+}
+
+static float32 transformGizmoSize(void)
+{
+	if(g_activeCamera==NULL)return 30.0f;
+	float32 dx=g_activeCamera->x-g_activeCamera->targetX;
+	float32 dy=g_activeCamera->y-g_activeCamera->targetY;
+	float32 dz=g_activeCamera->z-g_activeCamera->targetZ;
+	float32 size=sqrtf(dx*dx+dy*dy+dz*dz)*0.12f;
+	if(size<15.0f)size=15.0f;if(size>80.0f)size=80.0f;return size;
+}
+
+static void addTransformGizmo(void)
+{
+	if(g_transformMode==TRANSFORM_NONE||g_selected==NULL||!g_selected->active||g_selected->fixed||g_selected==g_activeCamera)return;
+	gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1};float32 size=transformGizmoSize();
+	if(g_transformMode==TRANSFORM_ROTATE){
+		if(g_selected->kind!=SCENE_OBJECT_MESH)return;
+		/* 灰色为物体原始坐标轴，彩色环为当前局部坐标轴，旋转过程中保持对照。 */
+		addLine(center,(gre_fvector4d){center.x+size,center.y,center.z,1},(GRErgb24){150,150,150});
+		addLine(center,(gre_fvector4d){center.x,center.y+size,center.z,1},(GRErgb24){150,150,150});
+		addLine(center,(gre_fvector4d){center.x,center.y,center.z+size,1},(GRErgb24){150,150,150});
+		for(uint8 axis=0;axis<3;++axis){gre_fvector4d ring[24];
+			for(uint8 i=0;i<24;++i){float32 angle=(float32)i*2.0f*YMGRE_Pai/24.0f;ring[i]=center;
+				if(axis==0){ring[i].y+=cosf(angle)*size;ring[i].z+=sinf(angle)*size;}
+				else if(axis==1){ring[i].x+=cosf(angle)*size;ring[i].z+=sinf(angle)*size;}
+				else {ring[i].x+=cosf(angle)*size;ring[i].y+=sinf(angle)*size;}}
+			GRErgb24 color=axis==0?(GRErgb24){224,72,72}:(axis==1?(GRErgb24){82,205,112}:(GRErgb24){70,135,235});
+			for(uint8 i=0;i<24;++i)addLine(ring[i],ring[(i+1)%24],color);
+		}
+		return;
+	}
+	if(g_transformMode==TRANSFORM_SCALE&&g_selected->kind!=SCENE_OBJECT_MESH)return;
+	gre_fvector4d ends[3]={{center.x+size,center.y,center.z,1},{center.x,center.y+size,center.z,1},{center.x,center.y,center.z+size,1}};
+	GRErgb24 colors[3]={{224,72,72},{82,205,112},{70,135,235}};
+	for(uint8 axis=0;axis<3;++axis){
+		addLine(center,ends[axis],colors[axis]);
+		if(g_transformMode==TRANSFORM_SCALE){float32 marker=size*0.08f;
+			addLine((gre_fvector4d){ends[axis].x-marker,ends[axis].y,ends[axis].z,1},
+				(gre_fvector4d){ends[axis].x+marker,ends[axis].y,ends[axis].z,1},colors[axis]);
+			addLine((gre_fvector4d){ends[axis].x,ends[axis].y-marker,ends[axis].z,1},
+				(gre_fvector4d){ends[axis].x,ends[axis].y+marker,ends[axis].z,1},colors[axis]);
+		}
 	}
 }
 
@@ -269,12 +346,8 @@ static SceneEditorObject* allocateSceneObject(void)
 	return NULL;
 }
 
-static void initScene(void)
+static void createDefaultScene(void)
 {
-	memset(g_scene, 0, sizeof(g_scene));
-	buildReferenceLines();
-	YMGRE_RenderTarget_Init(&g_target, 560, 540, g_colorBuffer, g_depthBuffer);
-	g_workspace = YMGRE_Creat_RenderWorkspace();
 	g_mainCamera = allocateSceneObject();
 	snprintf(g_mainCamera->name, sizeof(g_mainCamera->name), "Main Camera");
 	snprintf(g_mainCamera->type, sizeof(g_mainCamera->type), "相机");
@@ -287,9 +360,18 @@ static void initScene(void)
 	snprintf(g_globalLight->name, sizeof(g_globalLight->name), "Global Light");
 	snprintf(g_globalLight->type, sizeof(g_globalLight->type), "全局光照");
 	g_globalLight->kind = SCENE_OBJECT_LIGHT; g_globalLight->lightType = GRE_GlobalLight;
-	g_globalLight->strength = 0.2f; g_globalLight->color = GY_ARGB(0xFF,255,255,255);
-	g_globalLight->light = YMGRE_Creat_Light(0, GRE_GlobalLight, (GRErgb24){255,255,255}, 0.2f);
+	g_globalLight->strength = 0.7f; g_globalLight->color = GY_ARGB(0xFF,255,255,255);
+	g_globalLight->light = YMGRE_Creat_Light(0, GRE_GlobalLight, (GRErgb24){255,255,255}, 0.7f);
 	YMGRE_List_Append(&g_lightsList, sizeof(gre_light4d), g_globalLight->light);
+}
+
+static void initScene(void)
+{
+	memset(g_scene, 0, sizeof(g_scene));
+	buildReferenceLines();
+	YMGRE_RenderTarget_Init(&g_target, 560, 540, g_colorBuffer, g_depthBuffer);
+	g_workspace = YMGRE_Creat_RenderWorkspace();
+	createDefaultScene();
 }
 
 static void renderScene(void)
@@ -299,6 +381,7 @@ static void renderScene(void)
 	YMGRE_Camera_TanglePipline_RenderingWithWorkspace(g_activeCamera->camera,
 		&g_lightsList, &g_objectsList, &g_importContext.MaterialList, g_workspace);
 	addSelectionLines();
+	addTransformGizmo();
 	YMGRE_Camera_LineList_Rendering(g_activeCamera->camera, g_lines, g_lineCount, 1);
 }
 
@@ -336,6 +419,40 @@ static int projectPoint(const gre_fvector4d* world, float32* screenX, float32* s
 	*screenY = -point.y * camera->perspectPlane.Dis / point.z * g_target.height / viewH + g_target.height * 0.5f;
 	*depth = point.z;
 	return isfinite(*screenX) && isfinite(*screenY);
+}
+
+static float32 pointSegmentDistance(float32 px,float32 py,float32 ax,float32 ay,float32 bx,float32 by)
+{
+	float32 dx=bx-ax,dy=by-ay,length=dx*dx+dy*dy;
+	float32 t=length>0.0001f?((px-ax)*dx+(py-ay)*dy)/length:0;
+	if(t<0)t=0;if(t>1)t=1;dx=px-(ax+t*(bx-ax));dy=py-(ay+t*(by-ay));return sqrtf(dx*dx+dy*dy);
+}
+
+static ViewDragMode gizmoDragMode(GYOBJ viewport,GYcoord screenX,GYcoord screenY)
+{
+	if(g_transformMode==TRANSFORM_NONE||g_selected==NULL||g_selected->fixed||g_selected==g_activeCamera)return VIEW_DRAG_NONE;
+	GYrect area;YMGUI_Obj_GetAbsArea(viewport,&area);float32 px=screenX-area.x,py=screenY-area.y;
+	gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1};float32 cx,cy,depth;
+	if(!projectPoint(&center,&cx,&cy,&depth))return VIEW_DRAG_NONE;
+	if(g_transformMode==TRANSFORM_ROTATE){
+		if(g_selected->kind!=SCENE_OBJECT_MESH)return VIEW_DRAG_NONE;
+		float32 size=transformGizmoSize(),best=FLT_MAX;ViewDragMode result=VIEW_DRAG_NONE;
+		for(uint8 axis=0;axis<3;++axis){float32 previousX=0,previousY=0,unused,ringBest=FLT_MAX;uint8 havePrevious=0;
+			for(uint8 i=0;i<=24;++i){float32 angle=(float32)(i%24)*2.0f*YMGRE_Pai/24.0f;gre_fvector4d point=center;
+				if(axis==0){point.y+=cosf(angle)*size;point.z+=sinf(angle)*size;}else if(axis==1){point.x+=cosf(angle)*size;point.z+=sinf(angle)*size;}else{point.x+=cosf(angle)*size;point.y+=sinf(angle)*size;}
+				float32 x,y;if(projectPoint(&point,&x,&y,&unused)){if(havePrevious)ringBest=GREMin(ringBest,pointSegmentDistance(px,py,previousX,previousY,x,y));previousX=x;previousY=y;havePrevious=1;}}
+			if(ringBest<best){best=ringBest;result=(ViewDragMode)(VIEW_DRAG_ROTATE_X+axis);}
+		}
+		return best<=16.0f?result:VIEW_DRAG_NONE;
+	}
+	if(g_transformMode==TRANSFORM_SCALE&&g_selected->kind!=SCENE_OBJECT_MESH)return VIEW_DRAG_NONE;
+	float32 size=transformGizmoSize(),best=FLT_MAX;ViewDragMode result=VIEW_DRAG_NONE;
+	gre_fvector4d ends[3]={{center.x+size,center.y,center.z,1},{center.x,center.y+size,center.z,1},{center.x,center.y,center.z+size,1}};
+	for(uint8 axis=0;axis<3;++axis){float32 ex,ey;
+		if(projectPoint(&ends[axis],&ex,&ey,&depth)){float32 distance=pointSegmentDistance(px,py,cx,cy,ex,ey);
+			if(distance<best){best=distance;result=(ViewDragMode)(VIEW_DRAG_MOVE_X+axis);}}}
+	if(best>16.0f)return VIEW_DRAG_NONE;
+	return g_transformMode==TRANSFORM_SCALE?VIEW_DRAG_SCALE:result;
 }
 
 static SceneEditorObject* pickObject(GYOBJ viewport, GYcoord screenX, GYcoord screenY)
@@ -400,6 +517,26 @@ static void clearSelection(const char* status)
 	setStatus(status);
 }
 
+static void rebuildHierarchyTree(void)
+{
+	YMGUI_TreeView_Clear(g_ui->tree);
+	GYTREENODE scene=YMGUI_TreeView_AddNode(g_ui->tree,NULL,"Scene",1);
+	g_camerasNode=YMGUI_TreeView_AddNode(g_ui->tree,scene,"Cameras",1);
+	g_lightsNode=YMGUI_TreeView_AddNode(g_ui->tree,scene,"Lights",1);
+	g_objectsNode=YMGUI_TreeView_AddNode(g_ui->tree,scene,"Objects",1);
+	for(int i=0;i<32;++i){
+		SceneEditorObject* object=&g_scene[i]; if(!object->active)continue;
+		GYTREENODE parent=object->kind==SCENE_OBJECT_CAMERA?g_camerasNode:
+			(object->kind==SCENE_OBJECT_LIGHT?g_lightsNode:g_objectsNode);
+		object->treeNode=YMGUI_TreeView_AddNode(g_ui->tree,parent,object->name,0);
+		YMGUI_TreeView_SetNodeUserPtr(object->treeNode,object);
+	}
+	YMGUI_TreeView_SetExpanded(g_ui->tree,scene,1);
+	YMGUI_TreeView_SetExpanded(g_ui->tree,g_camerasNode,1);
+	YMGUI_TreeView_SetExpanded(g_ui->tree,g_lightsNode,1);
+	YMGUI_TreeView_SetExpanded(g_ui->tree,g_objectsNode,1);
+}
+
 static void orbitCamera(float32 deltaX, float32 deltaY)
 {
 	SceneEditorObject* camera = g_activeCamera;
@@ -414,6 +551,7 @@ static void orbitCamera(float32 deltaX, float32 deltaY)
 	camera->y=camera->targetY+distance*sinf(pitch);
 	camera->z=camera->targetZ-distance*cosf(pitch)*cosf(yaw);
 	syncCamera(camera);
+	g_sceneDirty = 1;
 }
 
 static void panCamera(float32 deltaX, float32 deltaY)
@@ -427,6 +565,7 @@ static void panCamera(float32 deltaX, float32 deltaY)
 	camera->x+=dx; camera->y+=dy; camera->z+=dz;
 	camera->targetX+=dx; camera->targetY+=dy; camera->targetZ+=dz;
 	syncCamera(camera);
+	g_sceneDirty = 1;
 }
 
 static void zoomCamera(float32 factor)
@@ -436,6 +575,7 @@ static void zoomCamera(float32 factor)
 	camera->y=camera->targetY+(camera->y-camera->targetY)*factor;
 	camera->z=camera->targetZ+(camera->z-camera->targetZ)*factor;
 	syncCamera(camera);
+	g_sceneDirty = 1;
 }
 
 static void dragSelected(float32 deltaX, float32 deltaY)
@@ -460,6 +600,29 @@ static void dragSelected(float32 deltaX, float32 deltaY)
 		right.y*deltaX*unitsX-up.y*deltaY*unitsY,
 		right.z*deltaX*unitsX-up.z*deltaY*unitsY);
 	SceneEditorInspector_SetObject(g_selected);
+	g_sceneDirty = 1;
+}
+
+static void dragSelectedAxis(ViewDragMode mode,float32 deltaX,float32 deltaY)
+{
+	if(g_selected==NULL||g_selected->fixed)return;
+	if(mode>=VIEW_DRAG_ROTATE_X&&mode<=VIEW_DRAG_ROTATE_Z&&g_selected->kind==SCENE_OBJECT_MESH){
+		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);float32 angle=axis==0?g_selected->rotX:(axis==1?g_selected->rotY:g_selected->rotZ);
+		SceneEditorObject_SetRotationAxis(g_selected,axis,angle+deltaX*0.6f);
+	}else if(mode==VIEW_DRAG_SCALE&&g_selected->kind==SCENE_OBJECT_MESH){
+		float32 scale=g_selected->scale*expf((deltaX-deltaY)*0.01f);
+		if(scale<0.01f)scale=0.01f;if(scale>1000.0f)scale=1000.0f;SceneEditorObject_SetScale(g_selected,scale);
+	}else if(mode>=VIEW_DRAG_MOVE_X&&mode<=VIEW_DRAG_MOVE_Z){
+		uint8 axis=(uint8)(mode-VIEW_DRAG_MOVE_X);float32 size=transformGizmoSize();
+		gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1},end=center;
+		if(axis==0)end.x+=size;else if(axis==1)end.y+=size;else end.z+=size;
+		float32 cx,cy,ex,ey,depth;
+		if(!projectPoint(&center,&cx,&cy,&depth)||!projectPoint(&end,&ex,&ey,&depth))return;
+		float32 sx=ex-cx,sy=ey-cy,length=sx*sx+sy*sy;if(length<0.001f)return;
+		float32 amount=(deltaX*sx+deltaY*sy)/length*size;
+		SceneEditorObject_Translate(g_selected,axis==0?amount:0,axis==1?amount:0,axis==2?amount:0);
+	}else return;
+	SceneEditorInspector_SetObject(g_selected);g_sceneDirty=1;
 }
 
 static void refreshCameraInspector(void)
@@ -473,38 +636,62 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 	GYcoord x=object->ctx->point_x, y=object->ctx->point_y;
 	if (event == GY_EVENT_Pressed) {
 		YMGUI_SetFocus(object->ctx, object);
-		g_ui->pointerX=x; g_ui->pointerY=y;
-		SceneEditorObject* picked=pickObject(object,x,y);
-		if (picked != NULL) { selectObject(picked,"已在视口中选中对象，拖动可移动"); g_ui->dragMode=VIEW_DRAG_OBJECT; }
-		else { clearSelection("已取消选择；拖动空白区域可平移视图"); g_ui->dragMode=VIEW_DRAG_PAN; }
+		g_ui->pointerX=x; g_ui->pointerY=y;g_ui->dragChanged=0;
+		ViewDragMode gizmoMode=gizmoDragMode(object,x,y);
+		if(gizmoMode!=VIEW_DRAG_NONE){g_ui->dragMode=gizmoMode;setStatus(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z?"拖动旋转参考轴":
+			(gizmoMode==VIEW_DRAG_SCALE?"拖动操作轴统一缩放":"拖动操作轴约束移动"));}
+		else{SceneEditorObject* picked=pickObject(object,x,y);
+			if(picked!=NULL){selectObject(picked,"已在视口中选中对象");g_ui->dragMode=(g_transformMode==TRANSFORM_NONE||g_transformMode==TRANSFORM_MOVE)?VIEW_DRAG_OBJECT:VIEW_DRAG_NONE;}
+			else{clearSelection("已取消选择；拖动空白区域可平移视图");g_ui->dragMode=VIEW_DRAG_PAN;}}
 	} else if (event == GY_EVENT_Pressing) {
 		float32 dx=x-g_ui->pointerX, dy=y-g_ui->pointerY;
-		if (g_ui->dragMode==VIEW_DRAG_OBJECT) { dragSelected(dx,dy); setStatus("正在移动选中对象"); }
-		else if (g_ui->dragMode==VIEW_DRAG_PAN) { panCamera(dx,dy); refreshCameraInspector(); setStatus("正在平移视图"); }
+		if (g_ui->dragMode==VIEW_DRAG_OBJECT) { dragSelected(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在移动选中对象"); }
+		else if (g_ui->dragMode==VIEW_DRAG_PAN) { panCamera(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;refreshCameraInspector();setStatus("正在平移视图"); }
+		else if(g_ui->dragMode>=VIEW_DRAG_MOVE_X){dragSelectedAxis(g_ui->dragMode,dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;setStatus("正在使用变换操作轴");}
 		g_ui->pointerX=x; g_ui->pointerY=y; YMGUI_Obj_Invalidate(object);
 	} else if (event == GY_EVENT_ContextRequested) {
-		if (g_selected != NULL && g_selected != g_activeCamera &&
-			!(g_selected->kind == SCENE_OBJECT_LIGHT && g_selected->lightType == GRE_GlobalLight)) {
-			float32 dx = g_activeCamera->x - g_selected->x;
-			float32 dy = g_activeCamera->y - g_selected->y;
-			float32 dz = g_activeCamera->z - g_selected->z;
-			if (dx*dx + dy*dy + dz*dz > 0.0001f) {
-				g_activeCamera->targetX = g_selected->x;
-				g_activeCamera->targetY = g_selected->y;
-				g_activeCamera->targetZ = g_selected->z;
-				syncCamera(g_activeCamera);
-			}
+		uint8 orbitSelection=g_selected!=NULL&&g_selected!=g_activeCamera&&
+			!(g_selected->kind==SCENE_OBJECT_LIGHT&&g_selected->lightType==GRE_GlobalLight);
+		if(orbitSelection){
+			float32 dx=g_activeCamera->x-g_selected->x,dy=g_activeCamera->y-g_selected->y;
+			float32 dz=g_activeCamera->z-g_selected->z;
+			if(dx*dx+dy*dy+dz*dz<=0.0001f)orbitSelection=0;
 		}
-		g_ui->pointerX=x; g_ui->pointerY=y; setStatus("右键拖动旋转视图");
+		if(orbitSelection){
+			g_activeCamera->targetX=g_selected->x;
+			g_activeCamera->targetY=g_selected->y;
+			g_activeCamera->targetZ=g_selected->z;
+		}else{
+			g_activeCamera->targetX=0;g_activeCamera->targetY=0;g_activeCamera->targetZ=0;
+		}
+			syncCamera(g_activeCamera);
+			g_sceneDirty = 1;
+			g_ui->dragChanged=1;
+		g_ui->pointerX=x;g_ui->pointerY=y;
+		setStatus(orbitSelection?"右键拖动绕选中对象旋转":"右键拖动绕世界原点旋转");
 	} else if (event == GY_EVENT_ContextDragging) {
 		orbitCamera(x-g_ui->pointerX,y-g_ui->pointerY); refreshCameraInspector();
+		g_ui->dragChanged=1;
 		g_ui->pointerX=x; g_ui->pointerY=y; YMGUI_Obj_Invalidate(object);
+	} else if (event == GY_EVENT_Wheel) {
+		float32 steps=(float32)object->ctx->wheel_y;
+		if(steps>8)steps=8;else if(steps<-8)steps=-8;
+		if(steps!=0){
+			zoomCamera(expf(-0.16f*steps));refreshCameraInspector();YMGUI_Obj_Invalidate(object);
+			historyCommit();setStatus(steps>0?"视图拉近":"视图拉远");
+		}
 	} else if (event == GY_EVENT_Key && object->ctx->last_key=='+') {
-		zoomCamera(expf(-0.16f)); refreshCameraInspector(); YMGUI_Obj_Invalidate(object); setStatus("视图拉近");
+		zoomCamera(expf(-0.16f));historyCommit();refreshCameraInspector();YMGUI_Obj_Invalidate(object);setStatus("视图拉近");
 	} else if (event == GY_EVENT_Key && object->ctx->last_key=='-') {
-		zoomCamera(expf(0.16f)); refreshCameraInspector(); YMGUI_Obj_Invalidate(object); setStatus("视图拉远");
+		zoomCamera(expf(0.16f));historyCommit();refreshCameraInspector();YMGUI_Obj_Invalidate(object);setStatus("视图拉远");
+	} else if (event == GY_EVENT_Key && object->ctx->last_key==GY_KEY_UNDO) {
+		undoClicked(NULL);
+	} else if (event == GY_EVENT_Key && object->ctx->last_key==GY_KEY_REDO) {
+		redoClicked(NULL);
 	} else if (event==GY_EVENT_Released || event==GY_EVENT_ReleasedOff ||
-		event==GY_EVENT_ContextReleased || event==GY_EVENT_ContextCancelled) g_ui->dragMode=VIEW_DRAG_NONE;
+		event==GY_EVENT_ContextReleased || event==GY_EVENT_ContextCancelled){
+		if(g_ui->dragChanged)historyCommit();g_ui->dragChanged=0;g_ui->dragMode=VIEW_DRAG_NONE;
+	}
 }
 
 static void treeSelect(GYOBJ tree, GYTREENODE node)
@@ -519,7 +706,7 @@ static void treeContext(GYOBJ tree, GYTREENODE node)
 	(void)tree;
 	SceneEditorObject* object=YMGUI_TreeView_NodeUserPtr(node);
 	if (object != NULL) SceneEditorHierarchy_Open(object,g_ui->host.context->point_x,
-		g_ui->host.context->point_y,object!=g_mainCamera);
+		g_ui->host.context->point_y,object!=g_mainCamera&&object!=g_globalLight);
 }
 
 static void normalizeSpotDirection(SceneEditorObject* object)
@@ -566,6 +753,7 @@ static void objectPlaced(const SceneEditorPlaceResult* result, void* userData)
 	}
 	YMGUI_TreeView_SetNodeUserPtr(object->treeNode,object);
 	selectObject(object,"对象已放入场景");
+	g_sceneDirty = 1;historyCommit();
 }
 
 static int removeListItem(GRE_List list, void* data, listNodeDataFree freeData)
@@ -582,6 +770,7 @@ static void renameObject(SceneEditorObject* object, const char* name, void* user
 	snprintf(object->name,sizeof(object->name),"%s",name);
 	YMGUI_TreeView_SetNodeName(g_ui->tree,object->treeNode,object->name);
 	SceneEditorInspector_SetObject(object); setStatus("对象已重命名");
+	g_sceneDirty = 1;historyCommit();
 }
 
 static void switchCamera(SceneEditorObject* object, void* userData)
@@ -591,19 +780,21 @@ static void switchCamera(SceneEditorObject* object, void* userData)
 	g_activeCamera=object; syncCamera(object);
 	char text[96]; snprintf(text,sizeof(text),"VIEWPORT  /  %.20s",object->name);
 	YMGUI_Label_SetText(g_ui->viewportCamera,text); selectObject(object,"已切换相机视角");
+	g_sceneDirty = 1;historyCommit();
 }
 
 static void deleteObject(SceneEditorObject* object, void* userData)
 {
 	(void)userData;
-	if (object==NULL || object==g_mainCamera) return;
-	if (object==g_activeCamera) switchCamera(g_mainCamera,NULL);
+	if (object==NULL || object==g_mainCamera || object==g_globalLight) return;
+	if (object==g_activeCamera){g_historyBatch++;switchCamera(g_mainCamera,NULL);g_historyBatch--;}
 	if (object->kind==SCENE_OBJECT_MESH) removeListItem(&g_objectsList,object->mesh,YMGRE_Free_Object);
 	else if (object->kind==SCENE_OBJECT_LIGHT) removeListItem(&g_lightsList,object->light,YMGRE_Free_Light);
 	else if (object->camera!=NULL) YMGRE_Free_Camera(object->camera);
 	YMGUI_TreeView_RemoveNode(g_ui->tree,object->treeNode);
 	memset(object,0,sizeof(*object));
 	clearSelection("对象已删除");
+	g_sceneDirty = 1;historyCommit();
 }
 
 static void inspectorChanged(const char* status, void* userData)
@@ -611,6 +802,7 @@ static void inspectorChanged(const char* status, void* userData)
 	(void)userData;
 	if (g_selected!=NULL) { normalizeSpotDirection(g_selected); if(g_selected->kind==SCENE_OBJECT_CAMERA)syncCamera(g_selected); }
 	setStatus(status); if(g_image!=NULL)YMGUI_Obj_Invalidate(g_image);
+	g_sceneDirty = 1;historyCommit();
 }
 
 static uint8 importMesh(const char* path, uint8 wireframe, void* userData)
@@ -636,6 +828,8 @@ static uint8 importMesh(const char* path, uint8 wireframe, void* userData)
 	object->mesh = mesh; object->scale = 1; object->visible = 1; object->wireframe = wireframe;
 	object->x = 0; object->y = -minimumY; object->z = 0;
 	object->color = GY_ARGB(0xFF, 128, 128, 128);
+	if(realpath(path,object->sourcePath)==NULL)
+		snprintf(object->sourcePath, sizeof(object->sourcePath), "%s", path);
 	snprintf(object->name, sizeof(object->name), "%s", mesh->objName != NULL ? mesh->objName : "Imported Mesh");
 	snprintf(object->type, sizeof(object->type), "外部网格");
 	YMGRE_List_Append(&g_objectsList, sizeof(gre_object4d), mesh);
@@ -643,6 +837,7 @@ static uint8 importMesh(const char* path, uint8 wireframe, void* userData)
 	YMGUI_TreeView_SetNodeUserPtr(object->treeNode, object);
 	YMGUI_TreeView_SetExpanded(g_ui->tree, g_objectsNode, 1);
 	selectObject(object, "外部网格已导入");
+	g_sceneDirty = 1;historyCommit();
 	return 1;
 }
 
@@ -672,12 +867,307 @@ static uint8 inspectorRemesh(SceneEditorObject* object, uint16 detailA, uint16 d
 	object->detailB = detailB;
 	YMGRE_Free_Object(previous);
 	if (g_image != NULL) YMGUI_Obj_Invalidate(g_image);
+	g_sceneDirty = 1;
 	return 1;
 }
 
-static void saveClicked(GYOBJ button){(void)button;setStatus("场景保存入口待接序列化");}
+static void duplicateObject(SceneEditorObject* source, void* userData)
+{
+	(void)userData;
+	if(source==NULL){setStatus("请先选择要复制的对象");return;}
+	if(source==g_globalLight){setStatus("全局光照不能复制");return;}
+	char copyName[64];snprintf(copyName,sizeof(copyName),"%.55s Copy",source->name);
+	g_historyBatch++;
+	if(source->kind==SCENE_OBJECT_MESH&&source->primitiveKind==0xFF){
+		if(!importMesh(source->sourcePath,source->wireframe,NULL)){g_historyBatch--;setStatus("复制失败：外部网格无法重新加载");return;}
+		SceneEditorObject* copy=g_selected;
+		SceneEditorObject_Translate(copy,source->x+10-copy->x,source->y-copy->y,source->z+10-copy->z);
+		SceneEditorObject_SetScale(copy,source->scale);SceneEditorObject_SetRotationY(copy,source->rotY);
+		copy->color=source->color;copy->visible=source->visible;copy->fixed=source->fixed;
+		for(GRE_Object4d part=copy->mesh;part!=NULL;part=part->nextObject)part->isVisible=copy->visible;
+		snprintf(copy->name,sizeof(copy->name),"%s",copyName);YMGUI_TreeView_SetNodeName(g_ui->tree,copy->treeNode,copy->name);
+		SceneEditorInspector_SetObject(copy);
+	}else{
+		SceneEditorPlaceResult result={0};
+		result.kind=source->kind==SCENE_OBJECT_CAMERA?SCENE_PLACE_CAMERA:
+			(source->kind==SCENE_OBJECT_LIGHT?(source->lightType==GRE_SpotLight?SCENE_PLACE_SPOT_LIGHT:SCENE_PLACE_POINT_LIGHT):
+			(SceneEditorPlaceKind)source->primitiveKind);
+		result.x=source->x+10;result.y=source->y;result.z=source->z+10;
+		result.targetX=source->targetX;result.targetY=source->targetY;result.targetZ=source->targetZ;
+		result.scale=source->scale;result.rotationY=source->rotY;result.strength=source->strength;
+		result.color=source->color;result.wireframe=source->wireframe;result.shadowsEnabled=source->shadowsEnabled;
+		result.detailA=source->detailA;result.detailB=source->detailB;
+		snprintf(result.name,sizeof(result.name),"%s",copyName);snprintf(result.type,sizeof(result.type),"%s",source->type);
+		if(source->kind==SCENE_OBJECT_MESH){
+			result.mesh=SceneEditorPlace_CreateMesh(&result);
+			if(result.mesh==NULL){g_historyBatch--;setStatus("复制失败：无法创建网格");return;}
+			SceneEditorPlace_TransformMesh(result.mesh,result.x,result.y,result.z,result.rotationY,result.scale,result.wireframe);
+		}
+		objectPlaced(&result,NULL);
+		if(g_selected!=NULL)g_selected->fixed=source->fixed;
+	}
+	g_historyBatch--;g_sceneDirty=1;historyCommit();setStatus("对象已复制");
+}
+
+static int writeCurrentScene(const char* path,char* error,size_t errorCapacity)
+{
+	SceneEditorObject compact[32]; uint32 count=0;
+	int32 mainIndex=-1,activeIndex=-1;
+	for(int i=0;i<32;++i)if(g_scene[i].active){
+		if(&g_scene[i]==g_mainCamera)mainIndex=(int32)count;
+		if(&g_scene[i]==g_activeCamera)activeIndex=(int32)count;
+		compact[count++]=g_scene[i];
+	}
+	return SceneEditorIo_Write(path,compact,count,mainIndex,activeIndex,error,errorCapacity);
+}
+
+static void saveSceneToPath(const char* path, void* userData)
+{
+	(void)userData;char error[192];
+	if(!writeCurrentScene(path,error,sizeof(error))){
+		g_pendingAction=PENDING_NONE;SceneEditorIo_SetError(error);setStatus("场景保存失败，当前场景已保留");return;
+	}
+	snprintf(g_currentScenePath,sizeof(g_currentScenePath),"%s",path);g_sceneDirty=0;
+	if(g_historyReady)g_historySavedIndex=(int32)g_historyIndex;
+	SceneEditorIo_Close();char status[192];snprintf(status,sizeof(status),"场景已保存：%.150s",path);setStatus(status);
+	completePendingAction();
+}
+
+static void freeStagedScene(SceneEditorObject* objects, uint32 count, GRE_List objectList,
+	GRE_List lightList, gre_scence* importContext)
+{
+	for(uint32 i=0;i<count;++i)if(objects[i].kind==SCENE_OBJECT_CAMERA&&objects[i].camera!=NULL)
+		YMGRE_Free_Camera(objects[i].camera);
+	YMGRE_List_Clear(lightList,YMGRE_Free_Light);YMGRE_List_Clear(objectList,YMGRE_Free_Object);
+	YMGRE_List_Clear(&importContext->MaterialList,YMGRE_Free_Material);
+}
+
+static void reopenSceneDialog(GYOBJ messageBox, int index)
+{
+	(void)messageBox;(void)index;SceneEditorIo_OpenLoad();
+}
+
+static void showSceneOpenError(const char* message)
+{
+	if(g_sceneOpenError==NULL){fprintf(stderr,"scene editor open: %s\n",message);return;}
+	YMGUI_MsgBox_ClearButtons(g_sceneOpenError);
+	YMGUI_MsgBox_SetTitle(g_sceneOpenError,"无法打开场景");
+	YMGUI_MsgBox_SetText(g_sceneOpenError,message);
+	YMGUI_MsgBox_AddButton(g_sceneOpenError,"返回",reopenSceneDialog);
+	YMGUI_MsgBox_Show(g_sceneOpenError);
+}
+
+static void loadSceneFromPath(const char* path, void* userData)
+{
+	(void)userData;SceneEditorObject staged[32];uint32 count=0;int32 mainIndex=-1,activeIndex=-1;
+	char error[256];
+	if(!SceneEditorIo_Read(path,staged,32,&count,&mainIndex,&activeIndex,error,sizeof(error))){
+		SceneEditorIo_SetError(error);showSceneOpenError(error);setStatus("场景打开失败，已保留当前场景");return;
+	}
+	uint8 ignoreResourceErrors=SceneEditorIo_GetIgnoreLoadErrors();
+	char skippedDetails[224]="";uint32 skippedCount=0;
+	gre_list stagedObjects={0},stagedLights={0};gre_scence stagedImport={0};uint32 built=0;
+	for(;built<count;++built){
+		SceneEditorObject* object=&staged[built];object->treeNode=NULL;
+		if(object->kind==SCENE_OBJECT_MESH){
+			uint8 meshFailed=0;char resourceError[224]="";
+			if(object->primitiveKind<=SCENE_PLACE_CAPSULE){
+				SceneEditorPlaceResult result={.kind=(SceneEditorPlaceKind)object->primitiveKind,
+					.scale=object->scale,.rotationY=object->rotY,.detailA=object->detailA,
+					.detailB=object->detailB,.color=object->color,.wireframe=object->wireframe};
+				snprintf(result.name,sizeof(result.name),"%s",object->name);
+				object->mesh=SceneEditorPlace_CreateMesh(&result);
+			}else if(object->primitiveKind==0xFF&&object->sourcePath[0]!='\0'){
+				if(!SceneEditorImport_Validate(object->sourcePath,resourceError,sizeof(resourceError))){
+					meshFailed=1;
+				}else{
+					object->mesh=YMGRE_LoadOgreMeshAndMaterial(&stagedImport,object->sourcePath);
+					if(object->mesh!=NULL&&!SceneEditorImport_ValidateLoadedMaterials(object->sourcePath,
+						object->mesh,resourceError,sizeof(resourceError))){
+						YMGRE_Free_Object(object->mesh);object->mesh=NULL;meshFailed=1;
+					}
+				}
+			}
+			if(object->mesh==NULL&&!meshFailed){snprintf(resourceError,sizeof(resourceError),
+				"网格解析失败：%.150s",object->sourcePath[0]!='\0'?object->sourcePath:"内置网格");meshFailed=1;}
+			if(meshFailed){
+				snprintf(error,sizeof(error),"物体「%.48s」：%.180s",object->name,resourceError);
+				if(!ignoreResourceErrors)break;
+				size_t used=strlen(skippedDetails);
+				if(used+1<sizeof(skippedDetails))snprintf(skippedDetails+used,sizeof(skippedDetails)-used,
+					"「%.36s」：%.120s\n",object->name,resourceError);
+				object->active=0;skippedCount++;continue;
+			}
+			SceneEditorPlace_TransformMesh(object->mesh,object->x,object->y,object->z,
+				object->rotY,object->scale,object->wireframe);
+			for(GRE_Object4d part=object->mesh;part!=NULL;part=part->nextObject)part->isVisible=object->visible;
+			YMGRE_List_Append(&stagedObjects,sizeof(gre_object4d),object->mesh);
+		}else if(object->kind==SCENE_OBJECT_LIGHT){
+			GRErgb24 rgb={(uint8)(object->color>>16),(uint8)(object->color>>8),(uint8)object->color};
+			object->light=YMGRE_Creat_Light((int16)built,object->lightType,rgb,object->strength);
+			if(object->light==NULL){snprintf(error,sizeof(error),"无法创建灯光：%.120s",object->name);break;}
+			SceneEditorObject_SyncHandle(object);normalizeSpotDirection(object);
+			YMGRE_List_Append(&stagedLights,sizeof(gre_light4d),object->light);
+		}else{
+			object->camera=YMGRE_Creat_CameraFromTarget((int16)built,&g_target,45,45,45,45);
+			if(object->camera==NULL){snprintf(error,sizeof(error),"无法创建相机：%.120s",object->name);break;}
+			updateProjection(object->camera,g_target.width);syncCamera(object);
+		}
+	}
+	if(built!=count){freeStagedScene(staged,built,&stagedObjects,&stagedLights,&stagedImport);
+		SceneEditorIo_SetError(error);showSceneOpenError(error);setStatus("场景打开失败，已保留当前场景");return;}
+	if(skippedCount>0){
+		uint32 compactCount=0;
+		for(uint32 source=0;source<count;++source)if(staged[source].active){
+			if((int32)source==mainIndex)mainIndex=(int32)compactCount;
+			if((int32)source==activeIndex)activeIndex=(int32)compactCount;
+			if(source!=compactCount)staged[compactCount]=staged[source];
+			compactCount++;
+		}
+		count=compactCount;
+	}
+	clearSelection("正在打开场景");
+	for(int i=0;i<32;++i)if(g_scene[i].active&&g_scene[i].kind==SCENE_OBJECT_CAMERA&&g_scene[i].camera!=NULL)
+		YMGRE_Free_Camera(g_scene[i].camera);
+	YMGRE_List_Clear(&g_lightsList,YMGRE_Free_Light);YMGRE_List_Clear(&g_objectsList,YMGRE_Free_Object);
+	YMGRE_List_Clear(&g_importContext.MaterialList,YMGRE_Free_Material);
+	memset(g_scene,0,sizeof(g_scene));memcpy(g_scene,staged,sizeof(SceneEditorObject)*count);
+	g_objectsList=stagedObjects;g_lightsList=stagedLights;g_importContext=stagedImport;
+	g_mainCamera=&g_scene[mainIndex];g_activeCamera=&g_scene[activeIndex];g_globalLight=NULL;
+	for(uint32 i=0;i<count;++i)if(g_scene[i].kind==SCENE_OBJECT_LIGHT&&
+		g_scene[i].lightType==GRE_GlobalLight){g_globalLight=&g_scene[i];break;}
+	rebuildHierarchyTree();syncCamera(g_activeCamera);
+	char cameraText[96];snprintf(cameraText,sizeof(cameraText),"VIEWPORT  /  %.20s",g_activeCamera->name);
+	YMGUI_Label_SetText(g_ui->viewportCamera,cameraText);SceneEditorIo_Close();
+	snprintf(g_currentScenePath,sizeof(g_currentScenePath),"%s",path);g_sceneDirty=0;g_pendingAction=PENDING_NONE;
+	if(!g_historyRestoring)historyReset();
+	char status[192];
+	if(skippedCount>0)snprintf(status,sizeof(status),"场景已打开，已过滤 %u 个错误物体",skippedCount);
+	else snprintf(status,sizeof(status),"场景已打开：%.150s",path);
+	setStatus(status);
+	if(skippedCount>0){
+		char warning[256];snprintf(warning,sizeof(warning),"已过滤 %u 个无法加载的物体：\n%.205s",skippedCount,skippedDetails);
+		YMGUI_MsgBox_ClearButtons(g_sceneOpenError);YMGUI_MsgBox_SetTitle(g_sceneOpenError,"场景已打开，但有资源被忽略");
+		YMGUI_MsgBox_SetText(g_sceneOpenError,warning);YMGUI_MsgBox_AddButton(g_sceneOpenError,"确定",NULL);
+		YMGUI_MsgBox_Show(g_sceneOpenError);
+	}
+}
+
+static void historyRemoveFrom(uint32 first)
+{
+	for(uint32 i=first;i<g_historyCount;++i)if(g_historyPaths[i][0]!='\0')unlink(g_historyPaths[i]);
+	g_historyCount=first;
+}
+
+static void historyCommit(void)
+{
+	if(!g_historyReady||g_historyRestoring||g_historyBatch)return;
+	if(g_historyIndex+1<g_historyCount){
+		if(g_historySavedIndex>(int32)g_historyIndex)g_historySavedIndex=-1;
+		historyRemoveFrom(g_historyIndex+1);
+	}
+	if(g_historyCount==SCENE_HISTORY_CAPACITY){
+		unlink(g_historyPaths[0]);
+		memmove(g_historyPaths,g_historyPaths[1],sizeof(g_historyPaths[0])*(SCENE_HISTORY_CAPACITY-1));
+		g_historyCount--;if(g_historyIndex>0)g_historyIndex--;
+		if(g_historySavedIndex>=0)g_historySavedIndex--;
+	}
+	char path[192],error[192];
+	snprintf(path,sizeof(path),"/tmp/ymgre_scene_history_%ld_%u.scene",(long)getpid(),g_historySerial++);
+	if(!writeCurrentScene(path,error,sizeof(error))){fprintf(stderr,"scene history: %s\n",error);return;}
+	snprintf(g_historyPaths[g_historyCount],sizeof(g_historyPaths[g_historyCount]),"%s",path);
+	g_historyIndex=g_historyCount++;
+	g_sceneDirty=g_historySavedIndex<0||(int32)g_historyIndex!=g_historySavedIndex;
+}
+
+static void historyReset(void)
+{
+	historyRemoveFrom(0);g_historyIndex=0;g_historySavedIndex=-1;g_historyReady=1;
+	historyCommit();g_historySavedIndex=(int32)g_historyIndex;g_sceneDirty=0;
+}
+
+static uint8 historyRestore(uint32 target)
+{
+	if(!g_historyReady||target>=g_historyCount||target==g_historyIndex)return 0;
+	char documentPath[SCENE_EDITOR_PATH_CAPACITY];snprintf(documentPath,sizeof(documentPath),"%s",g_currentScenePath);
+	uint8 ignore=SceneEditorIo_GetIgnoreLoadErrors();g_historyRestoring=1;SceneEditorIo_SetIgnoreLoadErrors(0);
+	loadSceneFromPath(g_historyPaths[target],NULL);
+	uint8 restored=strcmp(g_currentScenePath,g_historyPaths[target])==0;
+	g_historyRestoring=0;SceneEditorIo_SetIgnoreLoadErrors(ignore);
+	if(!restored)return 0;
+	snprintf(g_currentScenePath,sizeof(g_currentScenePath),"%s",documentPath);g_historyIndex=target;
+	g_sceneDirty=g_historySavedIndex<0||(int32)g_historyIndex!=g_historySavedIndex;
+	return 1;
+}
+
+static void undoClicked(GYOBJ button){(void)button;if(g_historyIndex>0){if(historyRestore(g_historyIndex-1))setStatus("已撤销场景修改");}else setStatus("没有可撤销的修改");}
+static void redoClicked(GYOBJ button){(void)button;if(g_historyIndex+1<g_historyCount){if(historyRestore(g_historyIndex+1))setStatus("已重做场景修改");}else setStatus("没有可重做的修改");}
+
+static void createNewScene(void)
+{
+	clearSelection("正在新建场景");
+	for(int i=0;i<32;++i)
+		if(g_scene[i].active&&g_scene[i].kind==SCENE_OBJECT_CAMERA&&g_scene[i].camera!=NULL)
+			YMGRE_Free_Camera(g_scene[i].camera);
+	YMGRE_List_Clear(&g_lightsList,YMGRE_Free_Light);
+	YMGRE_List_Clear(&g_objectsList,YMGRE_Free_Object);
+	YMGRE_List_Clear(&g_importContext.MaterialList,YMGRE_Free_Material);
+	memset(g_scene,0,sizeof(g_scene));
+	createDefaultScene();
+	rebuildHierarchyTree();
+	YMGUI_Label_SetText(g_ui->viewportCamera,"VIEWPORT  /  Main Camera");
+	SceneEditorIo_ResetPath();
+	g_currentScenePath[0]='\0';g_sceneDirty=0;g_pendingAction=PENDING_NONE;
+	if(g_image!=NULL)YMGUI_Obj_Invalidate(g_image);
+	setStatus("已新建场景");
+	if(g_historyReady)historyReset();
+}
+
+static void completePendingAction(void)
+{
+	PendingAction action=g_pendingAction;g_pendingAction=PENDING_NONE;
+	if(action==PENDING_NEW)createNewScene();
+	else if(action==PENDING_OPEN)SceneEditorIo_OpenLoad();
+	else if(action==PENDING_EXIT)g_shouldExit=1;
+}
+
+static void unsavedPromptResult(GYOBJ messageBox, int index)
+{
+	(void)messageBox;
+	if(index==0){
+		if(g_currentScenePath[0]!='\0')saveSceneToPath(g_currentScenePath,g_ui);
+		else SceneEditorIo_OpenSave();
+	}else if(index==1)completePendingAction();
+	else g_pendingAction=PENDING_NONE;
+}
+
+static void showUnsavedPrompt(PendingAction action)
+{
+	if(g_unsavedPrompt==NULL)return;
+	g_pendingAction=action;YMGUI_MsgBox_ClearButtons(g_unsavedPrompt);
+	YMGUI_MsgBox_SetTitle(g_unsavedPrompt,action==PENDING_NEW?"新建场景":
+		(action==PENDING_OPEN?"打开场景":"退出场景编辑器"));
+	YMGUI_MsgBox_SetText(g_unsavedPrompt,"当前场景有未保存的修改，是否先保存？");
+	YMGUI_MsgBox_AddButton(g_unsavedPrompt,"保存",unsavedPromptResult);
+	YMGUI_MsgBox_AddButton(g_unsavedPrompt,"不保存",unsavedPromptResult);
+	YMGUI_MsgBox_AddButton(g_unsavedPrompt,"取消",unsavedPromptResult);
+	YMGUI_MsgBox_Show(g_unsavedPrompt);
+}
+
+static void sceneDialogCancelled(void* userData)
+{
+	(void)userData;uint8 hadPending=g_pendingAction!=PENDING_NONE;g_pendingAction=PENDING_NONE;
+	setStatus(hadPending?"已取消保存，当前场景已保留":"已取消文件操作");
+}
+
+static void saveClicked(GYOBJ button){(void)button;YMGUI_Obj_SetHidden(g_editMenu,1);SceneEditorIo_OpenSave();}
 static void importClicked(GYOBJ button){(void)button;SceneEditorImport_Open();}
-static void addClicked(GYOBJ button){(void)button;setStatus("请使用放置菜单创建对象、灯光或相机");}
+static void addClicked(GYOBJ button)
+{
+	(void)button;
+	if(!g_sceneDirty){createNewScene();return;}
+	showUnsavedPrompt(PENDING_NEW);
+}
 static void frameClicked(GYOBJ button)
 {
 	(void)button;
@@ -687,17 +1177,39 @@ static void frameClicked(GYOBJ button)
 	g_activeCamera->targetX=g_selected->x;g_activeCamera->targetY=g_selected->y;g_activeCamera->targetZ=g_selected->z;
 	float32 old=sqrtf(dx*dx+dy*dy+dz*dz);if(old<0.001f)old=1;
 	g_activeCamera->x=g_activeCamera->targetX+dx/old*distance;g_activeCamera->y=g_activeCamera->targetY+dy/old*distance;g_activeCamera->z=g_activeCamera->targetZ+dz/old*distance;
-	syncCamera(g_activeCamera);setStatus("视图已定位到选中对象");
+	syncCamera(g_activeCamera);g_sceneDirty=1;historyCommit();setStatus("视图已定位到选中对象");
 }
 static void editClicked(GYOBJ button){(void)button;YMGUI_Obj_SetHidden(g_editMenu,!(g_editMenu->state&GY_STATE_Hidden));}
-static void openClicked(GYOBJ button){(void)button;setStatus("打开场景入口待接文件选择");}
+static void openClicked(GYOBJ button)
+{
+	(void)button;YMGUI_Obj_SetHidden(g_editMenu,1);
+	if(g_sceneDirty)showUnsavedPrompt(PENDING_OPEN);else SceneEditorIo_OpenLoad();
+}
+
+static int quitRequested(void* userData)
+{
+	(void)userData;
+	if(g_shouldExit)return 1;
+	if(g_sceneDirty){
+		if(g_unsavedPrompt==NULL||!YMGUI_MsgBox_IsShown(g_unsavedPrompt))showUnsavedPrompt(PENDING_EXIT);
+	}else g_shouldExit=1;
+	return 0;
+}
 static void resetClicked(GYOBJ button)
 {
 	(void)button;g_activeCamera->x=0;g_activeCamera->y=149;g_activeCamera->z=-213;
-	g_activeCamera->targetX=g_activeCamera->targetY=g_activeCamera->targetZ=0;syncCamera(g_activeCamera);refreshCameraInspector();setStatus("视图已复位");
+	g_activeCamera->targetX=g_activeCamera->targetY=g_activeCamera->targetZ=0;syncCamera(g_activeCamera);g_sceneDirty=1;historyCommit();refreshCameraInspector();setStatus("视图已复位");
 }
 static void leftClicked(GYOBJ button){(void)button;YMGUI_Obj_SetHidden(g_leftPanel,!(g_leftPanel->state&GY_STATE_Hidden));layoutPanels();}
 static void rightClicked(GYOBJ button){(void)button;YMGUI_Obj_SetHidden(g_rightPanel,!(g_rightPanel->state&GY_STATE_Hidden));layoutPanels();}
+static void referenceClicked(GYOBJ button)
+{
+	g_referenceVisible=!g_referenceVisible;
+	if(g_referenceVisible){g_lineCount=0;buildReferenceLines();}
+	YMGUI_Button_SetText(button,g_referenceVisible?"隐藏坐标轴和网格":"显示坐标轴和网格");
+	if(g_image!=NULL)YMGUI_Obj_Invalidate(g_image);
+	setStatus(g_referenceVisible?"已显示坐标轴和网格":"已隐藏坐标轴和网格");
+}
 
 static GYOBJ label(GYOBJ parent,GYcoord x,GYcoord y,GYcoord w,GYcoord h,const char* text,GYcolor color)
 {
@@ -709,9 +1221,27 @@ static void toolbarButton(GYOBJ parent,GYcoord x,const char* text,GYbtn_clicked_
 	GYOBJ button=YMGUI_Creat_Button_Creat(parent,x,12,78,30);YMGUI_Button_SetText(button,text);
 	YMGUI_Button_SetColors(button,GY_ARGB(0xFF,0x2C,0x35,0x48),GY_ARGB(0xFF,0x3C,0x86,0xB8));YMGUI_Button_SetClicked(button,clicked);
 }
-static void menuButton(GYOBJ parent,GYcoord y,const char* text,GYbtn_clicked_cb clicked)
+static void updateTransformButtons(void)
+{
+	for(uint8 i=0;i<3;++i)if(g_transformButtons[i]!=NULL)
+		YMGUI_Button_SetColors(g_transformButtons[i],i==(uint8)g_transformMode?GY_ARGB(0xFF,0x2E,0x79,0x96):GY_ARGB(0xFF,0x2C,0x35,0x48),
+			GY_ARGB(0xFF,0x3C,0x86,0xB8));
+}
+static void transformModeClicked(GYOBJ button)
+{
+	for(uint8 i=0;i<3;++i)if(g_transformButtons[i]==button){g_transformMode=(g_transformMode==(TransformMode)i)?TRANSFORM_NONE:(TransformMode)i;break;}
+	updateTransformButtons();if(g_image!=NULL)YMGUI_Obj_Invalidate(g_image);
+	setStatus(g_transformMode==TRANSFORM_NONE?"已取消变换约束":(g_transformMode==TRANSFORM_MOVE?"移动模式":(g_transformMode==TRANSFORM_ROTATE?"三轴旋转模式":"统一缩放模式")));
+}
+static void transformButton(GYOBJ parent,GYcoord x,const char* text,uint8 index)
+{
+	g_transformButtons[index]=YMGUI_Creat_Button_Creat(parent,x,12,54,30);
+	YMGUI_Button_SetText(g_transformButtons[index],text);YMGUI_Button_SetClicked(g_transformButtons[index],transformModeClicked);
+}
+static GYOBJ menuButton(GYOBJ parent,GYcoord y,const char* text,GYbtn_clicked_cb clicked)
 {
 	GYOBJ button=YMGUI_Creat_Button_Creat(parent,8,y,150,28);YMGUI_Button_SetText(button,text);YMGUI_Button_SetClicked(button,clicked);
+	return button;
 }
 
 static void buildUi(EditorUi* ui)
@@ -726,34 +1256,32 @@ static void buildUi(EditorUi* ui)
 	YMGUI_Obj_SetBgColor(g_centerPanel,GY_ARGB(0xFF,0x0E,0x13,0x1C));YMGUI_Obj_SetBgColor(g_rightPanel,GY_ARGB(0xFF,0x32,0x2B,0x3E));
 	toolbarButton(bar,18,"编辑",editClicked);SceneEditorPlace_Build(bar,104,ctx,objectPlaced,ui);
 	SceneEditorColor_Build(ctx);toolbarButton(bar,190,"新建",addClicked);toolbarButton(bar,276,"保存",saveClicked);toolbarButton(bar,362,"定位",frameClicked);toolbarButton(bar,448,"导入",importClicked);
-	label(bar,650,16,350,20,"PERSPECTIVE   |   60 FPS   |   RGB565",muted);
-	g_editMenu=YMGUI_Creat_Obj_Creat(root,12,48,170,172);YMGUI_Obj_SetBgColor(g_editMenu,GY_ARGB(0xFF,0x25,0x2D,0x3C));YMGUI_Obj_SetHidden(g_editMenu,1);
-	menuButton(g_editMenu,8,"打开场景",openClicked);menuButton(g_editMenu,40,"保存场景",saveClicked);menuButton(g_editMenu,72,"切换层级",leftClicked);menuButton(g_editMenu,104,"切换检查器",rightClicked);menuButton(g_editMenu,136,"重置视图",resetClicked);
+	transformButton(bar,540,"移动",0);transformButton(bar,598,"旋转",1);transformButton(bar,656,"缩放",2);updateTransformButtons();
+	label(bar,724,16,286,20,"PERSPECTIVE | 60 FPS | RGB565",muted);
+	g_editMenu=YMGUI_Creat_Obj_Creat(root,12,48,170,300);YMGUI_Obj_SetBgColor(g_editMenu,GY_ARGB(0xFF,0x25,0x2D,0x3C));YMGUI_Obj_SetHidden(g_editMenu,1);
+	menuButton(g_editMenu,8,"打开场景",openClicked);menuButton(g_editMenu,40,"保存场景",saveClicked);
+	menuButton(g_editMenu,72,"撤销",undoClicked);menuButton(g_editMenu,104,"重做",redoClicked);
+	menuButton(g_editMenu,136,"切换层级",leftClicked);
+	menuButton(g_editMenu,200,"切换检查器",rightClicked);menuButton(g_editMenu,232,"重置视图",resetClicked);
+	g_referenceToggle=menuButton(g_editMenu,264,"隐藏坐标轴和网格",referenceClicked);
+	YMGUI_Layout_Stack(g_editMenu,GY_LAYOUT_VER,4,8,GY_CROSS_START);
 	label(g_leftPanel,16,14,190,22,"场景层级",fg);
 	ui->tree=YMGUI_Creat_TreeView_Creat(g_leftPanel,12,48,212,430);YMGUI_TreeView_SetRowHeight(ui->tree,28);YMGUI_TreeView_SetIndent(ui->tree,18);
 	YMGUI_TreeView_SetSelectCb(ui->tree,treeSelect);YMGUI_TreeView_SetContextCb(ui->tree,treeContext);
-	GYTREENODE scene=YMGUI_TreeView_AddNode(ui->tree,NULL,"Scene",1);
-	g_camerasNode=YMGUI_TreeView_AddNode(ui->tree,scene,"Cameras",1);g_lightsNode=YMGUI_TreeView_AddNode(ui->tree,scene,"Lights",1);g_objectsNode=YMGUI_TreeView_AddNode(ui->tree,scene,"Objects",1);
-	g_mainCamera->treeNode=YMGUI_TreeView_AddNode(ui->tree,g_camerasNode,g_mainCamera->name,0);YMGUI_TreeView_SetNodeUserPtr(g_mainCamera->treeNode,g_mainCamera);
-	g_globalLight->treeNode=YMGUI_TreeView_AddNode(ui->tree,g_lightsNode,g_globalLight->name,0);YMGUI_TreeView_SetNodeUserPtr(g_globalLight->treeNode,g_globalLight);
-	YMGUI_TreeView_SetExpanded(ui->tree,scene,1);YMGUI_TreeView_SetExpanded(ui->tree,g_camerasNode,1);YMGUI_TreeView_SetExpanded(ui->tree,g_lightsNode,1);YMGUI_TreeView_SetExpanded(ui->tree,g_objectsNode,1);
+	rebuildHierarchyTree();
 	label(g_leftPanel,16,500,204,22,"右键管理场景对象",muted);label(g_leftPanel,16,526,204,22,"点击项目查看属性",muted);
 	g_image=YMGUI_Creat_Image_Creat(g_centerPanel,0,0,560,540);g_imageSource=(GYimg){(const GYpx*)g_colorBuffer,560,540,0,0};YMGUI_Image_SetSrc(g_image,&g_imageSource);
 	ui->viewport=YMGUI_Creat_Obj_Creat(g_centerPanel,0,0,560,540);ui->viewport->draw_cb=NULL;ui->viewport->event_cb=viewportEvent;ui->viewport->state|=GY_STATE_Focusable;
 	ui->viewportBrand=label(g_centerPanel,18,16,240,22,"YMGRE  /  SCENE EDITOR",cyan);ui->viewportCamera=label(g_centerPanel,300,16,242,22,"VIEWPORT  /  Main Camera",fg);
 	label(g_centerPanel,18,482,440,24,"LMB select / move    blank drag pans    RMB orbits",muted);
 	SceneEditorInspector_Build(g_rightPanel,inspectorChanged,inspectorRemesh,ui);
-	SceneEditorHierarchyOps ops={renameObject,deleteObject,switchCamera};SceneEditorHierarchy_Build(ctx,&ops,ui);
+	SceneEditorHierarchyOps ops={renameObject,deleteObject,switchCamera,duplicateObject};SceneEditorHierarchy_Build(ctx,&ops,ui);
 	SceneEditorImport_Build(ctx,importMesh,ui);
+	SceneEditorIo_Build(ctx,saveSceneToPath,loadSceneFromPath,sceneDialogCancelled,ui);
+	g_unsavedPrompt=YMGUI_Creat_MsgBox_Creat(ctx);
+	g_sceneOpenError=YMGUI_Creat_MsgBox_Creat(ctx);
 	ui->status=label(root,14,650,996,24,"就绪",muted);
 	clearSelection("就绪");YMGUI_Inject_SetCtx(ctx);YMGUI_SetFocus(ctx,ui->viewport);
-}
-
-static uint32 monotonicMilliseconds(void)
-{
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	return (uint32)(now.tv_sec * 1000u + now.tv_nsec / 1000000u);
 }
 
 static int runSelfTest(void)
@@ -762,14 +1290,92 @@ static int runSelfTest(void)
 	#define SELF_CHECK(condition) do { if(!(condition)) { \
 		fprintf(stderr, "scene_editor self-test failed at line %d: %s\n", __LINE__, #condition); \
 		failures++; } } while(0)
+	const char* longPath="/tmp/ymgre/scenes/a_directory_name_longer_than_the_old_limit/blender_export.scene";
+	GYOBJ pathInput=YMGUI_Creat_TextInput_Creat(g_ui->host.context->root,0,0,320,28,255);
+	YMGUI_TextInput_SetText(pathInput,longPath);
+	SELF_CHECK(strcmp(YMGUI_TextInput_GetText(pathInput),longPath)==0);
+	YMGUI_Free_ObjFree(pathInput);
+	char orphanMesh[160],orphanError[160];
+	snprintf(orphanMesh,sizeof(orphanMesh),"/tmp/ymgre_orphan_%ld.MESH",(long)getpid());
+	FILE* orphan=fopen(orphanMesh,"wb");SELF_CHECK(orphan!=NULL);
+	if(orphan!=NULL)fclose(orphan);
+	SELF_CHECK(!SceneEditorImport_Validate(orphanMesh,orphanError,sizeof(orphanError))&&
+		strstr(orphanError,".material")!=NULL);
+	unlink(orphanMesh);
+	char textureMesh[160],textureMaterial[160];
+	snprintf(textureMesh,sizeof(textureMesh),"/tmp/ymgre_texture_%ld.mesh",(long)getpid());
+	snprintf(textureMaterial,sizeof(textureMaterial),"/tmp/ymgre_texture_%ld.material",(long)getpid());
+	FILE* textureMeshFile=fopen(textureMesh,"wb");SELF_CHECK(textureMeshFile!=NULL);
+	if(textureMeshFile!=NULL)fclose(textureMeshFile);
+	FILE* textureMaterialFile=fopen(textureMaterial,"w");SELF_CHECK(textureMaterialFile!=NULL);
+	if(textureMaterialFile!=NULL){
+		fputs("material SelftestMaterial\n{\n texture_unit\n {\n  texture missing_selftest.bmp\n }\n}\n",textureMaterialFile);
+		fclose(textureMaterialFile);
+	}
+	SELF_CHECK(!SceneEditorImport_Validate(textureMesh,orphanError,sizeof(orphanError))&&
+		strstr(orphanError,"SelftestMaterial")!=NULL&&strstr(orphanError,"missing_selftest.bmp")!=NULL);
+	GRE_Object4d missingMaterialMesh=YMGRE_Creat_Object(1,0,"Selftest Mesh","MissingMaterial");
+	SELF_CHECK(missingMaterialMesh!=NULL&&!SceneEditorImport_ValidateLoadedMaterials(textureMesh,
+		missingMaterialMesh,orphanError,sizeof(orphanError))&&strstr(orphanError,"MissingMaterial")!=NULL&&
+		strstr(orphanError,".material")!=NULL);
+	if(missingMaterialMesh!=NULL)YMGRE_Free_Object(missingMaterialMesh);
+	unlink(textureMaterial);unlink(textureMesh);
+	char brokenScenePath[160],missingMeshPath[160];
+	snprintf(brokenScenePath,sizeof(brokenScenePath),"/tmp/ymgre_broken_%ld.scene",(long)getpid());
+	snprintf(missingMeshPath,sizeof(missingMeshPath),"/tmp/missing_scene_mesh_%ld.mesh",(long)getpid());
+	SceneEditorObject brokenScene[3]={{0}};
+	brokenScene[0].active=1;brokenScene[0].kind=SCENE_OBJECT_LIGHT;
+	brokenScene[0].lightType=GRE_GlobalLight;brokenScene[0].strength=1;
+	brokenScene[0].color=GY_ARGB(0xFF,255,255,255);snprintf(brokenScene[0].name,sizeof(brokenScene[0].name),"Global Light");
+	brokenScene[1].active=1;brokenScene[1].kind=SCENE_OBJECT_CAMERA;brokenScene[1].scale=1;
+	brokenScene[1].x=0;brokenScene[1].y=149;brokenScene[1].z=-213;
+	snprintf(brokenScene[1].name,sizeof(brokenScene[1].name),"Test Camera");
+	brokenScene[2].active=1;brokenScene[2].kind=SCENE_OBJECT_MESH;brokenScene[2].primitiveKind=0xFF;
+	brokenScene[2].scale=1;snprintf(brokenScene[2].name,sizeof(brokenScene[2].name),"Missing Statue");
+	snprintf(brokenScene[2].sourcePath,sizeof(brokenScene[2].sourcePath),"%s",missingMeshPath);
+	SELF_CHECK(SceneEditorIo_Write(brokenScenePath,brokenScene,3,1,1,orphanError,sizeof(orphanError)));
+	SceneEditorObject brokenRead[3];uint32 brokenCount=0;int32 brokenMain=-1,brokenActive=-1;
+	SELF_CHECK(SceneEditorIo_Read(brokenScenePath,brokenRead,3,&brokenCount,&brokenMain,&brokenActive,
+		orphanError,sizeof(orphanError))&&brokenCount==3&&
+		strstr(brokenRead[2].sourcePath,"missing_scene_mesh")!=NULL);
+	SceneEditorIo_SetIgnoreLoadErrors(0);
+	loadSceneFromPath(brokenScenePath,NULL);
+	SELF_CHECK(YMGUI_MsgBox_IsShown(g_sceneOpenError)&&g_objectsList.len==0&&g_lightsList.len==1);
+	YMGUI_MsgBox_Close(g_sceneOpenError);
+	SceneEditorIo_SetIgnoreLoadErrors(1);loadSceneFromPath(brokenScenePath,NULL);
+	uint32 filteredActive=0;for(int i=0;i<32;++i)if(g_scene[i].active)filteredActive++;
+	SELF_CHECK(YMGUI_MsgBox_IsShown(g_sceneOpenError)&&filteredActive==2&&
+		g_objectsList.len==0&&g_lightsList.len==1&&strcmp(g_currentScenePath,brokenScenePath)==0);
+	YMGUI_MsgBox_Close(g_sceneOpenError);SceneEditorIo_SetIgnoreLoadErrors(1);
+	SceneEditorIo_OpenLoad();SELF_CHECK(!SceneEditorIo_GetIgnoreLoadErrors());SceneEditorIo_Close();
+	unlink(brokenScenePath);
+	float32 wheelDistance=cameraDistance(g_activeCamera);
+	g_ui->host.context->wheel_y=1;viewportEvent(g_ui->viewport,GY_EVENT_Wheel);
+	SELF_CHECK(cameraDistance(g_activeCamera)<wheelDistance);
+	g_ui->host.context->wheel_y=-1;viewportEvent(g_ui->viewport,GY_EVENT_Wheel);
+	SELF_CHECK(fabsf(cameraDistance(g_activeCamera)-wheelDistance)<0.01f);
 	SELF_CHECK(g_selected == NULL && YMGUI_TreeView_GetSelectedNode(g_ui->tree) == NULL);
+	g_activeCamera->targetX=12;g_activeCamera->targetY=8;g_activeCamera->targetZ=-4;
+	viewportEvent(g_ui->viewport,GY_EVENT_ContextRequested);
+	SELF_CHECK(g_activeCamera->targetX==0&&g_activeCamera->targetY==0&&g_activeCamera->targetZ==0);
+	g_selected=g_activeCamera;g_activeCamera->targetX=5;
+	viewportEvent(g_ui->viewport,GY_EVENT_ContextRequested);
+	SELF_CHECK(g_activeCamera->targetX==0&&g_activeCamera->targetY==0&&g_activeCamera->targetZ==0);
+	SceneEditorObject otherCameraPivot={.active=1,.kind=SCENE_OBJECT_CAMERA,.x=35,.y=20,.z=-15};
+	g_selected=&otherCameraPivot;viewportEvent(g_ui->viewport,GY_EVENT_ContextRequested);
+	SELF_CHECK(g_activeCamera->targetX==otherCameraPivot.x&&
+		g_activeCamera->targetY==otherCameraPivot.y&&g_activeCamera->targetZ==otherCameraPivot.z);
+	g_selected=NULL;
+	g_sceneDirty=0;
 	SceneEditorPlaceResult sphere={.kind=SCENE_PLACE_SPHERE,.x=12,.y=18,.z=4,.scale=1,
 		.color=GY_ARGB(0xFF,80,170,110),.wireframe=1,.detailA=6,.detailB=12};
 	snprintf(sphere.name,sizeof(sphere.name),"Selftest Sphere");snprintf(sphere.type,sizeof(sphere.type),"球体");
 	sphere.mesh=YMGRE_MeshGener_Sphere(18,sphere.detailA,sphere.detailB,(GRErgb24){80,170,110},sphere.name,"");
 	sphere.mesh->WorldCoordinate=(gre_fvector4d){sphere.x,sphere.y,sphere.z,1};sphere.mesh->wireFrame=1;YMGRE_Object_LocalToWorld(sphere.mesh);
 	objectPlaced(&sphere,NULL);SceneEditorObject* mesh=g_selected;
-	SELF_CHECK(mesh!=NULL&&mesh->mesh!=NULL&&mesh->mesh->polygonNum==120&&g_objectsList.len==1);
+	SELF_CHECK(g_sceneDirty&&mesh!=NULL&&mesh->mesh!=NULL&&mesh->mesh->polygonNum==120&&g_objectsList.len==1);
+	viewportEvent(g_ui->viewport,GY_EVENT_ContextRequested);
+	SELF_CHECK(g_activeCamera->targetX==mesh->x&&g_activeCamera->targetY==mesh->y&&g_activeCamera->targetZ==mesh->z);
 	GRE_Object4d originalMesh=mesh->mesh;
 	SELF_CHECK(inspectorRemesh(mesh,8,16,NULL)&&mesh->mesh!=originalMesh&&
 		mesh->mesh->polygonNum==224&&mesh->detailA==8&&mesh->detailB==16&&
@@ -780,7 +1386,11 @@ static int runSelfTest(void)
 	SELF_CHECK(fabsf(mesh->rotY-90)<0.001f&&
 		fabsf((mesh->mesh->pointList[1].pos.x-mesh->x)-beforeZ)<0.001f&&
 		fabsf((mesh->mesh->pointList[1].pos.z-mesh->z)+beforeX)<0.001f);
-	addSelectionLines();SELF_CHECK(g_lineCount==g_baseLineCount+12);
+	addSelectionLines();SELF_CHECK(g_referenceVisible&&g_lineCount==g_baseLineCount+12);
+	referenceClicked(g_referenceToggle);addSelectionLines();
+	SELF_CHECK(!g_referenceVisible&&g_lineCount==12);
+	referenceClicked(g_referenceToggle);addSelectionLines();
+	SELF_CHECK(g_referenceVisible&&g_lineCount==g_baseLineCount+12);
 	SceneEditorPlaceResult grounded={.kind=SCENE_PLACE_SPHERE,.scale=2,.detailA=6,.detailB=12,
 		.color=GY_ARGB(0xFF,80,170,110)};
 	snprintf(grounded.name,sizeof(grounded.name),"Grounded Sphere");
@@ -848,9 +1458,66 @@ static int runSelfTest(void)
 				viewportArea.y+(GYcoord)pickY)!=importedObject);
 			for(GRE_Object4d part=importedObject->mesh;part!=NULL;part=part->nextObject)part->isVisible=1;
 		}
+	SceneEditorPlaceResult savedCamera={.kind=SCENE_PLACE_CAMERA,.x=65,.y=55,.z=-90,.targetY=8};
+	snprintf(savedCamera.name,sizeof(savedCamera.name),"Saved Camera");snprintf(savedCamera.type,sizeof(savedCamera.type),"相机");
+	objectPlaced(&savedCamera,NULL);SceneEditorObject* savedCameraObject=g_selected;switchCamera(savedCameraObject,NULL);
+	int savedObjectCount=g_objectsList.len,savedLightCount=g_lightsList.len;
+	char scenePath[160];snprintf(scenePath,sizeof(scenePath),"/tmp/ymgre_scene_editor_selftest_%ld.scene",(long)getpid());
+	unlink(scenePath);saveSceneToPath(scenePath,NULL);SELF_CHECK(access(scenePath,R_OK)==0&&
+		!g_sceneDirty&&strcmp(g_currentScenePath,scenePath)==0);
 	if(importedObject!=NULL)deleteObject(importedObject,NULL);
-	deleteObject(spotObject,NULL);deleteObject(pointObject,NULL);deleteObject(planeObject,NULL);deleteObject(mesh,NULL);
+	deleteObject(savedCameraObject,NULL);deleteObject(spotObject,NULL);deleteObject(pointObject,NULL);
+	deleteObject(planeObject,NULL);deleteObject(mesh,NULL);
 	SELF_CHECK(g_objectsList.len==0&&g_lightsList.len==1&&g_selected==NULL);
+	loadSceneFromPath(scenePath,NULL);SELF_CHECK(g_objectsList.len==savedObjectCount&&
+		g_lightsList.len==savedLightCount&&strcmp(g_activeCamera->name,"Saved Camera")==0&&
+		g_globalLight!=NULL&&g_globalLight->light->proper.lightcolor.R==120&&
+		!g_sceneDirty&&strcmp(g_currentScenePath,scenePath)==0);
+	SceneEditorObject* loadedSphere=NULL;SceneEditorObject* loadedImport=NULL;
+	for(int i=0;i<32;++i)if(g_scene[i].active){
+		if(strcmp(g_scene[i].name,"Selftest Sphere")==0)loadedSphere=&g_scene[i];
+		if(g_scene[i].primitiveKind==0xFF)loadedImport=&g_scene[i];
+	}
+	SELF_CHECK(loadedSphere!=NULL&&loadedSphere->mesh!=NULL&&loadedSphere->detailA==8&&
+		fabsf(loadedSphere->rotY-90)<0.001f);
+	if(importedObject!=NULL)SELF_CHECK(loadedImport!=NULL&&loadedImport->sourcePath[0]!='\0');
+	for(int i=31;i>=0;--i)if(g_scene[i].active&&&g_scene[i]!=g_mainCamera&&&g_scene[i]!=g_globalLight)
+		deleteObject(&g_scene[i],NULL);
+	SELF_CHECK(g_sceneDirty&&g_objectsList.len==0&&g_lightsList.len==1&&g_selected==NULL);
+	addClicked(NULL);SELF_CHECK(YMGUI_MsgBox_IsShown(g_unsavedPrompt)&&g_pendingAction==PENDING_NEW);
+	unsavedPromptResult(g_unsavedPrompt,2);YMGUI_MsgBox_Close(g_unsavedPrompt);
+	SELF_CHECK(g_sceneDirty&&g_currentScenePath[0]!='\0');
+	createNewScene();uint32 activeObjects=0;
+	for(int i=0;i<32;++i)if(g_scene[i].active)activeObjects++;
+	SELF_CHECK(activeObjects==2&&g_objectsList.len==0&&g_lightsList.len==1&&
+		g_mainCamera!=NULL&&g_mainCamera->camera!=NULL&&g_activeCamera==g_mainCamera&&
+		g_globalLight!=NULL&&g_globalLight->light!=NULL&&!g_sceneDirty&&
+		g_currentScenePath[0]=='\0'&&g_selected==NULL);
+	SceneEditorPlaceResult historySphere={.kind=SCENE_PLACE_SPHERE,.x=0,.y=18,.z=0,.scale=1,
+		.color=GY_ARGB(0xFF,90,160,210),.detailA=6,.detailB=12};
+	snprintf(historySphere.name,sizeof(historySphere.name),"History Sphere");snprintf(historySphere.type,sizeof(historySphere.type),"球体");
+	historySphere.mesh=SceneEditorPlace_CreateMesh(&historySphere);
+	SceneEditorPlace_TransformMesh(historySphere.mesh,historySphere.x,historySphere.y,historySphere.z,0,1,0);
+	objectPlaced(&historySphere,NULL);SceneEditorObject* historyObject=g_selected;
+	g_transformMode=TRANSFORM_MOVE;addSelectionLines();uint32 beforeGizmo=g_lineCount;addTransformGizmo();
+	SELF_CHECK(g_lineCount==beforeGizmo+3);
+	float32 transformX=historyObject->x;dragSelectedAxis(VIEW_DRAG_MOVE_X,12,0);
+	SELF_CHECK(fabsf(historyObject->x-transformX)>0.001f);
+	g_transformMode=TRANSFORM_ROTATE;addSelectionLines();beforeGizmo=g_lineCount;addTransformGizmo();
+	SELF_CHECK(g_lineCount==beforeGizmo+75);float32 transformRotation=historyObject->rotY;
+	dragSelectedAxis(VIEW_DRAG_ROTATE_Y,10,0);SELF_CHECK(historyObject->rotY>transformRotation);
+	g_transformMode=TRANSFORM_SCALE;float32 transformScale=historyObject->scale;
+	dragSelectedAxis(VIEW_DRAG_SCALE,10,-5);SELF_CHECK(historyObject->scale>transformScale);historyCommit();
+	duplicateObject(historyObject,NULL);SELF_CHECK(g_objectsList.len==2&&strstr(g_selected->name,"Copy")!=NULL);
+	undoClicked(NULL);SELF_CHECK(g_objectsList.len==1);
+	redoClicked(NULL);SELF_CHECK(g_objectsList.len==2);
+	g_sceneDirty=1;openClicked(NULL);SELF_CHECK(YMGUI_MsgBox_IsShown(g_unsavedPrompt)&&g_pendingAction==PENDING_OPEN);
+	unsavedPromptResult(g_unsavedPrompt,2);YMGUI_MsgBox_Close(g_unsavedPrompt);
+	SELF_CHECK(g_sceneDirty&&g_pendingAction==PENDING_NONE);
+	SELF_CHECK(!quitRequested(NULL)&&YMGUI_MsgBox_IsShown(g_unsavedPrompt)&&g_pendingAction==PENDING_EXIT&&!g_shouldExit);
+	unsavedPromptResult(g_unsavedPrompt,2);YMGUI_MsgBox_Close(g_unsavedPrompt);
+	SELF_CHECK(!g_shouldExit&&g_pendingAction==PENDING_NONE);createNewScene();g_transformMode=TRANSFORM_MOVE;updateTransformButtons();
+	unlink(scenePath);
 #undef SELF_CHECK
 	return failures;
 }
@@ -859,16 +1526,12 @@ int main(void)
 {
 	EditorUi ui={0};g_ui=&ui;setenv("YMGRE_WINDOW_SCALE","1",1);
 	if(!YMGRE_DemoHost_Init(&ui.host,1024,680,40))return 1;
-	SceneEditorFont_Init();initScene();buildUi(&ui);
+	SceneEditorFont_Init();initScene();buildUi(&ui);historyReset();SDL_LCD_SetQuitRequestCb(quitRequested,NULL);
 	const char* limit=getenv("YMGRE_MAX_FRAMES");ui.frameLimit=limit?atoi(limit):0;
 	int selfTestFailures=0;
 	if(getenv("YMGRE_SCENE_EDITOR_SELFTEST")!=NULL){selfTestFailures=runSelfTest();ui.frameLimit=1;}
 	YMGUI_Obj_SetBgColor(ui.host.context->root,GY_ARGB(0xFF,0x15,0x1A,0x24));
-	uint32 previousTick=monotonicMilliseconds();
-	while(SDL_LCD_PumpEvents()){
-		uint32 currentTick=monotonicMilliseconds();
-		uint32 elapsed=currentTick-previousTick;previousTick=currentTick;
-		SceneEditorInspector_Tick((uint16)GREMin(elapsed,65535u));
+	while(!g_shouldExit&&SDL_LCD_PumpEvents()){
 		renderScene();YMGUI_Obj_Invalidate(g_image);YMGUI_Refresh(ui.host.context);
 		if(ui.frameLimit>0&&++ui.frames>=ui.frameLimit) break;
 		SDL_LCD_Delay(16);
@@ -877,5 +1540,6 @@ int main(void)
 	YMGRE_Free_RenderWorkspace(g_workspace);YMGRE_Free_Camera(g_mainCamera->camera);
 	YMGRE_List_Clear(&g_lightsList,YMGRE_Free_Light);YMGRE_List_Clear(&g_objectsList,YMGRE_Free_Object);
 	YMGRE_List_Clear(&g_importContext.MaterialList,YMGRE_Free_Material);
+	historyRemoveFrom(0);
 	SceneEditorInspector_Shutdown();YMGRE_DemoHost_Destroy(&ui.host);SceneEditorFont_Shutdown();g_ui=NULL;return selfTestFailures?1:0;
 }

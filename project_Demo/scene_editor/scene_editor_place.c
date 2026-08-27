@@ -269,7 +269,7 @@ static GYOBJ addInput(GYOBJ dialog, GYcoord y, const char* caption, GYOBJ* label
 {
 	GYOBJ label = placeLabel(dialog, 22, y, 112, 26, caption, GY_ARGB(0xFF,0xB4,0xBF,0xCE));
 	if (labelOut != NULL) *labelOut = label;
-	return YMGUI_Creat_TextInput_Creat(dialog, 142, y, 244, 28);
+	return YMGUI_Creat_TextInput_Creat(dialog, 142, y, 244, 28, 63);
 }
 
 void SceneEditorPlace_Build(GYOBJ toolbar, GYcoord buttonX, GYCTX context,

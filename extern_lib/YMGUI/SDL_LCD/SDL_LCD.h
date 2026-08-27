@@ -4,7 +4,7 @@
 #include "YMGUI_Hal.h"
 
 //===========================================================================
-// SDL 假 LCD:flush_cb 分块上传纹理，frame-done 回调每轮 Refresh 只 present 一次
+// SDL 假 LCD:实现 HAL 的 flush_cb,把软件渲染好的 framebuffer 推给 SDL 纹理
 //   "假装自己是一块 LCD 面板"。移植到真实硬件时照此写一个 SPI/并口版 flush_cb
 //===========================================================================
 //初始化窗口 + 纹理,并填好 disp 的 flush_cb / user_data。
@@ -16,6 +16,9 @@ int SDL_LCD_Init(GYDISP disp, int scale);
 void SDL_LCD_Destroy(void);
 //抽干事件队列;返回 0 表示收到退出请求
 int  SDL_LCD_PumpEvents(void);
+typedef int (*SDL_LCD_QuitRequestCb)(void* userData);
+//可选退出请求回调：返回非零允许退出，返回 0 由应用继续处理（例如弹出未保存确认）。
+void SDL_LCD_SetQuitRequestCb(SDL_LCD_QuitRequestCb callback, void* userData);
 //延时(ms)
 void SDL_LCD_Delay(int ms);
 

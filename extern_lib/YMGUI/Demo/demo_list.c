@@ -6,6 +6,7 @@
 #include "YMGUI_Invalidate.h"
 #include "YMGUI_Label.h"
 #include "YMGUI_List.h"
+#include "YMGUI_Font.h"
 #include "SDL_LCD.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -25,6 +26,8 @@
 #define SCR_W 320
 #define SCR_H 240
 #define BAND_H 60
+#define ITEM_H 32
+#define FULL_ROWS 5
 
 int main(int argc, char** argv)
 {
@@ -37,7 +40,7 @@ int main(int argc, char** argv)
 	disp.buf1 = (GYpx*)GY_malloc1(buf_px * sizeof(GYpx));
 	disp.buf2 = NULL; disp.user_data = NULL;
 
-	SDL_LCD_Init(&disp, 2);
+	SDL_LCD_Init(&disp, 1);
 	GYCTX ctx = YMGUI_Creat_Ctx_Creat(&disp, SCR_W, SCR_H);
 	YMGUI_Obj_SetBgColor(ctx->root, GY_ARGB(0xFF, 0x18, 0x18, 0x20));
 
@@ -45,12 +48,15 @@ int main(int argc, char** argv)
 	YMGUI_Label_SetText(title, "Drag to scroll");
 	YMGUI_Label_SetTextColor(title, GY_ARGB(0xFF, 0xF0, 0xC0, 0x40));
 
-	GYOBJ list = YMGUI_Creat_List_Creat(ctx->root, 40, 32, 240, 190);
+	//第 6 行只显示上半个字形:5 个整行 + 行内上留白 + 半个字高。
+	GYcoord list_h = FULL_ROWS * ITEM_H +
+		(ITEM_H - YMGUI_Font_Default.cell_h) / 2 + YMGUI_Font_Default.cell_h / 2;
+	GYOBJ list = YMGUI_Creat_List_Creat(ctx->root, 40, 32, 240, list_h);
 	for (int i = 0; i < 20; i++)
 	{
 		char buf[24];
 		snprintf(buf, sizeof(buf), "List item #%d", i);
-		YMGUI_List_AddItem(list, buf, 32);
+		YMGUI_List_AddItem(list, buf, ITEM_H);
 	}
 
 	YMGUI_Inject_SetCtx(ctx);

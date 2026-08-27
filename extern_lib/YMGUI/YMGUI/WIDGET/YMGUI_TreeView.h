@@ -32,7 +32,7 @@ typedef void (*GYtree_expand_cb)(GYOBJ tree, GYTREENODE node);
 typedef void (*GYtree_select_cb)(GYOBJ tree, GYTREENODE node);
 //行激活回调(双击文件行 / 对文件回车):node 为被激活节点
 typedef void (*GYtree_activate_cb)(GYOBJ tree, GYTREENODE node);
-//节点上下文操作回调(右键/长按):控件先选中命中行，再把节点交给上层弹菜单
+//节点上下文操作回调(右键/触摸长按):控件先选中命中行，再交给上层处理
 typedef void (*GYtree_context_cb)(GYOBJ tree, GYTREENODE node);
 
 //---- 生命周期 ----
@@ -43,9 +43,9 @@ GYOBJ YMGUI_Creat_TreeView_Creat(GYOBJ parent, GYcoord x, GYcoord y, GYcoord w, 
 //加一个节点:parent_node=NULL 表示加到根层级;name 深拷一份;is_dir 非 0 为目录(可展开)。
 //返回新节点句柄(失败返回 NULL)。加节点后重建可见数组 + 标脏
 GYTREENODE YMGUI_TreeView_AddNode(GYOBJ tree, GYTREENODE parent_node, const char* name, uint8 is_dir);
-//修改节点显示名(深拷到节点内部固定缓冲)，成功返回1
+//修改节点显示名(深拷到节点内部固定缓冲)，成功返回 1
 uint8 YMGUI_TreeView_SetNodeName(GYOBJ tree, GYTREENODE node, const char* name);
-//删除节点及其全部后代；句柄删除后立即失效，成功返回1
+//删除节点及其全部后代；节点句柄删除后立即失效，成功返回 1
 uint8 YMGUI_TreeView_RemoveNode(GYOBJ tree, GYTREENODE node);
 //清空某节点的全部子节点(级联释放),并把该节点标回"未加载"(供刷新/懒加载重填)。
 //node=NULL 表示清空根层级。重建可见数组 + 标脏

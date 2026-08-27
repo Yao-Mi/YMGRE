@@ -58,6 +58,20 @@ void SceneEditorObject_SetRotationY(SceneEditorObject* object, float32 rotationY
 	object->rotY = rotationY;
 }
 
+void SceneEditorObject_SetRotationAxis(SceneEditorObject* object, uint8 axis, float32 angle)
+{
+	if(object==NULL||object->mesh==NULL||axis>2||!isfinite(angle))return;
+	float32* current=axis==0?&object->rotX:(axis==1?&object->rotY:&object->rotZ);
+	float32 delta=(angle-*current)*YMGRE_Deg2Rad,c=YMGRE_Cos(delta),s=YMGRE_Sin(delta);
+	for(GRE_Object4d part=object->mesh;part!=NULL;part=part->nextObject)for(int i=0;i<part->pointNum;++i){
+		gre_fvector4d* p=&part->pointList[i].pos;float32 x=p->x-object->x,y=p->y-object->y,z=p->z-object->z;
+		if(axis==0){p->y=object->y+y*c-z*s;p->z=object->z+y*s+z*c;}
+		else if(axis==1){p->x=object->x+x*c+z*s;p->z=object->z-x*s+z*c;}
+		else {p->x=object->x+x*c-y*s;p->y=object->y+x*s+y*c;}
+	}
+	*current=angle;
+}
+
 void SceneEditorObject_SetColor(SceneEditorObject* object, GYcolor color)
 {
 	if (object == NULL) return;
