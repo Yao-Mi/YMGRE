@@ -69,6 +69,14 @@ static int8 g_rotateAxis=-1;
 static float32 g_rotateStartAngle;
 static float32 g_rotateStartPointerAngle;
 static float32 g_rotateCenterX, g_rotateCenterY;
+static float32 g_rotateBasisUX, g_rotateBasisUY, g_rotateBasisVX, g_rotateBasisVY;
+
+static float32 rotatePointerAngle(float32 x, float32 y)
+{
+	float32 dx=x-g_rotateCenterX, dy=y-g_rotateCenterY;
+	return atan2f(dx*g_rotateBasisVX+dy*g_rotateBasisVY,
+		dx*g_rotateBasisUX+dy*g_rotateBasisUY);
+}
 static GYOBJ g_referenceToggle;
 static GYOBJ g_transformButtons[3];
 static TransformMode g_transformMode=TRANSFORM_NONE;
@@ -684,8 +692,20 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 				g_rotateAxis=(int8)(gizmoMode-VIEW_DRAG_ROTATE_X);
 				g_rotateStartAngle=g_rotateAxis==0?g_selected->rotX:(g_rotateAxis==1?g_selected->rotY:g_selected->rotZ);
 				float32 depth; gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1};
-				if(projectPoint(&center,&g_rotateCenterX,&g_rotateCenterY,&depth))
-					g_rotateStartPointerAngle=atan2f((float32)y-g_rotateCenterY,(float32)x-g_rotateCenterX);
+				if(projectPoint(&center,&g_rotateCenterX,&g_rotateCenterY,&depth)) {
+					gre_fvector4d basisU=center,basisV=center;
+					if(g_rotateAxis==0){basisU.y+=1.0f;basisV.z+=1.0f;}
+					else if(g_rotateAxis==1){basisU.x+=1.0f;basisV.z+=1.0f;}
+					else {basisU.x+=1.0f;basisV.y+=1.0f;}
+					float32 ux,uy,vx,vy,unused;
+					if(projectPoint(&basisU,&ux,&uy,&unused)&&projectPoint(&basisV,&vx,&vy,&unused)) {
+						float32 ul=sqrtf((ux-g_rotateCenterX)*(ux-g_rotateCenterX)+(uy-g_rotateCenterY)*(uy-g_rotateCenterY));
+						float32 vl=sqrtf((vx-g_rotateCenterX)*(vx-g_rotateCenterX)+(vy-g_rotateCenterY)*(vy-g_rotateCenterY));
+						g_rotateBasisUX=ul>0.001f?(ux-g_rotateCenterX)/ul:1.0f; g_rotateBasisUY=ul>0.001f?(uy-g_rotateCenterY)/ul:0.0f;
+						g_rotateBasisVX=vl>0.001f?(vx-g_rotateCenterX)/vl:0.0f; g_rotateBasisVY=vl>0.001f?(vy-g_rotateCenterY)/vl:1.0f;
+					}
+					g_rotateStartPointerAngle=rotatePointerAngle((float32)x,(float32)y);
+				}
 			}
 			setStatus(gizmoMode>=VIEW_DRAG_ROTATE_X&&gizmoMode<=VIEW_DRAG_ROTATE_Z?"拖动旋转参考轴":
 			(gizmoMode==VIEW_DRAG_SCALE?"拖动操作轴统一缩放":"拖动操作轴约束移动"));}
@@ -698,7 +718,7 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 		else if (g_ui->dragMode==VIEW_DRAG_PAN) { panCamera(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;refreshCameraInspector();setStatus("正在平移视图"); }
 		else if(g_ui->dragMode>=VIEW_DRAG_MOVE_X){
 			if(g_ui->dragMode>=VIEW_DRAG_ROTATE_X&&g_ui->dragMode<=VIEW_DRAG_ROTATE_Z){
-				float32 currentAngle=atan2f((float32)y-g_rotateCenterY,(float32)x-g_rotateCenterX);
+				float32 currentAngle=rotatePointerAngle((float32)x,(float32)y);
 				float32 deltaAngle=(currentAngle-g_rotateStartPointerAngle)/YMGRE_Deg2Rad;
 				while(deltaAngle>180.0f)deltaAngle-=360.0f; while(deltaAngle<-180.0f)deltaAngle+=360.0f;
 				dragSelectedAxis(g_ui->dragMode,deltaAngle,dy);
