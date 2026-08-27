@@ -63,8 +63,6 @@ static gre_render_target g_target;
 static GYOBJ g_image, g_editMenu, g_leftPanel, g_rightPanel, g_centerPanel;
 static GYimg g_imageSource;
 static gre_line3d g_lines[256];
-static gre_line3d g_projectionLines[3];
-static uint8 g_projectionLineCount;
 static uint32 g_lineCount, g_baseLineCount;
 static uint8 g_referenceVisible=1;
 static int8 g_rotateAxis=-1;
@@ -79,6 +77,7 @@ static float32 rotatePointerAngle(float32 x, float32 y)
 	return atan2f(g_rotateBasisUX*dy-g_rotateBasisUY*dx,
 		g_rotateBasisUX*dx+g_rotateBasisUY*dy);
 }
+
 static GYOBJ g_referenceToggle;
 static GYOBJ g_transformButtons[3];
 static TransformMode g_transformMode=TRANSFORM_NONE;
@@ -124,11 +123,6 @@ static void addGizmoLine(gre_fvector4d start, gre_fvector4d end, GRErgb24 color)
 		g_lines[g_lineCount++] = (gre_line3d){ start, end, color, 4 };
 }
 
-static void addProjectionLine(gre_fvector4d start, gre_fvector4d end, GRErgb24 color)
-{
-	if(g_projectionLineCount<3)g_projectionLines[g_projectionLineCount++]=(gre_line3d){start,end,color,5};
-}
-
 static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fvector4d* hit)
 {
 	if(g_ui==NULL||g_activeCamera==NULL||g_activeCamera->camera==NULL||hit==NULL)return 0;
@@ -136,8 +130,8 @@ static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fve
 	GRE_Camera4d camera=g_activeCamera->camera;
 	float32 px=(float32)(g_ui->pointerX-area.x), py=(float32)(g_ui->pointerY-area.y);
 	float32 viewW=camera->perspectPlane.pR-camera->perspectPlane.pL, viewH=camera->perspectPlane.pU-camera->perspectPlane.pD;
-	float32 cx=(px-(float32)g_target.width*0.5f)*viewW/(camera->perspectPlane.Dis*g_target.width);
-	float32 cy=((float32)g_target.height*0.5f-py)*viewH/(camera->perspectPlane.Dis*g_target.height);
+	float32 cx=(px-(float32)g_target.width*0.5f)*viewW/g_target.width;
+	float32 cy=((float32)g_target.height*0.5f-py)*viewH/g_target.height;
 	gre_fvector4d origin=camera->pos;
 	gre_fvector4d direction={camera->move.cu.x*cx+camera->move.cv.x*cy+camera->move.cn.x*camera->perspectPlane.Dis,
 		camera->move.cu.y*cx+camera->move.cv.y*cy+camera->move.cn.y*camera->perspectPlane.Dis,
@@ -311,6 +305,26 @@ static void addSelectionLines(void)
 	}
 }
 
+static float32 rotationVisualDirection(uint8 axis)
+{
+	float32 direction=axis==1?-1.0f:1.0f;
+	if(g_selected!=NULL&&g_activeCamera!=NULL&&g_activeCamera->camera!=NULL){
+		if(axis==1&&g_activeCamera->y<g_selected->y)direction=-direction;
+	}
+	return direction;
+}
+
+static float32 projectedPlaneAngle(uint8 axis, gre_fvector4d center, gre_fvector4d hit)
+{
+	gre_fvector4d reference=center;
+	if(axis==0)reference.y+=1.0f; else reference.x+=1.0f;
+	gre_fvector4d r={reference.x-center.x,reference.y-center.y,reference.z-center.z,0};
+	gre_fvector4d h={hit.x-center.x,hit.y-center.y,hit.z-center.z,0};
+	gre_fvector4d normal={axis==0?1.0f:0.0f,axis==1?1.0f:0.0f,axis==2?1.0f:0.0f,0};
+	gre_fvector4d cross;YMGRE_Fvector4d_CrossToResult(&r,&h,&cross);
+	return atan2f(YMGRE_Fvector4d_Dot(&cross,&normal),YMGRE_Fvector4d_Dot(&r,&h))/YMGRE_Deg2Rad;
+}
+
 static float32 transformGizmoSize(void)
 {
 	if(g_activeCamera==NULL)return 30.0f;
@@ -361,7 +375,7 @@ static void addTransformGizmo(void)
 			GRErgb24 color=axis==0?(GRErgb24){224,72,72}:(axis==1?(GRErgb24){82,205,112}:(GRErgb24){70,135,235});
 			for(uint8 i=0;i<24;++i)addGizmoLine(ring[i],ring[(i+1)%24],color);
 			if(g_rotateAxis==(int8)axis){
-				float32 degrees=axis==0?g_selected->rotX:(axis==1?g_selected->rotY:g_selected->rotZ);
+				float32 degrees=axis==0?g_selected->rotX:(axis==1?-g_selected->rotY:g_selected->rotZ);
 				float32 radians=degrees*YMGRE_Deg2Rad; int steps=(int)(fabsf(radians)*16.0f/YMGRE_Pai)+1; if(steps>64)steps=64;
 				/* 用多条同心弧和两条边界线形成真正的扇形，而不是单独一截圆环。 */
 				for(int band=0;band<3;++band){float32 radius=size*(0.68f+0.16f*(float32)band);gre_fvector4d previous=center;
@@ -376,16 +390,6 @@ static void addTransformGizmo(void)
 					if(axis==0){point.y+=cosf(a)*size;point.z+=sinf(a)*size;} else if(axis==1){point.x+=cosf(a)*size;point.z+=sinf(a)*size;} else {point.x+=cosf(a)*size;point.y+=sinf(a)*size;}
 					addGizmoLine(center,point,(GRErgb24){245,210,70});
 				}
-			}
-		}
-		if(g_selected!=NULL){
-			gre_fvector4d hit;
-			/* 调试阶段固定投影到 Z 环的 XY 平面，避免其它两个平面干扰判断。 */
-			if(projectMouseToRotationPlane(2,center,&hit)){
-				GRErgb24 guide={255,255,255}; float32 marker=GREMax(size*0.04f,1.5f);
-				addProjectionLine(center,hit,guide);
-				addProjectionLine((gre_fvector4d){hit.x-marker,hit.y,hit.z,1},(gre_fvector4d){hit.x+marker,hit.y,hit.z,1},guide);
-				addProjectionLine((gre_fvector4d){hit.x,hit.y-marker,hit.z,1},(gre_fvector4d){hit.x,hit.y+marker,hit.z,1},guide);
 			}
 		}
 		return;
@@ -483,10 +487,8 @@ static void renderScene(void)
 	YMGRE_Camera_TanglePipline_RenderingWithWorkspace(g_activeCamera->camera,
 		&g_lightsList, &g_objectsList, &g_importContext.MaterialList, g_workspace);
 	addSelectionLines();
-	g_projectionLineCount=0;
 	addTransformGizmo();
 	YMGRE_Camera_LineList_Rendering(g_activeCamera->camera, g_lines, g_lineCount, 1);
-	if(g_projectionLineCount>0)YMGRE_Camera_LineList_Rendering(g_activeCamera->camera,g_projectionLines,g_projectionLineCount,0);
 }
 
 static void layoutPanels(void)
@@ -713,8 +715,7 @@ static void dragSelectedAxis(ViewDragMode mode,float32 deltaX,float32 deltaY)
 	if(mode>=VIEW_DRAG_ROTATE_X&&mode<=VIEW_DRAG_ROTATE_Z&&g_selected->kind==SCENE_OBJECT_MESH){
 		uint8 axis=(uint8)(mode-VIEW_DRAG_ROTATE_X);
 		/* 绝对定位：鼠标当前极角就是轴的目标角度，不再累加拖动变化量。 */
-		float32 direction = axis == 1 ? -1.0f : 1.0f;
-		SceneEditorObject_SetRotationAxis(g_selected, axis, direction * deltaX);
+		SceneEditorObject_SetRotationAxis(g_selected, axis, deltaX);
 	}else if(mode==VIEW_DRAG_SCALE&&g_selected->kind==SCENE_OBJECT_MESH){
 		float32 scale=g_selected->scale*expf((deltaX-deltaY)*0.01f);
 		if(scale<0.01f)scale=0.01f;if(scale>1000.0f)scale=1000.0f;SceneEditorObject_SetScale(g_selected,scale);
@@ -750,8 +751,11 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 				g_rotateStartAngle=g_rotateAxis==0?g_selected->rotX:(g_rotateAxis==1?g_selected->rotY:g_selected->rotZ);
 				float32 depth; gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1};
 				if(projectPoint(&center,&g_rotateCenterX,&g_rotateCenterY,&depth)) {
+					GYrect viewportArea; YMGUI_Obj_GetAbsArea(g_ui->viewport,&viewportArea);
+					g_rotateCenterX+=viewportArea.x; g_rotateCenterY+=viewportArea.y;
 					gre_fvector4d reference=center;
-					if(g_rotateAxis==0)reference.x+=1.0f; else if(g_rotateAxis==1)reference.y+=1.0f; else reference.z+=1.0f;
+					/* 与环的 0° 起点保持一致：X 环从 +Y，Y/Z 环从 +X 开始。 */
+					if(g_rotateAxis==0)reference.y+=1.0f; else reference.x+=1.0f;
 					float32 ux,uy,unused;
 					if(projectPoint(&reference,&ux,&uy,&unused)) {
 						float32 length=sqrtf((ux-g_rotateCenterX)*(ux-g_rotateCenterX)+(uy-g_rotateCenterY)*(uy-g_rotateCenterY));
@@ -772,8 +776,8 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 		else if (g_ui->dragMode==VIEW_DRAG_PAN) { panCamera(dx,dy);g_ui->dragChanged|=dx!=0||dy!=0;refreshCameraInspector();setStatus("正在平移视图"); }
 		else if(g_ui->dragMode>=VIEW_DRAG_MOVE_X){
 			if(g_ui->dragMode>=VIEW_DRAG_ROTATE_X&&g_ui->dragMode<=VIEW_DRAG_ROTATE_Z){
-				float32 currentAngle=rotatePointerAngle((float32)x,(float32)y);
-				float32 targetAngle=currentAngle/YMGRE_Deg2Rad;
+				uint8 axis=(uint8)(g_ui->dragMode-VIEW_DRAG_ROTATE_X); gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1},hit;
+				float32 targetAngle=0.0f; if(projectMouseToRotationPlane(axis,center,&hit))targetAngle=projectedPlaneAngle(axis,center,hit);
 				while(targetAngle>180.0f)targetAngle-=360.0f; while(targetAngle<-180.0f)targetAngle+=360.0f;
 				dragSelectedAxis(g_ui->dragMode,targetAngle,dy);
 			}
