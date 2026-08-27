@@ -74,11 +74,8 @@ static float32 g_rotateBasisUX, g_rotateBasisUY, g_rotateBasisVX, g_rotateBasisV
 static float32 rotatePointerAngle(float32 x, float32 y)
 {
 	float32 dx=x-g_rotateCenterX, dy=y-g_rotateCenterY;
-	float32 det=g_rotateBasisUX*g_rotateBasisVY-g_rotateBasisVX*g_rotateBasisUY;
-	if(fabsf(det)<0.0001f)return atan2f(dy,dx);
-	float32 u=(dx*g_rotateBasisVY-dy*g_rotateBasisVX)/det;
-	float32 v=(-dx*g_rotateBasisUY+dy*g_rotateBasisUX)/det;
-	return atan2f(v,u);
+	return atan2f(g_rotateBasisUX*dy-g_rotateBasisUY*dx,
+		g_rotateBasisUX*dx+g_rotateBasisUY*dy);
 }
 static GYOBJ g_referenceToggle;
 static GYOBJ g_transformButtons[3];
@@ -705,16 +702,13 @@ static void viewportEvent(GYOBJ object, GYEvent event)
 				g_rotateStartAngle=g_rotateAxis==0?g_selected->rotX:(g_rotateAxis==1?g_selected->rotY:g_selected->rotZ);
 				float32 depth; gre_fvector4d center={g_selected->x,g_selected->y,g_selected->z,1};
 				if(projectPoint(&center,&g_rotateCenterX,&g_rotateCenterY,&depth)) {
-					gre_fvector4d basisU=center,basisV=center;
-					if(g_rotateAxis==0){basisU.y+=1.0f;basisV.z+=1.0f;}
-					else if(g_rotateAxis==1){basisU.x+=1.0f;basisV.z+=1.0f;}
-					else {basisU.x+=1.0f;basisV.y+=1.0f;}
-					float32 ux,uy,vx,vy,unused;
-					if(projectPoint(&basisU,&ux,&uy,&unused)&&projectPoint(&basisV,&vx,&vy,&unused)) {
-						float32 ul=sqrtf((ux-g_rotateCenterX)*(ux-g_rotateCenterX)+(uy-g_rotateCenterY)*(uy-g_rotateCenterY));
-						float32 vl=sqrtf((vx-g_rotateCenterX)*(vx-g_rotateCenterX)+(vy-g_rotateCenterY)*(vy-g_rotateCenterY));
-						g_rotateBasisUX=ul>0.001f?(ux-g_rotateCenterX)/ul:1.0f; g_rotateBasisUY=ul>0.001f?(uy-g_rotateCenterY)/ul:0.0f;
-						g_rotateBasisVX=vl>0.001f?(vx-g_rotateCenterX)/vl:0.0f; g_rotateBasisVY=vl>0.001f?(vy-g_rotateCenterY)/vl:1.0f;
+					gre_fvector4d reference=center;
+					if(g_rotateAxis==0)reference.x+=1.0f; else if(g_rotateAxis==1)reference.y+=1.0f; else reference.z+=1.0f;
+					float32 ux,uy,unused;
+					if(projectPoint(&reference,&ux,&uy,&unused)) {
+						float32 length=sqrtf((ux-g_rotateCenterX)*(ux-g_rotateCenterX)+(uy-g_rotateCenterY)*(uy-g_rotateCenterY));
+						g_rotateBasisUX=length>0.001f?(ux-g_rotateCenterX)/length:1.0f;
+						g_rotateBasisUY=length>0.001f?(uy-g_rotateCenterY)/length:0.0f;
 					}
 					g_rotateStartPointerAngle=rotatePointerAngle((float32)x,(float32)y);
 				}
