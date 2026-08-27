@@ -22,6 +22,7 @@ typedef struct {
 	float32 targetX, targetY, targetZ;
 	float32 scale;
 	float32 rotX, rotY, rotZ;
+	float32 gizmoBaseExtent;
 	float32 strength;
 	GYcolor color;
 	uint8 visible;

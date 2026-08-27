@@ -74,8 +74,11 @@ static float32 g_rotateBasisUX, g_rotateBasisUY, g_rotateBasisVX, g_rotateBasisV
 static float32 rotatePointerAngle(float32 x, float32 y)
 {
 	float32 dx=x-g_rotateCenterX, dy=y-g_rotateCenterY;
-	return atan2f(dx*g_rotateBasisVX+dy*g_rotateBasisVY,
-		dx*g_rotateBasisUX+dy*g_rotateBasisUY);
+	float32 det=g_rotateBasisUX*g_rotateBasisVY-g_rotateBasisVX*g_rotateBasisUY;
+	if(fabsf(det)<0.0001f)return atan2f(dy,dx);
+	float32 u=(dx*g_rotateBasisVY-dy*g_rotateBasisVX)/det;
+	float32 v=(-dx*g_rotateBasisUY+dy*g_rotateBasisUX)/det;
+	return atan2f(v,u);
 }
 static GYOBJ g_referenceToggle;
 static GYOBJ g_transformButtons[3];
@@ -294,7 +297,16 @@ static float32 transformGizmoSize(void)
 		}
 		if(found)extent=GREMax(maxX-minX,GREMax(maxY-minY,maxZ-minZ));
 	}
-	if(extent>0.0f)size=GREMax(size,extent*1.15f);
+	if(g_selected!=NULL&&g_selected->kind==SCENE_OBJECT_MESH){
+		if(g_selected->gizmoBaseExtent<=0.0f&&extent>0.0f)
+			g_selected->gizmoBaseExtent=extent/(g_selected->scale>0.001f?g_selected->scale:1.0f);
+		float32 base=g_selected->gizmoBaseExtent;
+		if(base>0.0f){
+			float32 gizmoExtent=base*1.3f;
+			if(g_transformMode==TRANSFORM_SCALE)gizmoExtent*=g_selected->scale>0.001f?g_selected->scale:1.0f;
+			size=gizmoExtent;
+		}
+	}
 	if(size<24.0f)size=24.0f;if(size>240.0f)size=240.0f;return size;
 }
 
