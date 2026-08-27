@@ -63,6 +63,8 @@ static gre_render_target g_target;
 static GYOBJ g_image, g_editMenu, g_leftPanel, g_rightPanel, g_centerPanel;
 static GYimg g_imageSource;
 static gre_line3d g_lines[256];
+static gre_line3d g_projectionLines[3];
+static uint8 g_projectionLineCount;
 static uint32 g_lineCount, g_baseLineCount;
 static uint8 g_referenceVisible=1;
 static int8 g_rotateAxis=-1;
@@ -121,6 +123,11 @@ static void addGizmoLine(gre_fvector4d start, gre_fvector4d end, GRErgb24 color)
 		g_lines[g_lineCount++] = (gre_line3d){ start, end, color, 4 };
 }
 
+static void addProjectionLine(gre_fvector4d start, gre_fvector4d end, GRErgb24 color)
+{
+	if(g_projectionLineCount<3)g_projectionLines[g_projectionLineCount++]=(gre_line3d){start,end,color,5};
+}
+
 static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fvector4d* hit)
 {
 	if(g_ui==NULL||g_activeCamera==NULL||g_activeCamera->camera==NULL||hit==NULL)return 0;
@@ -142,7 +149,7 @@ static int projectMouseToRotationPlane(uint8 axis, gre_fvector4d center, gre_fve
 	if(fabsf(denominator)<0.0001f){
 		/* 视线平行于旋转面时没有唯一交点，取中心深度处的射线点并压回该平面。 */
 		t=YMGRE_Fvector4d_Dot(&toCenter,&direction); if(t<=0.0f||!isfinite(t))t=1.0f;
-	} else { t=YMGRE_Fvector4d_Dot(&toCenter,&normal)/denominator; if(t<=0.0f||!isfinite(t))return 0; }
+	} else { t=YMGRE_Fvector4d_Dot(&toCenter,&normal)/denominator; if(!isfinite(t))return 0; if(t<0.0f)t=-t; }
 	hit->x=origin.x+direction.x*t;hit->y=origin.y+direction.y*t;hit->z=origin.z+direction.z*t;hit->w=1;
 	if(fabsf(denominator)<0.0001f){if(axis==0)hit->x=center.x;else if(axis==1)hit->y=center.y;else hit->z=center.z;}
 	return isfinite(hit->x)&&isfinite(hit->y)&&isfinite(hit->z);
@@ -375,9 +382,9 @@ static void addTransformGizmo(void)
 			uint8 displayAxis=(uint8)(g_rotateAxis>=0?g_rotateAxis:0);
 			if(projectMouseToRotationPlane(displayAxis,center,&hit)){
 				GRErgb24 guide={255,220,90}; float32 marker=GREMax(size*0.04f,1.5f);
-				addGizmoLine(center,hit,guide);
-				addGizmoLine((gre_fvector4d){hit.x-marker,hit.y,hit.z,1},(gre_fvector4d){hit.x+marker,hit.y,hit.z,1},guide);
-				addGizmoLine((gre_fvector4d){hit.x,hit.y-marker,hit.z,1},(gre_fvector4d){hit.x,hit.y+marker,hit.z,1},guide);
+				addProjectionLine(center,hit,guide);
+				addProjectionLine((gre_fvector4d){hit.x-marker,hit.y,hit.z,1},(gre_fvector4d){hit.x+marker,hit.y,hit.z,1},guide);
+				addProjectionLine((gre_fvector4d){hit.x,hit.y-marker,hit.z,1},(gre_fvector4d){hit.x,hit.y+marker,hit.z,1},guide);
 			}
 		}
 		return;
@@ -475,8 +482,10 @@ static void renderScene(void)
 	YMGRE_Camera_TanglePipline_RenderingWithWorkspace(g_activeCamera->camera,
 		&g_lightsList, &g_objectsList, &g_importContext.MaterialList, g_workspace);
 	addSelectionLines();
+	g_projectionLineCount=0;
 	addTransformGizmo();
 	YMGRE_Camera_LineList_Rendering(g_activeCamera->camera, g_lines, g_lineCount, 1);
+	if(g_projectionLineCount>0)YMGRE_Camera_LineList_Rendering(g_activeCamera->camera,g_projectionLines,g_projectionLineCount,0);
 }
 
 static void layoutPanels(void)
