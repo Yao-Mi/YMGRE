@@ -33,5 +33,9 @@ int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
 int YMGRE_Ray_FromCameraPixel(GRE_Camera4d camera, uint16 pixelX, uint16 pixelY,
 	GRE_Ray result);
+void YMGRE_Ray_Reflect(const gre_fvector4d* incident, const gre_fvector4d* normal,
+	gre_fvector4d* result);
+int YMGRE_Ray_Refract(const gre_fvector4d* incident, const gre_fvector4d* normal,
+	float32 etaIncident, float32 etaTransmitted, gre_fvector4d* result);
 
 #endif

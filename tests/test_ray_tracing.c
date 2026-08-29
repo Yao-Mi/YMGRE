@@ -48,6 +48,13 @@ int main(void)
 	int cameraPass = YMGRE_Ray_FromCameraPixel(&camera, 49, 49, &cameraRay);
 	cameraPass = cameraPass && cameraRay.origin.w == 1.0f && cameraRay.direction.z > 0.99f;
 	pass = pass && cameraPass;
+	gre_fvector4d incident = { 0, -0.6f, 0.8f, 0 }, normal = { 0, 1, 0, 0 }, reflected;
+	YMGRE_Ray_Reflect(&incident, &normal, &reflected);
+	pass = pass && reflected.y > 0.59f;
+	pass = pass && YMGRE_Fabs(YMGRE_Fvector4d_Len1(&reflected) - 1.0f) < 1e-5f;
+	gre_fvector4d refracted;
+	pass = pass && YMGRE_Ray_Refract(&incident, &normal, 1.0f, 1.5f, &refracted);
+	pass = pass && refracted.y < -0.8f && refracted.z > 0.5f;
 	printf("ray triangle intersection: %s\n", pass ? "PASS" : "FAIL");
 	return pass ? 0 : 1;
 }

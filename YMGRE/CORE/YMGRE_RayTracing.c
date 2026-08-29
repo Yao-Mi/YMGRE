@@ -101,3 +101,35 @@ int YMGRE_Ray_FromCameraPixel(GRE_Camera4d camera, uint16 pixelX, uint16 pixelY,
 	YMGRE_Fvector4d_Normalize(&result->direction);
 	return 1;
 }
+
+void YMGRE_Ray_Reflect(const gre_fvector4d* incident, const gre_fvector4d* normal,
+	gre_fvector4d* result)
+{
+	if (incident == NULL || normal == NULL || result == NULL) return;
+	float32 d = incident->x * normal->x + incident->y * normal->y + incident->z * normal->z;
+	d *= 2.0f;
+	result->x = incident->x - d * normal->x;
+	result->y = incident->y - d * normal->y;
+	result->z = incident->z - d * normal->z;
+	result->w = 0.0f;
+	if (YMGRE_Fvector4d_Len2(result) > 1e-12f) YMGRE_Fvector4d_Normalize(result);
+}
+
+int YMGRE_Ray_Refract(const gre_fvector4d* incident, const gre_fvector4d* normal,
+	float32 etaIncident, float32 etaTransmitted, gre_fvector4d* result)
+{
+	if (incident == NULL || normal == NULL || result == NULL || etaIncident <= 0.0f || etaTransmitted <= 0.0f) return 0;
+	gre_fvector4d n = *normal;
+	float32 cosi = -(incident->x * n.x + incident->y * n.y + incident->z * n.z);
+	if (cosi < 0.0f) { cosi = -cosi; n.x = -n.x; n.y = -n.y; n.z = -n.z; }
+	float32 eta = etaIncident / etaTransmitted;
+	float32 k = 1.0f - eta * eta * (1.0f - cosi * cosi);
+	if (k < 0.0f) return 0;
+	float32 a = eta * cosi - YMGRE_Sqrt(k);
+	result->x = eta * incident->x + a * n.x;
+	result->y = eta * incident->y + a * n.y;
+	result->z = eta * incident->z + a * n.z;
+	result->w = 0.0f;
+	YMGRE_Fvector4d_Normalize(result);
+	return 1;
+}
