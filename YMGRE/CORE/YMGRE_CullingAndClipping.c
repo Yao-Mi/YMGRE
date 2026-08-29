@@ -133,6 +133,26 @@ void YMGRE_ObjectPoly_FrustumCullingTo(GRE_Object4d myobj, GRE_Vertex4d points, 
 	}
 }
 
+void YMGRE_ObjectPoly_FrustumCullingTo_wN(GRE_Object4d object, GRE_Vertex4d_wN points,
+	GRE_Camera4d camera, uint8* polygonHide)
+{
+	if (object == NULL || points == NULL || camera == NULL || polygonHide == NULL) return;
+	for (int i = 0; i < object->polygonNum; i++)
+	{
+		GRE_Polygon4d polygon = &object->polygonList[i];
+		uint8 outside = 1;
+		for (int j = 0; j < polygon->num; j++)
+		{
+			GRE_Fvector4d point = &points[polygon->index[j]].base.pos;
+			if (point->z < camera->frustum.Zfar && point->z > camera->frustum.Znear &&
+				point->x < camera->perspectPlane.pR && point->x > camera->perspectPlane.pL &&
+				point->y < camera->perspectPlane.pU && point->y > camera->perspectPlane.pD)
+			{ outside = 0; break; }
+		}
+		if (outside) polygonHide[i] = 1;
+	}
+}
+
 //计算相机空间顶点到指定视景体平面的有向距离，非负表示位于内部
 static float32 YMGRE_FrustumPlaneDistance(GRE_Vertex4d vertex, GRE_Camera4d camera, uint8 plane)
 {
@@ -487,5 +507,67 @@ void YMGRE_Polygon_clip2D(GRE_fLinesList thislines, GRE_LinesList olines, GRE_FR
 	//内存释放
 	GRE_free0(uline2.data);//释放
 	GRE_free0(uline.data);//释放
+}
+
+static gre_vertex4d_wN YMGRE_FrustumClipIntersect_wN(GRE_Vertex4d_wN start, GRE_Vertex4d_wN end,
+	float32 startDistance, float32 endDistance)
+{
+	float32 t = startDistance / (startDistance - endDistance);
+	gre_vertex4d_wN result = *start;
+	result.base.pos.x += (end->base.pos.x - start->base.pos.x) * t;
+	result.base.pos.y += (end->base.pos.y - start->base.pos.y) * t;
+	result.base.pos.z += (end->base.pos.z - start->base.pos.z) * t;
+	result.base.pos.w += (end->base.pos.w - start->base.pos.w) * t;
+	result.base.u += (end->base.u - start->base.u) * t;
+	result.base.v += (end->base.v - start->base.v) * t;
+	result.normal.x += (end->normal.x - start->normal.x) * t;
+	result.normal.y += (end->normal.y - start->normal.y) * t;
+	result.normal.z += (end->normal.z - start->normal.z) * t;
+	result.tangent.x += (end->tangent.x - start->tangent.x) * t;
+	result.tangent.y += (end->tangent.y - start->tangent.y) * t;
+	result.tangent.z += (end->tangent.z - start->tangent.z) * t;
+	result.tangentW += (end->tangentW - start->tangentW) * t;
+	result.color.R = (uint8)(start->color.R + (end->color.R - start->color.R) * t);
+	result.color.G = (uint8)(start->color.G + (end->color.G - start->color.G) * t);
+	result.color.B = (uint8)(start->color.B + (end->color.B - start->color.B) * t);
+	result.vertexLighting.R = (uint8)(start->vertexLighting.R + (end->vertexLighting.R - start->vertexLighting.R) * t);
+	result.vertexLighting.G = (uint8)(start->vertexLighting.G + (end->vertexLighting.G - start->vertexLighting.G) * t);
+	result.vertexLighting.B = (uint8)(start->vertexLighting.B + (end->vertexLighting.B - start->vertexLighting.B) * t);
+	result.vertexSpecular.R = (uint8)(start->vertexSpecular.R + (end->vertexSpecular.R - start->vertexSpecular.R) * t);
+	result.vertexSpecular.G = (uint8)(start->vertexSpecular.G + (end->vertexSpecular.G - start->vertexSpecular.G) * t);
+	result.vertexSpecular.B = (uint8)(start->vertexSpecular.B + (end->vertexSpecular.B - start->vertexSpecular.B) * t);
+	return result;
+}
+
+uint16 YMGRE_Polygon_FrustumClip_wN(GRE_Vertex4d_wN input, uint16 inputNum, GRE_Vertex4d_wN output,
+	uint16 outputMax, GRE_Camera4d camera)
+{
+	if (input == NULL || output == NULL || camera == NULL || inputNum < 3 || outputMax < 3)
+		return 0;
+	gre_vertex4d_wN buffer0[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+	gre_vertex4d_wN buffer1[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+	GRE_Vertex4d_wN source = buffer0, target = buffer1;
+	uint16 sourceNum = inputNum > YMGRE_FRUSTUM_CLIP_VERTEX_MAX ? YMGRE_FRUSTUM_CLIP_VERTEX_MAX : inputNum;
+	for (uint16 i = 0; i < sourceNum; i++) source[i] = input[i];
+	for (uint8 plane = 0; plane < 6; plane++)
+	{
+		uint16 targetNum = 0;
+		GRE_Vertex4d_wN start = &source[sourceNum - 1];
+		float32 sd = YMGRE_FrustumPlaneDistance(&start->base, camera, plane);
+		for (uint16 i = 0; i < sourceNum; i++)
+		{
+			GRE_Vertex4d_wN end = &source[i];
+			float32 ed = YMGRE_FrustumPlaneDistance(&end->base, camera, plane);
+			if ((sd >= 0) != (ed >= 0) && targetNum < YMGRE_FRUSTUM_CLIP_VERTEX_MAX)
+				target[targetNum++] = YMGRE_FrustumClipIntersect_wN(start, end, sd, ed);
+			if (ed >= 0 && targetNum < YMGRE_FRUSTUM_CLIP_VERTEX_MAX) target[targetNum++] = *end;
+			start = end; sd = ed;
+		}
+		if (targetNum == 0) return 0;
+		GRE_Vertex4d_wN swap = source; source = target; target = swap; sourceNum = targetNum;
+	}
+	uint16 count = sourceNum < outputMax ? sourceNum : outputMax;
+	for (uint16 i = 0; i < count; i++) output[i] = source[i];
+	return count;
 }
 

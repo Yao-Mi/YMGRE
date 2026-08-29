@@ -45,7 +45,7 @@ static int frameIsColor(GRE_FrameBuffer frame, uint32 count, GRErgb24 color)
 {
 	GRE_FramePixel expected = GRE_FramePixel_From_RGB24(color);
 	for (uint32 i = 0; i < count; i++)
-		if (frame[i] != expected)
+		if (!GRE_FramePixel_Equals(frame[i], expected))
 			return 0;
 	return 1;
 }
@@ -120,6 +120,63 @@ static void testLightColors(void)
 	CHECK(color.G > color.R && color.R == color.B,
 		"spot light color changes the lit surface inside its cone");
 
+	color = (GRErgb24){ 0 };
+	pointLight->proper.spot.direct = (gre_fvector4d){ 1, 0, 0, 0 };
+	YMGRE_PolygonLighting_Color(&polygon, &point, &normal, pointLight, &color, 0, 1);
+	CHECK(color.R == 0 && color.G == 0 && color.B == 0,
+		"spot light contributes nothing outside its outer cone");
+
+	color = (GRErgb24){ 0 };
+	pointLight->type = GRE_PointLight;
+	pointLight->proper.lightcolor = (GRErgb24){ 255, 255, 255 };
+	pointLight->proper.pos_ = (gre_fvector4d){ 0, 0, 0, 1 };
+	polygon.planeColor = (GRErgb24){ 0, 0, 0 };
+	gre_fvector4d specularPoint = { 0, 0, 10, 1 };
+	gre_fvector4d specularNormal = { 0, 0, -1, 0 };
+	YMGRE_PolygonLighting_ColorAdvanced(&polygon, &specularPoint, &specularNormal, pointLight,
+		&color, 1.0f, 1, (GRErgb24){ 0, 0, 255 });
+	CHECK(color.B > 200 && color.R == 0 && color.G == 0,
+		"advanced point-light specular uses the material specular color");
+
+	GRErgb24 broad = { 0, 0, 0 }, tight = { 0, 0, 0 };
+	pointLight->proper.pos_ = (gre_fvector4d){ 6, 0, 0, 1 };
+	YMGRE_PolygonLighting_ColorAdvanced(&polygon, &specularPoint, &specularNormal,
+		pointLight, &broad, 1.0f, 8, (GRErgb24){ 255, 255, 255 });
+	YMGRE_PolygonLighting_ColorAdvanced(&polygon, &specularPoint, &specularNormal,
+		pointLight, &tight, 1.0f, 96, (GRErgb24){ 255, 255, 255 });
+	CHECK(broad.R > tight.R + 100 && broad.G > tight.G + 100 && broad.B > tight.B + 100,
+		"higher specular power narrows the off-axis highlight");
+
+	polygon.planeColor = (GRErgb24){ 180, 110, 45 };
+	pointLight->proper.pos_ = (gre_fvector4d){ 0, 0, -10, 1 };
+	pointLight->proper.kc0 = 1.0f;
+	pointLight->proper.kc1 = pointLight->proper.kc2 = 0.0f;
+	pointLight->proper.shadowK = 0.5f;
+	GRErgb24 backBase = { 0, 0, 0 }, backSpecular = { 0, 0, 0 };
+	YMGRE_PolygonLighting_ComponentsAdvanced(&polygon, &point, &normal, pointLight,
+		&backBase, &backSpecular, 1.0f, 30, (GRErgb24){ 0, 0, 255 });
+	CHECK(backBase.R == 90 && backBase.G == 55 && backBase.B == 22,
+		"point-light shadowK preserves the material diffuse color");
+	CHECK(backSpecular.R == 0 && backSpecular.G == 0 && backSpecular.B == 0,
+		"back-facing point light produces no specular contribution");
+
+	GRErgb24 spotBase = { 0, 0, 0 }, spotSpecular = { 0, 0, 0 };
+	pointLight->type = GRE_SpotLight;
+	pointLight->proper.pos_ = (gre_fvector4d){ 0, 0, 0, 1 };
+	pointLight->proper.spot.direct = (gre_fvector4d){ 0, 0, 1, 0 };
+	YMGRE_PolygonLighting_ComponentsAdvanced(&polygon, &specularPoint,
+		&specularNormal, pointLight, &spotBase, &spotSpecular, 1.0f, 30,
+		(GRErgb24){ 40, 90, 255 });
+	CHECK(spotSpecular.B > spotSpecular.R && spotSpecular.B > 150,
+		"spot light produces material-colored specular inside its cone");
+	spotBase = spotSpecular = (GRErgb24){ 0, 0, 0 };
+	pointLight->proper.spot.direct = (gre_fvector4d){ 1, 0, 0, 0 };
+	YMGRE_PolygonLighting_ComponentsAdvanced(&polygon, &specularPoint,
+		&specularNormal, pointLight, &spotBase, &spotSpecular, 1.0f, 30,
+		(GRErgb24){ 40, 90, 255 });
+	CHECK(spotSpecular.R == 0 && spotSpecular.G == 0 && spotSpecular.B == 0,
+		"spot light produces no specular outside its outer cone");
+
 	YMGRE_Free_Light(pointLight);
 	YMGRE_Free_Light(ambient);
 }
@@ -128,6 +185,15 @@ int main(void)
 {
 	testLightColors();
 	GRE_Object4d object = makeTriangle();
+	CHECK(offsetof(gre_vertex4d_wN, base) == 0, "extended vertex keeps legacy vertex at offset zero");
+	object->renderMode = GRE_RenderMode_Pixel;
+	CHECK(YMGRE_Object_GenerateVertexAttributes(object), "triangle generates advanced vertex attributes");
+	CHECK(object->renderMode == GRE_RenderMode_Pixel,
+		"generating vertex attributes preserves the selected render mode");
+	CHECK(object->pointList_wN != NULL && object->pointList_wN[0].normal.z < -0.9f,
+		"generated vertex normal follows triangle winding");
+	CHECK(YMGRE_Fvector4d_Len1(&object->pointList_wN[0].tangent) > 0.9f,
+		"generated tangent has a stable fallback for degenerate UVs");
 	GRE_Light4d light = YMGRE_Creat_Light(0, GRE_GlobalLight, (GRErgb24){ 255, 255, 255 }, 1.0f);
 	GRE_Camera4d camera0 = makeCamera(0);
 	GRE_Camera4d camera1 = makeCamera(1);
@@ -152,6 +218,9 @@ int main(void)
 	CHECK(frameHash(camera1->img.data, TEST_W * TEST_H) == hash0, "shared workspace produces the same view");
 
 	GRE_RenderWorkspace independent = YMGRE_Creat_RenderWorkspace();
+	YMGRE_Camera_TanglePipline_wN(camera1, &lights, &objects, &materials, independent);
+	CHECK(depthWasWritten(camera1->img.zbuff, TEST_W * TEST_H, camera1->frustum.Zfar),
+		"advanced vertex pipeline renders with a dynamic workspace");
 	YMGRE_Camera_TanglePipline_RenderingWithWorkspace(camera1, &lights, &objects, &materials, independent);
 	CHECK(frameHash(camera1->img.data, TEST_W * TEST_H) == hash0, "independent workspace matches shared workspace");
 	object->isVisible = 0;
@@ -183,6 +252,11 @@ int main(void)
 	gre_fvector4d lightPos[1];
 	gre_render_workspace external;
 	YMGRE_RenderWorkspace_Init(&external, points, 3, hidden, colors, 1, lightPos, 1);
+	gre_vertex4d_wN advancedPoints[3];
+	YMGRE_RenderWorkspace_BindVertexAttributes(&external, advancedPoints, 3);
+	YMGRE_Camera_TanglePipline_wN(camera1, &lights, &objects, &materials, &external);
+	CHECK(depthWasWritten(camera1->img.zbuff, TEST_W * TEST_H, camera1->frustum.Zfar),
+		"advanced vertex pipeline accepts caller-owned fixed memory");
 	YMGRE_Camera_TanglePipline_RenderingWithWorkspace(camera1, &lights, &objects, &materials, &external);
 	CHECK(frameHash(camera1->img.data, TEST_W * TEST_H) == hash0, "external static workspace matches dynamic workspace");
 	static GRE_FramePixel externalColor[TEST_W * TEST_H];
@@ -200,7 +274,7 @@ int main(void)
 	matrixIdentity(&camera2->move.TMat);
 	YMGRE_CameraImage_Init(camera2, (GRErgb24){ 12, 34, 56 });
 	uint32 clearHash = frameHash(externalColor, TEST_W * TEST_H);
-	CHECK(externalColor[0] == GRE_FramePixel_From_RGB24((GRErgb24){ 12, 34, 56 }) &&
+	CHECK(GRE_FramePixel_Equals(externalColor[0], GRE_FramePixel_From_RGB24((GRErgb24){ 12, 34, 56 })) &&
 		externalDepth[0] == camera2->frustum.Zfar,
 		"camera clear writes its currently bound external target");
 	gre_line3d line = {
@@ -223,7 +297,7 @@ int main(void)
 	CHECK(camera0->ownsImageBuffers == 1,
 		"rebinding a regular camera preserves ownership of its original buffers");
 	YMGRE_CameraImage_Init(camera0, (GRErgb24){ 21, 43, 65 });
-	CHECK(reboundColor[0] == GRE_FramePixel_From_RGB24((GRErgb24){ 21, 43, 65 }) &&
+	CHECK(GRE_FramePixel_Equals(reboundColor[0], GRE_FramePixel_From_RGB24((GRErgb24){ 21, 43, 65 })) &&
 		reboundDepth[0] == camera0->frustum.Zfar,
 		"rebound camera clears the active target without transferring ownership");
 

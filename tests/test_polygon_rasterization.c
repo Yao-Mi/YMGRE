@@ -48,13 +48,13 @@ int main(void)
 	{
 		int begX = 0;
 		int endX = TEST_W - 1;
-		while ((begX < TEST_W) && (frame[y * TEST_W + begX] == backgroundPixel))
+		while ((begX < TEST_W) && GRE_FramePixel_Equals(frame[y * TEST_W + begX], backgroundPixel))
 			begX++;
-		while ((endX >= 0) && (frame[y * TEST_W + endX] == backgroundPixel))
+		while ((endX >= 0) && GRE_FramePixel_Equals(frame[y * TEST_W + endX], backgroundPixel))
 			endX--;
 		for (int x = begX; x <= endX; x++)
 		{
-			if (frame[y * TEST_W + x] == backgroundPixel)
+			if (GRE_FramePixel_Equals(frame[y * TEST_W + x], backgroundPixel))
 				gapCount++;
 		}
 	}

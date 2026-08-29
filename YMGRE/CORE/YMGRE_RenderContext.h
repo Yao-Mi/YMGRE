@@ -12,6 +12,9 @@ void YMGRE_RenderWorkspace_Init(GRE_RenderWorkspace workspace, GRE_Vertex4d poin
 	uint8* polygonHide, GRErgb24* polygonColor, uint32 polygonMax,
 	gre_fvector4d* lightPos, uint32 lightMax);//绑定外部固定容量缓存，不自动扩容
 void YMGRE_RenderWorkspace_Reserve(GRE_RenderWorkspace workspace, uint32 pointNum, uint32 polygonNum, uint32 lightNum);//确保动态工作区容量足够
+int YMGRE_RenderWorkspace_EnableVertexAttributes(GRE_RenderWorkspace workspace, uint32 pointNum);//按需申请高级顶点工作缓存
+void YMGRE_RenderWorkspace_BindVertexAttributes(GRE_RenderWorkspace workspace,
+	GRE_Vertex4d_wN points, uint32 pointMax);//给固定工作区绑定调用者持有的高级缓存
 void YMGRE_Free_RenderWorkspace(GRE_RenderWorkspace workspace);//释放独立渲染工作区
 
 void YMGRE_Camera_BindRenderTarget(GRE_Camera4d camera, GRE_RenderTarget target);//给相机绑定输出目标

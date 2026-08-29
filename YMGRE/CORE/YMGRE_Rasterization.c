@@ -1137,6 +1137,32 @@ void YMGRE_TrangleObject_Primitive_RasterizationTo(GRE_Object4d myTrangleObj, GR
 		YMGRE_TrangleObject_WiresTo(myTrangleObj, points, polygonHide, mycam);
 }
 
+void YMGRE_TrangleObject_Primitive_Rasterization_wN(GRE_Object4d object, GRE_Vertex4d_wN points,
+	uint8* polygonHide, GRE_Material material, GRE_List lights, gre_fvector4d* lightPos,
+	GRE_FMat4x4 worldToCamera, GRE_Camera4d camera)
+{
+	if (object == NULL || points == NULL || polygonHide == NULL || camera == NULL) return;
+	for (int i = 0; i < object->polygonNum; i++)
+	{
+		GRE_Polygon4d polygon = &object->polygonList[i];
+		if (!polygonHide[i] && polygon->num == 3)
+			YMGRE_TriangleRaster_Fill_wN(points, polygon, material, lights, lightPos, worldToCamera,
+				object->mirrorKs, camera);
+	}
+}
+
+void YMGRE_TrangleObject_Primitive_Rasterization_VertexColor_wN(GRE_Object4d object,
+	GRE_Vertex4d_wN points,uint8* polygonHide,GRE_Camera4d camera)
+{
+	if(object==NULL||points==NULL||polygonHide==NULL||camera==NULL) return;
+	for(int i=0;i<object->polygonNum;i++)
+	{
+		GRE_Polygon4d polygon=&object->polygonList[i];
+		if(!polygonHide[i]&&polygon->num==3)
+			YMGRE_TriangleRaster_FillVertexColor_wN(points,polygon,camera);
+	}
+}
+
 //三角网格线也参与深度测试，避免被遮挡的内部边覆盖前景表面
 static void YMGRE_Raster_TriangleWire(GRE_FrameBuffer data, uint16 width, uint16 height,
 	float32* zbuff, GRE_Vertex4d points, GRE_Polygon4d polygon,
@@ -1258,6 +1284,23 @@ void YMGRE_TrangleObject_WiresTo(GRE_Object4d myTrangleObj, GRE_Vertex4d points,
 				mycam->img.height, mycam->img.zbuff, points, thispoly,
 				clipedlines.data[j].x0, clipedlines.data[j].y0,
 				clipedlines.data[j].x1, clipedlines.data[j].y1);
+		}
+	}
+}
+
+void YMGRE_TrangleObject_Wires_wN(GRE_Object4d object, GRE_Vertex4d_wN points,
+	uint8* polygonHide, GRE_Camera4d camera)
+{
+	if (object == NULL || points == NULL || polygonHide == NULL || camera == NULL) return;
+	for (int i = 0; i < object->polygonNum; i++)
+	{
+		GRE_Polygon4d polygon=&object->polygonList[i];
+		if (polygonHide[i]) continue;
+		for (int j=0;j<polygon->num;j++)
+		{
+			GRE_Vertex4d_wN a=&points[polygon->index[j]], b=&points[polygon->index[(j+1)%polygon->num]];
+			YMGRE_Img_LineDepth(camera->img.data,camera->img.zbuff,camera->img.width,camera->img.height,
+				(int16)a->base.pos.x,(int16)a->base.pos.y,a->base.pos.z,(int16)b->base.pos.x,(int16)b->base.pos.y,b->base.pos.z,GRE_brush,1);
 		}
 	}
 }

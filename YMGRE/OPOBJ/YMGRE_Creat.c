@@ -2,6 +2,7 @@
 #include"./YMGRE_Creat.h"
 #include"../DEBUG/YMGRE_Debug.h"
 #include "../CONFIG/YMGRE_PubDefine.h"
+#include "../CORE/YMGRE_MathBase.h"
 
 /**
   ***************************************************************************************************************************
@@ -189,6 +190,8 @@ GRE_Object4d YMGRE_Creat_Object(int pointNum,int polygonNum,char* name,char* mat
 	myobj->pointNum = pointNum;
 	myobj->pointList = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
 	myobj->pointList_ = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
+	myobj->pointList_wN = NULL;
+	myobj->pointList_wN_ = NULL;
 	myobj->polygonNum = polygonNum;
 	myobj->polygonList = GRE_malloc1(polygonNum * sizeof(gre_polygon4d));
 	myobj->nextObject = NULL;//默认只有一个submesh
@@ -211,8 +214,100 @@ GRE_Object4d YMGRE_Creat_Object(int pointNum,int polygonNum,char* name,char* mat
 	myobj->isVisible = 1;//可见
 	myobj->isDelete = 0;//未被剔除
 	myobj->wireFrame = 0;//默认不绘制模型线框
+	myobj->renderMode = GRE_RenderMode_Face;//保持兼容的逐面渲染
 	myobj->cloneTimes = 0;//被克隆次数为0
 	return myobj;
+}
+
+int YMGRE_Object_EnableVertexAttributes(GRE_Object4d object)
+{
+	if (object == NULL || object->pointNum <= 0)
+		return 0;
+	if (object->pointList_wN != NULL && object->pointList_wN_ != NULL)
+		return 1;
+	GRE_Vertex4d_wN base = GRE_malloc1(object->pointNum * sizeof(gre_vertex4d_wN));
+	GRE_Vertex4d_wN transformed = GRE_malloc1(object->pointNum * sizeof(gre_vertex4d_wN));
+	if (base == NULL || transformed == NULL)
+	{
+		GRE_free1(base);
+		GRE_free1(transformed);
+		return 0;
+	}
+	for (int i = 0; i < object->pointNum; i++)
+	{
+		base[i].base = object->pointList[i];
+		base[i].normal = (gre_fvector4d){ 0, 0, 1, 0 };
+		base[i].tangent = (gre_fvector4d){ 1, 0, 0, 0 };
+		base[i].tangentW = 1.0f;
+		base[i].color = (GRErgb24){ 255, 255, 255 };
+		base[i].vertexLighting = (GRErgb24){ 255, 255, 255 };
+		base[i].vertexSpecular = (GRErgb24){ 0, 0, 0 };
+		transformed[i] = base[i];
+	}
+	object->pointList_wN = base;
+	object->pointList_wN_ = transformed;
+	return 1;
+}
+
+int YMGRE_Object_GenerateVertexAttributes(GRE_Object4d object)
+{
+	if (object == NULL || !YMGRE_Object_EnableVertexAttributes(object)) return 0;
+	for (int i=0;i<object->pointNum;i++)
+	{
+		object->pointList_wN[i].base=object->pointList[i];
+		object->pointList_wN[i].normal=(gre_fvector4d){0,0,0,0};
+		object->pointList_wN[i].tangent=(gre_fvector4d){0,0,0,0};
+		object->pointList_wN[i].tangentW=0.0f;
+		object->pointList_wN[i].color=(GRErgb24){255,255,255};
+		object->pointList_wN[i].vertexLighting=(GRErgb24){255,255,255};
+		object->pointList_wN[i].vertexSpecular=(GRErgb24){0,0,0};
+	}
+	for (int i=0;i<object->polygonNum;i++)
+	{
+		GRE_Polygon4d polygon=&object->polygonList[i];
+		if (polygon->num != 3) continue;
+		uint16 i0=polygon->index[0],i1=polygon->index[1],i2=polygon->index[2];
+		if(i0>=object->pointNum||i1>=object->pointNum||i2>=object->pointNum) continue;
+		GRE_Vertex4d p0=&object->pointList[i0],p1=&object->pointList[i1],p2=&object->pointList[i2];
+		gre_fvector4d e1={p1->pos.x-p0->pos.x,p1->pos.y-p0->pos.y,p1->pos.z-p0->pos.z,0};
+		gre_fvector4d e2={p2->pos.x-p0->pos.x,p2->pos.y-p0->pos.y,p2->pos.z-p0->pos.z,0};
+		gre_fvector4d face;
+		YMGRE_Fvector4d_CrossToResult(&e1,&e2,&face);
+		float32 du1=p1->u-p0->u,dv1=p1->v-p0->v,du2=p2->u-p0->u,dv2=p2->v-p0->v;
+		float32 det=du1*dv2-du2*dv1;
+		gre_fvector4d tangent={0};
+		if(YMGRE_Fabs(det)>1e-8f)
+		{
+			float32 inv=1.0f/det;
+			tangent.x=(e1.x*dv2-e2.x*dv1)*inv;
+			tangent.y=(e1.y*dv2-e2.y*dv1)*inv;
+			tangent.z=(e1.z*dv2-e2.z*dv1)*inv;
+		}
+		uint16 ids[3]={i0,i1,i2};
+		for(int j=0;j<3;j++)
+		{
+			YMGRE_Fvector4d_AddTo(&object->pointList_wN[ids[j]].normal,&face);
+			YMGRE_Fvector4d_AddTo(&object->pointList_wN[ids[j]].tangent,&tangent);
+			if(YMGRE_Fabs(det)>1e-8f) object->pointList_wN[ids[j]].tangentW += det < 0.0f ? -1.0f : 1.0f;
+		}
+	}
+	for(int i=0;i<object->pointNum;i++)
+	{
+		GRE_Vertex4d_wN vertex=&object->pointList_wN[i];
+		if(YMGRE_Fvector4d_Len1(&vertex->normal)<1e-8f) vertex->normal=(gre_fvector4d){0,0,1,0};
+		else YMGRE_Fvector4d_Normalize(&vertex->normal);
+		float32 ndt=YMGRE_Fvector4d_Dot(&vertex->normal,&vertex->tangent);
+		vertex->tangent.x-=vertex->normal.x*ndt;vertex->tangent.y-=vertex->normal.y*ndt;vertex->tangent.z-=vertex->normal.z*ndt;
+		if(YMGRE_Fvector4d_Len1(&vertex->tangent)<1e-8f)
+		{
+			gre_fvector4d axis=YMGRE_Fabs(vertex->normal.z)<0.9f?(gre_fvector4d){0,0,1,0}:(gre_fvector4d){0,1,0,0};
+			YMGRE_Fvector4d_CrossToResult(&axis,&vertex->normal,&vertex->tangent);
+		}
+		YMGRE_Fvector4d_Normalize(&vertex->tangent);
+		vertex->tangentW=vertex->tangentW<0.0f?-1.0f:1.0f;
+		object->pointList_wN_[i]=*vertex;
+	}
+	return 1;
 }
 
 /***********************************************************   材质创建  *****************************************************************************/
@@ -229,6 +324,7 @@ GRE_Material YMGRE_Creat_Material(char* name)
 	mymaterial->pixel = NULL;
 	mymaterial->width = 0;
 	mymaterial->height = 0;
+	mymaterial->advanced = NULL;
 	//默认为白色
 	GRErgb24 comcolor = (GRErgb24){ 255,255,255 };
 	mymaterial->ambient = comcolor;//环境色

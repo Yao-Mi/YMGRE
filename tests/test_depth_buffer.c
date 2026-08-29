@@ -59,7 +59,7 @@ int main(void)
 	drawTriangle(&camera, farColor, 140.0f, 0.0f);
 	drawTriangle(&camera, nearColor, 80.0f, 8.0f);
 	uint32 firstHash = frameHash(frame, TEST_W * TEST_H);
-	if (frame[32 * TEST_W + 32] != nearPixel)
+	if (!GRE_FramePixel_Equals(frame[32 * TEST_W + 32], nearPixel))
 	{
 		printf("test_depth_buffer: near triangle did not win FAILED\n");
 		return 1;

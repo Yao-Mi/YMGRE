@@ -89,7 +89,7 @@ int main(void)
 	{
 		for (uint16 x = 2; x < 66; x++)
 		{
-			if (frame[y * TEST_W + x] != fillPixel)
+		if (!GRE_FramePixel_Equals(frame[y * TEST_W + x], fillPixel))
 			{
 				printf("test_shared_edge_stress: gap at %u,%u FAILED\n", x, y);
 				return 1;
@@ -127,9 +127,9 @@ int main(void)
 		for (uint16 x = 2; x < 66; x++)
 		{
 			GRE_FramePixel pixel = frame[y * TEST_W + x];
-			if (pixel == wirePixel)
+			if (GRE_FramePixel_Equals(pixel, wirePixel))
 				wireCount++;
-			else if (pixel != fillPixel)
+		else if (!GRE_FramePixel_Equals(pixel, fillPixel))
 			{
 				printf("test_shared_edge_stress: wire gap at %u,%u FAILED\n", x, y);
 				return 1;
@@ -142,8 +142,9 @@ int main(void)
 		return 1;
 	}
 	//内部共享边必须在全部片元填充结束后保留，并保持单像素宽度
-	if ((frame[5 * TEST_W + 10] != wirePixel) ||
-		(frame[5 * TEST_W + 9] == wirePixel) || (frame[5 * TEST_W + 11] == wirePixel))
+	if ((!GRE_FramePixel_Equals(frame[5 * TEST_W + 10], wirePixel)) ||
+		GRE_FramePixel_Equals(frame[5 * TEST_W + 9], wirePixel) ||
+		GRE_FramePixel_Equals(frame[5 * TEST_W + 11], wirePixel))
 	{
 		printf("test_shared_edge_stress: shared wire overwritten or widened FAILED\n");
 		return 1;

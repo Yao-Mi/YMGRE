@@ -25,10 +25,14 @@ static inline float32 YMGRE_Spot_EquivalentPointLightGain(float32 halfConeAngleD
 
 
 //三角形平面光照
-static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvector4d planeVetex0, GRE_Fvector4d pN, GRE_Light4d thislight, GRERGB24 outColor,float32 mirror_ks,uint8 high_n)
+static inline void YMGRE_PolygonLighting_ComponentsAdvanced(GRE_Polygon4d thispoly,
+	GRE_Fvector4d planeVetex0, GRE_Fvector4d pN, GRE_Light4d thislight,
+	GRERGB24 outBaseColor, GRERGB24 outSpecularColor, float32 mirror_ks,
+	uint8 high_n, GRErgb24 materialSpecular)
 {
 	GRERGB24 lightI = &thislight->proper.lightcolor;
 	int r = 0, g = 0, b = 0;
+	int sr = 0, sg = 0, sb = 0;
 	switch (thislight->type)
 	{
 	case GRE_GlobalLight://全局光照
@@ -108,9 +112,12 @@ static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvect
 				specular *= noLight;
 				float32 specularScale = thislight->proper.strength *
 					distanceAttenuation * atten_k;
-				r += (uint32)(lightI->R * specularScale * mirror_ks * specular);
-				g += (uint32)(lightI->G * specularScale * mirror_ks * specular);
-				b += (uint32)(lightI->B * specularScale * mirror_ks * specular);
+				sr += (uint32)(lightI->R * materialSpecular.R / 255.0f *
+					specularScale * mirror_ks * specular);
+				sg += (uint32)(lightI->G * materialSpecular.G / 255.0f *
+					specularScale * mirror_ks * specular);
+				sb += (uint32)(lightI->B * materialSpecular.B / 255.0f *
+					specularScale * mirror_ks * specular);
 			}
 		}
 		//启用背面阴影模拟
@@ -195,33 +202,26 @@ static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvect
 				dotval = GREMax(dotval, 0.0f); // β半角>90时，会出现负值
 				dotval = YMGRE_Pow(dotval, high_n);
 				//加入高光部分： Is = Is * Ks * (H *N)^n
-				r += ((uint32)(light_r * mirror_ks * dotval));
-				g += ((uint32)(light_g * mirror_ks * dotval));
-				b += ((uint32)(light_b * mirror_ks * dotval));
+				sr += ((uint32)(light_r * materialSpecular.R / 255.0f * mirror_ks * dotval));
+				sg += ((uint32)(light_g * materialSpecular.G / 255.0f * mirror_ks * dotval));
+				sb += ((uint32)(light_b * materialSpecular.B / 255.0f * mirror_ks * dotval));
 			}
 		}
 		//启用背面阴影模拟
 		else if(thislight->proper.shadowK > 0.0f)
 		{
-
 			float32 Llen = YMGRE_Fvector4d_Len1(&Lvec);// |L|
-			float32 Nlen = YMGRE_Fvector4d_Len1(pN);// |N|
-			// 点光源的光照模型
-			//					IOpoint * Clpoint
-			// I(d)point = --------------------------
-			//				kc + kl * d + kq * d * d
-			// 其中d = |p-s| 即点光源到多边形的距离
-			float32 atten_k = 1.0f / (thislight->proper.kc0 + thislight->proper.kc1 * Llen + thislight->proper.kc2 * Llen * Llen);//衰减系数 1/(c0 + c1*d + c2*d^2)
-			//float32 cos_k = dotval / (Llen * Nlen * 255);
-
+			float32 denominator = thislight->proper.kc0 + thislight->proper.kc1 * Llen +
+				thislight->proper.kc2 * Llen * Llen;
+			float32 atten_k = denominator > 1e-6f ? 1.0f / denominator : 0.0f;
 			float32 light_r = lightI->R * atten_k;
 			float32 light_g = lightI->G * atten_k;
 			float32 light_b = lightI->B * atten_k;
 
-			// 这里当多边形是背朝光源时, 也进行了一些处理, 只是把它的颜色相对调暗，用于模拟背部阴影
-			r += light_r * thislight->proper.shadowK;
-			g += light_g * thislight->proper.shadowK;
-			b += light_b * thislight->proper.shadowK;
+			// 背面补光仍属于漫反射响应，必须保留材质颜色。
+			r += (uint32)(light_r * thispoly->planeColor.R * thislight->proper.shadowK / 255.0f);
+			g += (uint32)(light_g * thispoly->planeColor.G * thislight->proper.shadowK / 255.0f);
+			b += (uint32)(light_b * thispoly->planeColor.B * thislight->proper.shadowK / 255.0f);
 		}
 		break;
 	}
@@ -229,14 +229,42 @@ static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly, GRE_Fvect
 		break;
 	}
 	//在原来的基础上增加
-	r += outColor->R;
-	g += outColor->G;
-	b += outColor->B;
+	r += outBaseColor->R;
+	g += outBaseColor->G;
+	b += outBaseColor->B;
 
 	//限制幅度
-	outColor->R = GREMin(r, 255);
-	outColor->G = GREMin(g, 255);
-	outColor->B = GREMin(b, 255);
+	outBaseColor->R = GREMin(r, 255);
+	outBaseColor->G = GREMin(g, 255);
+	outBaseColor->B = GREMin(b, 255);
+	if (outSpecularColor != NULL)
+	{
+		outSpecularColor->R = GREMin(outSpecularColor->R + sr, 255);
+		outSpecularColor->G = GREMin(outSpecularColor->G + sg, 255);
+		outSpecularColor->B = GREMin(outSpecularColor->B + sb, 255);
+	}
+	else
+	{
+		outBaseColor->R = GREMin(outBaseColor->R + sr, 255);
+		outBaseColor->G = GREMin(outBaseColor->G + sg, 255);
+		outBaseColor->B = GREMin(outBaseColor->B + sb, 255);
+	}
+}
+
+static inline void YMGRE_PolygonLighting_ColorAdvanced(GRE_Polygon4d thispoly,
+	GRE_Fvector4d planeVetex0, GRE_Fvector4d pN, GRE_Light4d thislight,
+	GRERGB24 outColor, float32 mirror_ks, uint8 high_n, GRErgb24 specularColor)
+{
+	YMGRE_PolygonLighting_ComponentsAdvanced(thispoly, planeVetex0, pN,
+		thislight, outColor, NULL, mirror_ks, high_n, specularColor);
+}
+
+static inline void YMGRE_PolygonLighting_Color(GRE_Polygon4d thispoly,
+	GRE_Fvector4d planeVetex0, GRE_Fvector4d pN, GRE_Light4d thislight,
+	GRERGB24 outColor, float32 mirror_ks, uint8 high_n)
+{
+	YMGRE_PolygonLighting_ColorAdvanced(thispoly, planeVetex0, pN, thislight,
+		outColor, mirror_ks, high_n, (GRErgb24){ 255, 255, 255 });
 }
 
 //物体光照

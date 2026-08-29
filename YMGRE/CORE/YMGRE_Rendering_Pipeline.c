@@ -6,6 +6,7 @@
 #include "../CONFIG/YMGRE_Mem.h"
 #include "./YMGRE_Camera.h"
 #include "./YMGRE_Rasterization.h"
+#include "./YMGRE_TriangleRaster.h"
 
 #include "./YMGRE_Light.h"
 
@@ -323,6 +324,135 @@ void YMGRE_Camera_TanglePipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GRE
 				}
 			}
 		} while ((thisobj = thisobj->nextObject) != NULL);
+	}
+}
+
+void YMGRE_Camera_TanglePipline_VertexColor_wN(GRE_Camera4d thiscam,
+	GRE_List ObjList,GRE_RenderWorkspace workspace)
+{
+	gre_log_explain((thiscam==NULL)||(ObjList==NULL),GRE_LOG_PtrI,"顶点色管线输入不存在");
+	if(thiscam==NULL||ObjList==NULL) return;
+	if(workspace==NULL) workspace=thiscam->workspace;
+	if(workspace==NULL) return;
+	GRE_RenderTarget target=YMGRE_Camera_GetRenderTarget(thiscam);
+	if(target==NULL) return;
+	gre_camera4d renderCamera=*thiscam;
+	renderCamera.img=*target;
+	renderCamera.target=target;
+	GRE_Camera4d cam=&renderCamera;
+	YMGRE_CameraImage_Init(cam,(GRErgb24){50,50,50});
+	for(GRE_ListNode node=ObjList->listhead;node!=NULL;node=node->next)
+	{
+		GRE_Object4d object=node->data;
+		for(;object!=NULL;object=object->nextObject)
+		{
+			if(!object->isVisible||object->pointList_wN==NULL) continue;
+			YMGRE_RenderWorkspace_Reserve(workspace,object->pointNum,object->polygonNum,0);
+			if(!YMGRE_RenderWorkspace_EnableVertexAttributes(workspace,object->pointNum)) continue;
+			YMGRE_Object_WorldToCameraTo_wN(object,&cam->move.TMat,workspace->pointList_wN);
+			if(YMGRE_Object_FrustumCullingCal(object,cam)) continue;
+			YMGRE_Backface_RemoveTo(object,&cam->pos,workspace->polygonHide);
+			YMGRE_VertexList_CameraToViewPlane_wN(workspace->pointList_wN,
+				object->pointNum,cam->perspectPlane.Dis);
+			YMGRE_ObjectPoly_FrustumCullingTo_wN(object,workspace->pointList_wN,
+				cam,workspace->polygonHide);
+			YMGRE_VertexList_ViewPlaneToWindows_wN(workspace->pointList_wN,
+				object->pointNum,cam);
+			if(cam->wireFrame==GRE_Render_Wireframe)
+				YMGRE_TrangleObject_Wires_wN(object,workspace->pointList_wN,
+					workspace->polygonHide,cam);
+			else
+				YMGRE_TrangleObject_Primitive_Rasterization_VertexColor_wN(object,
+					workspace->pointList_wN,workspace->polygonHide,cam);
+		}
+	}
+}
+
+// Advanced material pipeline. Legacy pipeline entry points intentionally remain untouched.
+void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList,
+	GRE_RenderWorkspace workspace)
+{
+	gre_log_explain((thiscam==NULL)||(LightList==NULL)||(ObjList==NULL)||(MaterialList==NULL),
+		GRE_LOG_PtrI,"高级材质管线输入不存在");
+	if(thiscam==NULL||LightList==NULL||ObjList==NULL||MaterialList==NULL) return;
+	if (workspace == NULL) workspace = thiscam->workspace;
+	if (workspace == NULL) return;
+	GRE_RenderTarget target = YMGRE_Camera_GetRenderTarget(thiscam);
+	if (target == NULL) return;
+	gre_camera4d renderCamera = *thiscam;
+	renderCamera.img = *target;
+	renderCamera.target = target;
+	GRE_Camera4d cam = &renderCamera;
+	YMGRE_CameraImage_Init(cam, (GRErgb24){ 50, 50, 50 });
+	uint32 lightNum = 0;
+	for(GRE_ListNode n=LightList->listhead;n!=NULL;n=n->next) lightNum++;
+	YMGRE_RenderWorkspace_Reserve(workspace, 0, 0, lightNum);
+	uint32 li = 0;
+	for(GRE_ListNode n=LightList->listhead;n!=NULL;n=n->next)
+	{
+		GRE_Light4d light = n->data;
+		YMGRE_Point_WorldToCamera(&light->pos, &workspace->lightPos[li++], &cam->move.TMat);
+	}
+	for (GRE_ListNode node = ObjList->listhead; node != NULL; node = node->next)
+	{
+		GRE_Object4d object = node->data;
+		for (; object != NULL; object = object->nextObject)
+		{
+			if (!object->isVisible || object->pointList_wN == NULL) continue;
+			YMGRE_RenderWorkspace_Reserve(workspace, object->pointNum, object->polygonNum, lightNum);
+			if (!YMGRE_RenderWorkspace_EnableVertexAttributes(workspace, object->pointNum)) continue;
+			YMGRE_Object_WorldToCameraTo_wN(object, &cam->move.TMat, workspace->pointList_wN);
+			if (YMGRE_Object_FrustumCullingCal(object, cam)) continue;
+			YMGRE_Backface_RemoveTo(object, &cam->pos, workspace->polygonHide);
+			if (cam->wireFrame == GRE_Render_Wireframe)
+			{
+				YMGRE_VertexList_CameraToViewPlane_wN(workspace->pointList_wN, object->pointNum, cam->perspectPlane.Dis);
+				YMGRE_VertexList_ViewPlaneToWindows_wN(workspace->pointList_wN, object->pointNum, cam);
+				YMGRE_TrangleObject_Wires_wN(object, workspace->pointList_wN, workspace->polygonHide, cam);
+			}
+			else
+			{
+				GRE_Material material = YMGRE_Material_Find(MaterialList, object->materiaName);
+				for (int pi = 0; pi < object->polygonNum; pi++)
+				{
+					GRE_Polygon4d source = &object->polygonList[pi];
+					if (workspace->polygonHide[pi] || source->num != 3) continue;
+					gre_vertex4d_wN input[3], clipped[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+					for (int vi = 0; vi < 3; vi++) input[vi] = workspace->pointList_wN[source->index[vi]];
+					if (object->renderMode == GRE_RenderMode_Face)
+					{
+						gre_fvector4d faceNormal = source->pN;
+						faceNormal.w = 0;
+						YMGRE_Fvector4d_MatMultTo(&cam->move.TMat, &faceNormal, &faceNormal);
+						YMGRE_Fvector4d_Normalize(&faceNormal);
+						for (int vi = 0; vi < 3; vi++) input[vi].normal = faceNormal;
+					}
+					else if (object->renderMode == GRE_RenderMode_Vertex)
+					{
+						YMGRE_TriangleRaster_ComputeVertexLighting_wN(input, 3, source,
+							material, LightList, workspace->lightPos, &cam->move.TMat,
+							object->mirrorKs);
+					}
+					uint16 count = YMGRE_Polygon_FrustumClip_wN(input, 3, clipped,
+						YMGRE_FRUSTUM_CLIP_VERTEX_MAX, cam);
+					if (count < 3) continue;
+					YMGRE_VertexList_CameraToViewPlane_wN(clipped, count, cam->perspectPlane.Dis);
+					YMGRE_VertexList_ViewPlaneToWindows_wN(clipped, count, cam);
+					for (uint16 vi = 1; vi + 1 < count; vi++)
+					{
+						uint16 indices[3] = { 0, vi, (uint16)(vi + 1) };
+						gre_polygon4d triangle = *source;
+						triangle.num = 3;
+						triangle.index = indices;
+						if (object->renderMode == GRE_RenderMode_Vertex)
+							YMGRE_TriangleRaster_FillVertexLit_wN(clipped, &triangle, material, cam);
+						else
+							YMGRE_TriangleRaster_Fill_wN(clipped, &triangle, material, LightList,
+								workspace->lightPos, &cam->move.TMat, object->mirrorKs, cam);
+					}
+				}
+			}
+		}
 	}
 }
 

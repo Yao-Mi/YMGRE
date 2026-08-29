@@ -55,6 +55,29 @@ typedef struct gre_vertex4d_
 }gre_vertex4d;
 typedef gre_vertex4d* GRE_Vertex4d;
 
+// Extended vertex format. The legacy vertex is deliberately the first member
+// so buffers of this type can be passed to legacy position/UV code.
+typedef struct gre_vertex4d_wN_
+{
+	gre_vertex4d base;
+	gre_fvector4d normal;
+	gre_fvector4d tangent;
+	float32 tangentW;// bitangent handedness (+1/-1), reserved for normal maps
+	GRErgb24 color;
+	GRErgb24 vertexLighting;// per-vertex ambient/diffuse result
+	GRErgb24 vertexSpecular;// per-vertex mirror result, kept separate from albedo
+}gre_vertex4d_wN;
+typedef gre_vertex4d_wN* GRE_Vertex4d_wN;
+typedef char YMGRE_Vertex4d_wN_BaseMustBeFirst[
+	(offsetof(gre_vertex4d_wN, base) == 0) ? 1 : -1];
+
+typedef enum
+{
+	GRE_RenderMode_Face = 0,// legacy per-face lighting
+	GRE_RenderMode_Vertex,// per-vertex lighting, interpolated color
+	GRE_RenderMode_Pixel// per-pixel lighting, interpolated attributes
+}GRE_VertexRenderMode;
+
 //多边形，基于顶点索引
 typedef struct gre_polygon4d_
 {
@@ -100,6 +123,9 @@ typedef struct gre_object4d_
 	int pointNum;//顶点数量
 	GRE_Vertex4d pointList;//原始列表
 	GRE_Vertex4d pointList_;//用于处理的临时列表
+	GRE_Vertex4d_wN pointList_wN;//可选高级属性列表
+	GRE_Vertex4d_wN pointList_wN_;//可选高级属性临时列表
+	GRE_VertexRenderMode renderMode;//渲染路径，默认保持旧的逐面模式
 
 	int polygonNum;//多边形数量
 	GRE_Polygon4d polygonList;//多边形列表
@@ -205,10 +231,12 @@ typedef gre_render_target* GRE_RenderTarget;
 typedef struct gre_render_workspace_
 {
 	GRE_Vertex4d pointList;//当前物体变换后的顶点
+	GRE_Vertex4d_wN pointList_wN;//可选高级顶点工作缓存
 	uint8* polygonHide;//当前物体的逐面剔除结果
 	GRErgb24* polygonColor;//当前物体的逐面光照颜色
 	gre_fvector4d* lightPos;//当前相机空间中的灯光位置
 	uint32 pointMax;//顶点缓存容量
+	uint32 pointWNMax;//高级顶点缓存独立容量
 	uint32 polygonMax;//多边形状态和颜色缓存容量
 	uint32 lightMax;//灯光位置缓存容量
 	uint8 ownsMemory;//为1时由工作区扩容并释放内部缓存
@@ -269,6 +297,14 @@ typedef struct gre_camera4d_
 typedef gre_camera4d* GRE_Camera4d;
 
 /*-------------------------------------  材质  ---------------------------------------------*/
+typedef struct gre_material_advanced_
+{
+	uint16 normalWidth, normalHeight;
+	GRErgb24* normalPixel;//切线空间法线贴图（可选）
+	uint8 specularPower;// Blinn-Phong exponent; 0 keeps the default value 30
+}gre_material_advanced;
+typedef gre_material_advanced* GRE_MaterialAdvanced;
+
 typedef struct gre_material_
 {
 	char* name;
@@ -280,6 +316,7 @@ typedef struct gre_material_
 
 	uint16 width, height;
 	GRErgb24* pixel;
+	GRE_MaterialAdvanced advanced;//高级材质资源，NULL 时保持紧凑基础材质
 }gre_material;
 typedef gre_material* GRE_Material;
 

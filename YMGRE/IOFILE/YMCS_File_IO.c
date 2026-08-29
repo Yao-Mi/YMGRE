@@ -159,6 +159,18 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 							continue;
 						}
 
+						// 镜面高光指数（0 保持默认值 30）
+						if (YMGRE_Memcmp(info, "specular_power", sizeof("specular_power") - 1) == 0)
+						{
+							info += sizeof("specular_power") - 1;
+							float32 power = YMGRE_Strtof(info, &info);
+							power = GREMax(0.0f, GREMin(power, 255.0f));
+							if (materail->advanced == NULL)
+								materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+							materail->advanced->specularPower = (uint8)(power + 0.5f);
+							continue;
+						}
+
 						// 镜面反射
 						if (YMGRE_Memcmp(info, "specular", sizeof("specular") - 1) == 0)
 						{
@@ -171,6 +183,25 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 						}
 
 						// 贴图
+						if (YMGRE_Memcmp(info, "normal_map ", sizeof("normal_map ") - 1) == 0)
+						{
+							info += sizeof("normal_map");
+							while (YMGRE_Isspace(*info)) info++;
+							char textureName[64]; uint8 mi = 0;
+							while (!YMGRE_Isspace(*info) && *info != '\0')
+							{
+								gre_log_explain(mi >= sizeof(textureName) - 1, GRE_LOG_FILE, "法线贴图名称过长");
+								textureName[mi++] = *info++;
+							}
+							textureName[mi] = '\0';
+							if (materail->advanced == NULL)
+								materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+							YMGRE_Bmp_File_LoadTo_Image(GetImageFromSamePath(scriptName, textureName),
+								&materail->advanced->normalPixel, &materail->advanced->normalWidth,
+								&materail->advanced->normalHeight);
+							continue;
+						}
+
 						if (YMGRE_Memcmp(info, "texture ", sizeof("texture ") - 1) == 0)// 这里使用"texture ",后面保留一个空格, 与texture_unit区别
 						{
 							info += sizeof("texture");

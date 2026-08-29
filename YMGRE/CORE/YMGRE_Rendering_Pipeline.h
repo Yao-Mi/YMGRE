@@ -12,6 +12,10 @@ void YMGRE_Camera_PolygonPipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GR
 void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList);//三角形物体
 void YMGRE_Camera_TanglePipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList,
 	GRE_List MaterialList, GRE_RenderWorkspace workspace);//使用共享或独立工作区渲染三角形物体
+void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList,
+	GRE_RenderWorkspace workspace);//独立高级顶点流程
+void YMGRE_Camera_TanglePipline_VertexColor_wN(GRE_Camera4d thiscam,
+	GRE_List ObjList,GRE_RenderWorkspace workspace);//独立透视校正顶点色流程
 void YMGRE_Camera_LineList_Rendering(GRE_Camera4d camera, const gre_line3d* lines,
 	uint32 lineNum, uint8 depthTest);//渲染独立3D线段，不清除目标
 

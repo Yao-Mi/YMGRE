@@ -76,7 +76,7 @@ static int countColor(GRErgb24 color)
 	int count = 0;
 	for (uint16 i = 0; i < TEST_PIXEL_NUM; i++)
 	{
-		if (frameBuffer.data[i] == pixel)
+			if (GRE_FramePixel_Equals(frameBuffer.data[i], pixel))
 			count++;
 	}
 	return count;

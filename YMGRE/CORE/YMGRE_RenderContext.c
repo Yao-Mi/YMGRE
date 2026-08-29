@@ -45,6 +45,8 @@ GRE_RenderWorkspace YMGRE_Creat_RenderWorkspace(void)
 	gre_log_explain(workspace == NULL, GRE_LOG_Mem0, "渲染工作区头内存申请失败");
 	GRE_memset(workspace, 0, sizeof(gre_render_workspace));
 	workspace->ownsMemory = 1;
+	workspace->pointList_wN = NULL;
+	workspace->pointWNMax = 0;
 	return workspace;
 }
 
@@ -63,6 +65,30 @@ void YMGRE_RenderWorkspace_Init(GRE_RenderWorkspace workspace, GRE_Vertex4d poin
 	workspace->polygonMax = polygonMax;
 	workspace->lightMax = lightMax;
 	workspace->ownsMemory = 0;
+	workspace->pointList_wN = NULL;
+	workspace->pointWNMax = 0;
+}
+
+void YMGRE_RenderWorkspace_BindVertexAttributes(GRE_RenderWorkspace workspace,
+	GRE_Vertex4d_wN points, uint32 pointMax)
+{
+	if (workspace == NULL || points == NULL || pointMax == 0) return;
+	if (workspace->ownsMemory) return;
+	workspace->pointList_wN = points;
+	workspace->pointWNMax = pointMax;
+}
+
+int YMGRE_RenderWorkspace_EnableVertexAttributes(GRE_RenderWorkspace workspace, uint32 pointNum)
+{
+	if (workspace == NULL || pointNum == 0) return 0;
+	if (workspace->pointList_wN != NULL && workspace->pointWNMax >= pointNum) return 1;
+	if (!workspace->ownsMemory) return 0;//固定工作区容量不足时不自动分配
+	GRE_Vertex4d_wN points = GRE_malloc1(pointNum * sizeof(gre_vertex4d_wN));
+	if (points == NULL) return 0;
+	if (workspace->ownsMemory) GRE_free1(workspace->pointList_wN);
+	workspace->pointList_wN = points;
+	workspace->pointWNMax = pointNum;
+	return 1;
 }
 
 //确保动态工作区容量足够，外部工作区只检查容量，不在渲染帧内偷偷申请内存
@@ -114,6 +140,7 @@ void YMGRE_Free_RenderWorkspace(GRE_RenderWorkspace workspace)
 	if (workspace->ownsMemory)
 	{
 		GRE_free1(workspace->pointList);
+		GRE_free1(workspace->pointList_wN);
 		GRE_free1(workspace->polygonHide);
 		GRE_free1(workspace->polygonColor);
 		GRE_free1(workspace->lightPos);

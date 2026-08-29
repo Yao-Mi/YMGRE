@@ -1,6 +1,7 @@
 #ifndef YMGRE_RASTERIZATION_H
 #define YMGRE_RASTERIZATION_H
 #include "../OPOBJ/YMGRE_OBJ.h"
+#include "YMGRE_List.h"
 
 //基础直线光栅化，不包含窗口裁剪
 void YMGRE_Img_SetBrushColor(GRErgb24 color);
@@ -19,10 +20,17 @@ void YMGRE_PolygonObject_Primitive_RasterizationTo(GRE_Object4d myobj, GRE_Verte
 void YMGRE_TrangleObject_Primitive_Rasterization(GRE_Object4d myTrangleObj, GRE_Material mymaterial, GRE_Camera4d mycam);
 void YMGRE_TrangleObject_Primitive_RasterizationTo(GRE_Object4d myTrangleObj, GRE_Vertex4d points, uint8* polygonHide,
 	GRErgb24* polygonColor, GRE_Material mymaterial, GRE_Camera4d mycam);//使用外部相机工作区绘制三角形
+void YMGRE_TrangleObject_Primitive_Rasterization_wN(GRE_Object4d object, GRE_Vertex4d_wN points,
+	uint8* polygonHide, GRE_Material material, GRE_List lights, gre_fvector4d* lightPos,
+	GRE_FMat4x4 worldToCamera, GRE_Camera4d camera);
+void YMGRE_TrangleObject_Primitive_Rasterization_VertexColor_wN(GRE_Object4d object,
+	GRE_Vertex4d_wN points,uint8* polygonHide,GRE_Camera4d camera);
 
 //三角图元线框模型绘制
 void YMGRE_TrangleObject_Wires(GRE_Object4d myTrangleObj, GRE_Camera4d mycam);
 void YMGRE_TrangleObject_WiresTo(GRE_Object4d myTrangleObj, GRE_Vertex4d points, uint8* polygonHide, GRE_Camera4d mycam);//使用外部相机工作区绘制线框
+void YMGRE_TrangleObject_Wires_wN(GRE_Object4d object, GRE_Vertex4d_wN points,
+	uint8* polygonHide, GRE_Camera4d camera);
 
 //灯光光栅化绘制
 void YMGRE_Light_Primitive_Rasterization(GRE_Light4d mylight, GRE_Camera4d mycam, uint8 showLightSize);

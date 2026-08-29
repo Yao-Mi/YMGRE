@@ -33,6 +33,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// New YMGUI keeps Ctrl+Z as the only built-in edit key; the editor retains
+// its private redo value for application-level shortcut handling.
+#ifndef GY_KEY_REDO
+#define GY_KEY_REDO 0x110E
+#endif
 #include <unistd.h>
 
 typedef enum {
@@ -1665,7 +1671,8 @@ int main(void)
 {
 	EditorUi ui={0};g_ui=&ui;setenv("YMGRE_WINDOW_SCALE","1",1);
 	if(!YMGRE_DemoHost_Init(&ui.host,1024,680,40))return 1;
-	SceneEditorFont_Init();initScene();buildUi(&ui);historyReset();SDL_LCD_SetQuitRequestCb(quitRequested,NULL);
+	SceneEditorFont_Init();initScene();buildUi(&ui);historyReset();
+	SDL_LCD_SetCloseRequestCb(quitRequested,NULL);
 	const char* limit=getenv("YMGRE_MAX_FRAMES");ui.frameLimit=limit?atoi(limit):0;
 	int selfTestFailures=0;
 	if(getenv("YMGRE_SCENE_EDITOR_SELFTEST")!=NULL){selfTestFailures=runSelfTest();ui.frameLimit=1;}

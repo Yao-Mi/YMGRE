@@ -11,7 +11,7 @@
 #define WIDE_HEIGHT 48
 #define TALL_WIDTH 36
 #define TALL_HEIGHT 72
-#define COLOR_GUARD ((GRE_FramePixel)0x5AA5)
+#define COLOR_GUARD GRE_FramePixel_From_RGB24((GRErgb24){ 90, 90, 165 })
 #define DEPTH_GUARD 12345.0f
 
 typedef struct guarded_color_
@@ -156,8 +156,8 @@ int main(void)
 		printf("test_camera_viewport: viewport dimensions or views FAILED\n");
 		return 1;
 	}
-	if ((wideColor.before != COLOR_GUARD) || (wideColor.after != COLOR_GUARD) ||
-		(tallColor.before != COLOR_GUARD) || (tallColor.after != COLOR_GUARD) ||
+	if ((!GRE_FramePixel_Equals(wideColor.before, COLOR_GUARD)) || (!GRE_FramePixel_Equals(wideColor.after, COLOR_GUARD)) ||
+		(!GRE_FramePixel_Equals(tallColor.before, COLOR_GUARD)) || (!GRE_FramePixel_Equals(tallColor.after, COLOR_GUARD)) ||
 		(wideDepth.before != DEPTH_GUARD) || (wideDepth.after != DEPTH_GUARD) ||
 		(tallDepth.before != DEPTH_GUARD) || (tallDepth.after != DEPTH_GUARD))
 	{

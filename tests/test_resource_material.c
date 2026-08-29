@@ -100,9 +100,9 @@ static void testMaterialBasics(void)
 	int yellowCount = 0;
 	for (int i = 0; i < TEST_W * TEST_H; i++)
 	{
-		redCount += frame[i] == red;
-		blueCount += frame[i] == blue;
-		yellowCount += frame[i] == yellow;
+		redCount += GRE_FramePixel_Equals(frame[i], red);
+		blueCount += GRE_FramePixel_Equals(frame[i], blue);
+		yellowCount += GRE_FramePixel_Equals(frame[i], yellow);
 	}
 	CHECK(redCount > 0 && blueCount > 0 && yellowCount > 0,
 		"textured rasterization writes sampled texels to the framebuffer");
@@ -169,6 +169,25 @@ static void testTrackedMaterial(const char* resourceRoot)
 	YMGRE_List_Clear(&scene.MaterialList, YMGRE_Free_Material);
 }
 
+static void testAdvancedMaterialScript(const char* tempPath)
+{
+	char scriptPath[512];
+	snprintf(scriptPath, sizeof(scriptPath), "%s.material", tempPath);
+	FILE* file = fopen(scriptPath, "w");
+	CHECK(file != NULL, "temporary advanced material script is created");
+	if (file == NULL) return;
+	fputs("material GlossTest\n{\n specular_power 96\n}\n", file);
+	fclose(file);
+	gre_scence scene = { 0 };
+	YMGRE_ParseMaterialScript(&scene, scriptPath);
+	GRE_Material material = YMGRE_Material_Find(&scene.MaterialList, "GlossTest");
+	CHECK(material != NULL && material->advanced != NULL &&
+		material->advanced->specularPower == 96,
+		"advanced material script parses specular_power");
+	YMGRE_List_Clear(&scene.MaterialList, YMGRE_Free_Material);
+	remove(scriptPath);
+}
+
 int main(int argc, char** argv)
 {
 	if (argc != 3)
@@ -179,6 +198,7 @@ int main(int argc, char** argv)
 	testMaterialBasics();
 	testBmpRoundTrip(argv[2]);
 	testTrackedMaterial(argv[1]);
+	testAdvancedMaterialScript(argv[2]);
 	if (fails == 0)
 		printf("test_resource_material: ALL PASS\n");
 	else

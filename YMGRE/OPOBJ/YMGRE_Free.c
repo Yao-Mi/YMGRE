@@ -47,8 +47,10 @@ void YMGRE_Free_Object(void* data)
 	{
 		GRE_Object4d nextObject = pthis->nextObject;
 		//顶点
-		GRE_free1(pthis->pointList);
-		GRE_free1(pthis->pointList_);
+	GRE_free1(pthis->pointList);
+	GRE_free1(pthis->pointList_);
+	GRE_free1(pthis->pointList_wN);
+	GRE_free1(pthis->pointList_wN_);
 		//多边形
 		for (int i = 0; i < pthis->polygonNum; i++)
 		{
@@ -70,6 +72,11 @@ void YMGRE_Free_Material(void* data)
 	if (pthis == NULL)return;
 	GRE_free1(pthis->name);//名字
 	GRE_ImageBuff_Free(pthis->pixel);//图像
+	if (pthis->advanced != NULL)
+	{
+		GRE_ImageBuff_Free(pthis->advanced->normalPixel);//法线图（可选）
+		GRE_free0(pthis->advanced);
+	}
 	GRE_free0(pthis);
 }
 

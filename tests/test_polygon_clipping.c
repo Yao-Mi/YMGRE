@@ -58,7 +58,7 @@ int main(void)
 	{
 		for (int x = 0; x < TEST_W; x++)
 		{
-			if (frame[y * TEST_W + x] == fillPixel)
+			if (GRE_FramePixel_Equals(frame[y * TEST_W + x], fillPixel))
 			{
 				fillCount++;
 				if ((x < window.x0) || (x > window.x1) || (y < window.y0) || (y > window.y1))

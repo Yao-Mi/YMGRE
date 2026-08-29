@@ -46,6 +46,55 @@ void YMGRE_Object_WorldToCameraTo(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Ve
 	}
 }
 
+void YMGRE_Object_WorldToCameraTo_wN(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Vertex4d_wN out)
+{
+	gre_log_explain((myobj == NULL) || (camera == NULL) || (out == NULL), GRE_LOG_PtrIO,
+		"输入的物体、相机或高级顶点缓存不存在");
+	if (myobj == NULL || camera == NULL || out == NULL || myobj->pointList_wN == NULL)
+		return;
+	for (uint32 i = 0; i < (uint32)myobj->pointNum; i++)
+	{
+		YMGRE_Fvector4d_MatMultTo(camera, &myobj->pointList_wN[i].base.pos, &out[i].base.pos);
+		out[i].base.u = myobj->pointList_wN[i].base.u;
+		out[i].base.v = myobj->pointList_wN[i].base.v;
+		out[i].normal = myobj->pointList_wN[i].normal;
+		out[i].normal.w = 0;
+		out[i].tangent = myobj->pointList_wN[i].tangent;
+		out[i].tangent.w = 0;
+		out[i].tangentW = myobj->pointList_wN[i].tangentW;
+		out[i].color = myobj->pointList_wN[i].color;
+		out[i].vertexLighting = myobj->pointList_wN[i].vertexLighting;
+		out[i].vertexSpecular = myobj->pointList_wN[i].vertexSpecular;
+		YMGRE_Fvector4d_MatMultTo(camera, &out[i].normal, &out[i].normal);
+		YMGRE_Fvector4d_MatMultTo(camera, &out[i].tangent, &out[i].tangent);
+		out[i].normal.w = out[i].tangent.w = 0;
+	}
+}
+
+void YMGRE_VertexList_CameraToViewPlane_wN(GRE_Vertex4d_wN points, uint32 pointNum, float32 viewPlaneDis)
+{
+	if (points == NULL || viewPlaneDis < 1e-9f) return;
+	for (uint32 i = 0; i < pointNum; i++)
+	{
+		float32 pk = viewPlaneDis / points[i].base.pos.z;
+		points[i].base.pos.x *= pk;
+		points[i].base.pos.y *= pk;
+	}
+}
+
+void YMGRE_VertexList_ViewPlaneToWindows_wN(GRE_Vertex4d_wN points, uint32 pointNum, GRE_Camera4d mycam)
+{
+	if (points == NULL || mycam == NULL) return;
+	float32 pkw = mycam->img.width / (mycam->perspectPlane.pR - mycam->perspectPlane.pL);
+	float32 pkh = mycam->img.height / (mycam->perspectPlane.pU - mycam->perspectPlane.pD);
+	float32 w2 = mycam->img.width / 2.0f, h2 = mycam->img.height / 2.0f;
+	for (uint32 i = 0; i < pointNum; i++)
+	{
+		points[i].base.pos.x = points[i].base.pos.x * pkw + w2;
+		points[i].base.pos.y = points[i].base.pos.y * -pkh + h2;
+	}
+}
+
 
 //相机坐标变换到视平面坐标
 void YMGRE_Object_CameraToViewPlane(GRE_Object4d myobj, float32 viewPlaneDis)

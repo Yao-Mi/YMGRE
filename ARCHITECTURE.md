@@ -13,7 +13,8 @@ tests     自动化模块测试
 project_Demo 真实应用场景验证
 ```
 
-YMGRE 库不依赖 YMGUI 或 SDL，只产生 RGB565 framebuffer。`Demo/demo_host` 负责把
+YMGRE 库不依赖 YMGUI 或 SDL，只产生配置指定格式的 framebuffer。PC 高级默认使用 RGB888，
+MCU 基础构建使用 RGB565。`Demo/demo_host` 负责把
 RenderTarget 绑定到 YMGUI Image，桌面 Demo 再通过 SDL 显示。
 
 Demo 只组合少量 CORE API，展示静态或有限步骤结果。ProjectDemo 可以组合 IOFILE、
@@ -72,6 +73,59 @@ Camera framebuffer 所有权由 `ownsImageBuffers` 显式记录：
 - `light.proper.pos_`
 
 它保留用于 API 兼容，只适合顺序渲染。`RenderingWithWorkspace` 管线不修改这些字段，支持共享或独立 Workspace。
+
+## 基础与高级顶点管线
+
+MCU 和低内存配置固定使用紧凑的 `gre_vertex4d`（位置和 UV）基础管线。高级管线面向 PC
+或内存充足的平台，使用 `gre_vertex4d_wN`，附加顶点法线、切线、切线手性和 `GRErgb24`
+顶点颜色。两套管线由不同函数集合组成，不在物体循环或片元热路径中按模式分支：
+
+```text
+基础：YMGRE_Camera_TanglePipline_RenderingWithWorkspace
+高级顶点色：YMGRE_Camera_TanglePipline_VertexColor_wN
+高级材质光照：YMGRE_Camera_TanglePipline_wN
+```
+
+高级顶点色流程不创建或访问材质和灯光。高级材质光照流程要求传入材质列表和灯光列表，
+不使用 `lights == NULL` 在片元循环中切换渲染模式。MCU 不要求编译或运行这些高级入口。
+
+`YMGRE_Object_GenerateVertexAttributes` 按需分配并从三角网格和 UV 生成高级属性。动态
+Workspace 由高级管线按需扩容；固定 Workspace 必须调用
+`YMGRE_RenderWorkspace_BindVertexAttributes` 绑定调用者持有的 `gre_vertex4d_wN` 缓冲。
+
+`gre_vertex4d_wN.base` 位于结构首成员，单个顶点可以转换成 `GRE_Vertex4d`。扩展顶点数组
+不能整体转换为基础顶点数组后索引，因为两种元素的步长不同。
+Vertex 模式在该 PC 高级结构中分别缓存 `vertexLighting` 和 `vertexSpecular`：前者受颜色
+纹理与顶点色调制，后者以独立 RGB888 三字节缓存并在最后相加。两个属性都必须通过
+相机变换和视锥裁剪传播；MCU 基础 `gre_vertex4d` 不包含这些缓存。
+
+高级三角形光栅器对 UV、颜色、法线和切线做透视校正插值，并执行逐片元光照。材质脚本
+可用独立字段加载切线空间法线贴图：
+
+```text
+texture diffuse.bmp
+normal_map normal.bmp
+specular_power 30
+```
+
+没有 `normal_map` 时直接使用插值顶点法线；高级材质和高级顶点缓存均为独立分配，不增加
+基础 MCU 管线的逐顶点内存。PC 高级流程使用 RGB888（`YMGRE_CAMERA_COLOR_DEPTH=24`），
+MCU 基础流程使用 RGB565（`YMGRE_CAMERA_COLOR_DEPTH=16`）。
+
+## 光线追踪边界
+
+光线追踪是与上述光栅流程并列的新渲染管线，不复用三角形投影、光栅化和片元插值入口：
+
+```text
+光栅：顶点 -> 变换/裁剪 -> 三角形覆盖 -> 插值 -> 光照 -> framebuffer
+光追：像素 -> 相机射线 -> 最近交点 -> 阴影/反射/折射 -> framebuffer
+```
+
+当前只实现确定性的 Whitted-style 光线追踪，目标为 PC/RGB888。它可以复用场景网格、相机、
+材质资源和数学库，但使用独立的 `GRE_Ray`、交点记录、场景查询和递归工作区。首阶段覆盖
+三角形求交、硬阴影、镜面反射、Snell 折射、Fresnel 和全反射。路径追踪不属于当前范围，
+因此不添加随机采样、累积 framebuffer、降噪器或面光源概率采样；未来若需要，必须作为另一套
+明确选择的渲染流程加入。
 
 ## YMGUI 接入
 

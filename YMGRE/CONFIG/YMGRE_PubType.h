@@ -76,6 +76,28 @@ static inline GRE_FramePixel GRE_FramePixel_From_RGB24(GRErgb24 color)
 #endif
 }
 
+static inline GRErgb24 GRE_FramePixel_To_RGB24(GRE_FramePixel color)
+{
+#if YMGRE_CAMERA_COLOR_DEPTH == 16
+	uint8 r5 = (uint8)((color >> 11) & 0x1F);
+	uint8 g6 = (uint8)((color >> 5) & 0x3F);
+	uint8 b5 = (uint8)(color & 0x1F);
+	return (GRErgb24){ (uint8)((r5 << 3) | (r5 >> 2)),
+		(uint8)((g6 << 2) | (g6 >> 4)), (uint8)((b5 << 3) | (b5 >> 2)) };
+#else
+	return color;
+#endif
+}
+
+static inline uint8 GRE_FramePixel_Equals(GRE_FramePixel left, GRE_FramePixel right)
+{
+#if YMGRE_CAMERA_COLOR_DEPTH == 16
+	return (uint8)(left == right);
+#else
+	return (uint8)(left.R == right.R && left.G == right.G && left.B == right.B);
+#endif
+}
+
 //矩形
 typedef struct gre_frect_
 {

@@ -38,7 +38,7 @@ int main(void)
 	int linePixelCount = 0;
 	for (int i = 0; i < TEST_W * TEST_H; i++)
 	{
-		if (frame[i] != backgroundPixel)
+		if (!GRE_FramePixel_Equals(frame[i], backgroundPixel))
 			linePixelCount++;
 	}
 	if (linePixelCount != 4)
@@ -72,7 +72,7 @@ int main(void)
 	{
 		for (int x = 0; x < TEST_W; x++)
 		{
-			if (frame[y * TEST_W + x] == fillPixel)
+			if (GRE_FramePixel_Equals(frame[y * TEST_W + x], fillPixel))
 			{
 				fillCount++;
 				if (!pointInTriangle(&points[0].pos, &points[1].pos, &points[2].pos, x, y))
@@ -101,7 +101,7 @@ int main(void)
 	{
 		for (int x = 0; x < TEST_W; x++)
 		{
-			if (frame[y * TEST_W + x] == wirePixel)
+			if (GRE_FramePixel_Equals(frame[y * TEST_W + x], wirePixel))
 			{
 				wireCount++;
 				if (!pointInTriangle(&points[0].pos, &points[1].pos, &points[2].pos, x, y))

@@ -1,0 +1,3 @@
+[submodule "extern_lib/YMGUI"]
+	path = extern_lib/YMGUI
+	url = https://gitee.com/yao_mi/ymgui.git
