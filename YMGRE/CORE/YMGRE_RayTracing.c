@@ -75,3 +75,29 @@ int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,
 	}
 	return found;
 }
+
+int YMGRE_Ray_FromCameraPixel(GRE_Camera4d camera, uint16 pixelX, uint16 pixelY,
+	GRE_Ray result)
+{
+	if (camera == NULL || result == NULL || camera->img.width == 0 || camera->img.height == 0)
+		return 0;
+	if (pixelX >= camera->img.width || pixelY >= camera->img.height) return 0;
+	float32 fx = ((float32)pixelX + 0.5f) / (float32)camera->img.width;
+	float32 fy = ((float32)pixelY + 0.5f) / (float32)camera->img.height;
+	float32 viewX = camera->perspectPlane.pL +
+		(camera->perspectPlane.pR - camera->perspectPlane.pL) * fx;
+	float32 viewY = camera->perspectPlane.pU -
+		(camera->perspectPlane.pU - camera->perspectPlane.pD) * fy;
+	result->origin = camera->pos;
+	result->origin.w = 1.0f;
+	result->direction.x = camera->move.cu.x * viewX + camera->move.cv.x * viewY +
+		camera->move.cn.x * camera->perspectPlane.Dis;
+	result->direction.y = camera->move.cu.y * viewX + camera->move.cv.y * viewY +
+		camera->move.cn.y * camera->perspectPlane.Dis;
+	result->direction.z = camera->move.cu.z * viewX + camera->move.cv.z * viewY +
+		camera->move.cn.z * camera->perspectPlane.Dis;
+	result->direction.w = 0.0f;
+	if (YMGRE_Fvector4d_Len2(&result->direction) < 1e-12f) return 0;
+	YMGRE_Fvector4d_Normalize(&result->direction);
+	return 1;
+}

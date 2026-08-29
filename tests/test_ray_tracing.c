@@ -35,6 +35,19 @@ int main(void)
 	scenePass = scenePass && nearest.object == front && nearest.hit.distance < 6.0f;
 	pass = pass && scenePass;
 	YMGRE_List_Clear(&objects, YMGRE_Free_Object);
+	gre_camera4d camera = { 0 };
+	camera.img.width = 100; camera.img.height = 100;
+	camera.perspectPlane.Dis = 1.0f;
+	camera.perspectPlane.pL = -1.0f; camera.perspectPlane.pR = 1.0f;
+	camera.perspectPlane.pD = -1.0f; camera.perspectPlane.pU = 1.0f;
+	camera.move.cu = (gre_fvector4d){ 1, 0, 0, 0 };
+	camera.move.cv = (gre_fvector4d){ 0, 1, 0, 0 };
+	camera.move.cn = (gre_fvector4d){ 0, 0, 1, 0 };
+	camera.pos = (gre_fvector4d){ 0, 0, 0, 1 };
+	gre_ray cameraRay = { 0 };
+	int cameraPass = YMGRE_Ray_FromCameraPixel(&camera, 49, 49, &cameraRay);
+	cameraPass = cameraPass && cameraRay.origin.w == 1.0f && cameraRay.direction.z > 0.99f;
+	pass = pass && cameraPass;
 	printf("ray triangle intersection: %s\n", pass ? "PASS" : "FAIL");
 	return pass ? 0 : 1;
 }

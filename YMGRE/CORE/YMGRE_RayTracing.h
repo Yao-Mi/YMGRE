@@ -3,6 +3,7 @@
 
 #include "../OPOBJ/YMGRE_OBJ.h"
 #include "YMGRE_List.h"
+#include "YMGRE_Camera.h"
 
 typedef struct gre_ray_
 {
@@ -30,5 +31,7 @@ int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
 int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
+int YMGRE_Ray_FromCameraPixel(GRE_Camera4d camera, uint16 pixelX, uint16 pixelY,
+	GRE_Ray result);
 
 #endif
