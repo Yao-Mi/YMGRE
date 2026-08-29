@@ -31,3 +31,27 @@ int YMGRE_Ray_IntersectTriangle(const GRE_Ray ray,
 	hit->normal.w = 0;
 	return 1;
 }
+
+int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
+	float32 tMin, float32 tMax, gre_ray_scene_hit* result)
+{
+	if (ray == NULL || object == NULL || result == NULL || object->pointList == NULL) return 0;
+	int found = 0; float32 closest = tMax; gre_ray_hit candidate;
+	for (uint32 pi = 0; pi < (uint32)object->polygonNum; pi++)
+	{
+		GRE_Polygon4d polygon = &object->polygonList[pi];
+		if (polygon->index == NULL || polygon->num < 3) continue;
+		uint16 first = polygon->index[0];
+		for (int corner = 1; corner + 1 < polygon->num; corner++)
+		{
+			uint16 i1 = polygon->index[corner], i2 = polygon->index[corner + 1];
+			if (first >= object->pointNum || i1 >= object->pointNum || i2 >= object->pointNum) continue;
+			if (!YMGRE_Ray_IntersectTriangle(ray, &object->pointList[first].pos,
+				&object->pointList[i1].pos, &object->pointList[i2].pos,
+				tMin, closest, &candidate)) continue;
+			found = 1; closest = candidate.distance;
+			result->object = object; result->polygonIndex = pi; result->hit = candidate;
+		}
+	}
+	return found;
+}

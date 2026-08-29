@@ -1,4 +1,6 @@
 #include "YMGRE_RayTracing.h"
+#include "YMGRE_BasicMesh_Gener.h"
+#include "YMGRE_Free.h"
 #include "YMGRE_MathBase.h"
 #include <stdio.h>
 
@@ -12,6 +14,11 @@ int main(void)
 	pass = pass && hit.u >= 0.0f && hit.v >= 0.0f && hit.u + hit.v <= 1.0f;
 	gre_ray miss = { { 3, 3, 0, 1 }, { 0, 0, 1, 0 } };
 	pass = pass && !YMGRE_Ray_IntersectTriangle(&miss, &p0, &p1, &p2, 0.001f, 100.0f, &hit);
+	GRE_Object4d object = YMGRE_MeshGener_Cube(2.0f, (GRErgb24){255,255,255}, "ray_cube", "ray");
+	gre_ray_scene_hit sceneHit = { 0 };
+	pass = pass && YMGRE_Ray_IntersectObject(&ray, object, 0.001f, 100.0f, &sceneHit);
+	pass = pass && sceneHit.object == object && sceneHit.hit.distance > 0.0f;
+	YMGRE_Free_Object(object);
 	printf("ray triangle intersection: %s\n", pass ? "PASS" : "FAIL");
 	return pass ? 0 : 1;
 }

@@ -19,10 +19,13 @@ typedef struct gre_ray_hit_
 	gre_fvector4d normal;
 } gre_ray_hit;
 typedef gre_ray_hit* GRE_RayHit;
+typedef struct gre_ray_scene_hit_{GRE_Object4d object;uint32 polygonIndex;gre_ray_hit hit;} gre_ray_scene_hit;
 
 // Moller-Trumbore intersection. Returns 1 for a hit in [tMin, tMax].
 int YMGRE_Ray_IntersectTriangle(const GRE_Ray ray,
 	const gre_fvector4d* p0, const gre_fvector4d* p1, const gre_fvector4d* p2,
 	float32 tMin, float32 tMax, GRE_RayHit hit);
+int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
+	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
 
 #endif
