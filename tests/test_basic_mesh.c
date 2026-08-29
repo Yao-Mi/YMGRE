@@ -99,6 +99,7 @@ int main(void)
 	checkMesh(cylinder, 26, 48, "cylinder is created", 1);
 	checkMesh(cone, 14, 24, "cone is created", 1);
 	checkMesh(sphere, 62, 120, "sphere is created", 1);
+	CHECK(sphere->pointList[1].v > 0.0f && sphere->pointList[1].u == 0.0f, "sphere UVs are initialized");
 	checkTorus(torus, 128, 256, 14.0f);
 	checkMesh(capsule, 98, 192, "capsule is created", 1);
 	checkMesh(tetrahedron, 4, 4, "tetrahedron is created", 1);

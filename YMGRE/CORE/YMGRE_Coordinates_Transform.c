@@ -34,6 +34,18 @@ void YMGRE_Object_WorldToCamera(GRE_Object4d myobj, GRE_FMat4x4 camera)
 	}
 }
 
+void YMGRE_Object_LocalToWorld_wN(GRE_Object4d myobj)
+{
+	if (myobj == NULL) return;
+	YMGRE_Object_LocalToWorld(myobj);
+	if (myobj->pointList_wN == NULL || myobj->pointList_wN_ == NULL) return;
+	for (uint32 i = 0; i < (uint32)myobj->pointNum; i++)
+	{
+		myobj->pointList_wN[i].base = myobj->pointList[i];
+		myobj->pointList_wN_[i].base = myobj->pointList[i];
+	}
+}
+
 //世界坐标变换到外部相机顶点缓存
 void YMGRE_Object_WorldToCameraTo(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Vertex4d out)
 {

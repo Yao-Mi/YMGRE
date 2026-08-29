@@ -95,6 +95,8 @@ Workspace 由高级管线按需扩容；固定 Workspace 必须调用
 
 `gre_vertex4d_wN.base` 位于结构首成员，单个顶点可以转换成 `GRE_Vertex4d`。扩展顶点数组
 不能整体转换为基础顶点数组后索引，因为两种元素的步长不同。
+高级物体做世界变换必须使用 `YMGRE_Object_LocalToWorld_wN`，它在变换基础坐标后同步
+`pointList_wN.base` 和临时缓存；旧的 `YMGRE_Object_LocalToWorld` 保持基础流程语义。
 Vertex 模式在该 PC 高级结构中分别缓存 `vertexLighting` 和 `vertexSpecular`：前者受颜色
 纹理与顶点色调制，后者以独立 RGB888 三字节缓存并在最后相加。两个属性都必须通过
 相机变换和视锥裁剪传播；MCU 基础 `gre_vertex4d` 不包含这些缓存。
@@ -111,6 +113,10 @@ specular_power 30
 没有 `normal_map` 时直接使用插值顶点法线；高级材质和高级顶点缓存均为独立分配，不增加
 基础 MCU 管线的逐顶点内存。PC 高级流程使用 RGB888（`YMGRE_CAMERA_COLOR_DEPTH=24`），
 MCU 基础流程使用 RGB565（`YMGRE_CAMERA_COLOR_DEPTH=16`）。
+
+高度贴图不存入基础顶点或常驻高级材质。`YMGRE_Object_ApplyHeightMap` 在模型创建阶段
+通过 UV 采样临时高度图，沿已生成的顶点法线修改几何，更新包围范围并重新生成法线/切线。
+调用完成后可立即释放高度图；该流程不增加每帧片元采样，也不改变 MCU 基础渲染管线。
 
 ## 光线追踪边界
 

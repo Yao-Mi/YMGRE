@@ -791,7 +791,9 @@ GRE_Object4d YMGRE_MeshGener_Sphere(float32 radius, uint16 latitude, uint16 long
 	int polygonNum = 2 * longitude * (latitude - 1);
 	GRE_Object4d object = YMGRE_Creat_Object(pointNum, polygonNum, name, materiaName);
 	object->pointList[0].pos = (gre_fvector4d){ 0, radius, 0, 1 };
+	object->pointList[0].u = 0.0f; object->pointList[0].v = 0.0f;
 	object->pointList[pointNum - 1].pos = (gre_fvector4d){ 0, -radius, 0, 1 };
+	object->pointList[pointNum - 1].u = 0.0f; object->pointList[pointNum - 1].v = 1.0f;
 
 	for (uint16 row = 0; row < latitude - 1; row++)
 	{
@@ -804,6 +806,8 @@ GRE_Object4d YMGRE_MeshGener_Sphere(float32 radius, uint16 latitude, uint16 long
 			object->pointList[point].pos.y = radius * YMGRE_Cos(phi);
 			object->pointList[point].pos.z = radius * YMGRE_Sin(phi) * YMGRE_Sin(theta);
 			object->pointList[point].pos.w = 1;
+			object->pointList[point].u = (float32)col / longitude;
+			object->pointList[point].v = (float32)(row + 1) / latitude;
 		}
 	}
 

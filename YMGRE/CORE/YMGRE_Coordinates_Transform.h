@@ -3,6 +3,7 @@
 #include "../OPOBJ/YMGRE_OBJ.h"
 
 void YMGRE_Object_LocalToWorld(GRE_Object4d myobj);//局部坐标变换到世界坐标
+void YMGRE_Object_LocalToWorld_wN(GRE_Object4d myobj);//局部坐标变换，同时同步高级顶点缓存
 void YMGRE_Object_WorldToCamera(GRE_Object4d myobj, GRE_FMat4x4 camera);//物体变换到相机坐标系
 void YMGRE_Object_CameraToViewPlane(GRE_Object4d myobj, float32 viewPlaneDis);//相机坐标变换到视平面
 void YMGRE_Object_ViewPlaneToWindows(GRE_Object4d myobj, GRE_Camera4d mycam);//视平面到窗口的变换

@@ -59,6 +59,8 @@ C语言从零实现跨平台渲染引擎
 | `demo_advanced_light_accumulation` | 红光、蓝光及红蓝同时开启，验证多光源逐像素加法 |
 | `demo_advanced_light_order` | 交换红蓝灯提交顺序并倍增灯光，验证顺序无关和饱和钳位 |
 | `demo_advanced_backlight` | 正面光、无背面补光、有背面补光三格验证 `shadowK` |
+| `demo_advanced_earth_normal_map` | 地球纹理、UV 接缝、法线贴图及高度置换综合展示 |
+| `demo_advanced_height_map` | 高度贴图平面对照、正负位移及球体轮廓验证 |
 | `demo_advanced_normal_specular` | 关闭高光、平坦法线高光、扰动法线高光三格对照 |
 | `demo_advanced_specular_sampling` | 粗顶点、逐片元、细分顶点三格验证高光采样频率 |
 | `demo_advanced_render_modes` | Face/Vertex/Pixel 三种高级渲染模式对照 |
