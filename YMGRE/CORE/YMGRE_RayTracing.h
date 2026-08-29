@@ -2,6 +2,7 @@
 #define YMGRE_RAY_TRACING_H
 
 #include "../OPOBJ/YMGRE_OBJ.h"
+#include "YMGRE_List.h"
 
 typedef struct gre_ray_
 {
@@ -26,6 +27,8 @@ int YMGRE_Ray_IntersectTriangle(const GRE_Ray ray,
 	const gre_fvector4d* p0, const gre_fvector4d* p1, const gre_fvector4d* p2,
 	float32 tMin, float32 tMax, GRE_RayHit hit);
 int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
+	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
+int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
 
 #endif

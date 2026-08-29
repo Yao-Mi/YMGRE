@@ -55,3 +55,23 @@ int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	}
 	return found;
 }
+
+int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,
+	float32 tMin, float32 tMax, gre_ray_scene_hit* result)
+{
+	if (ray == NULL || objects == NULL || result == NULL) return 0;
+	int found = 0;
+	float32 closest = tMax;
+	for (GRE_ListNode node = objects->listhead; node != NULL; node = node->next)
+	{
+		GRE_Object4d object = (GRE_Object4d)node->data;
+		gre_ray_scene_hit candidate;
+		if (YMGRE_Ray_IntersectObject(ray, object, tMin, closest, &candidate))
+		{
+			found = 1;
+			closest = candidate.hit.distance;
+			*result = candidate;
+		}
+	}
+	return found;
+}
