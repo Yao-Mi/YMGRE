@@ -309,6 +309,7 @@ Demo 要求平坦法线至少有 100 个高光像素，扰动法线与平坦法�
 `demo_advanced_raytrace_shadow` 使用立方体遮挡地面点光源；地面必须同时存在超过 100 个阴影像素和 100 个受光像素，
 阴影射线的终点严格限制在交点到光源之间，不得把光源之后的物体误判为遮挡。
 `demo_advanced_raytrace_shading` 只调用库级 `YMGRE_Ray_ShadeBlinnPhong`，使用单三角形验证环境光、漫反射、距离衰减和白色高光。
+`demo_advanced_raytrace_refraction` 使用单玻璃球和背景立方体验证进入/离开介质的折射递归；必须有超过 1000 次折射命中，且不能出现非法自相交。
 `demo_advanced_raytrace_mirror` 同时验证真实镜面二次射线、可见发光球和白色 Blinn-Phong 高光。
 镜面接触区不得出现反射射线穿入立方体产生的红线或红点；发光球倒影必须由二次射线实际命中。
 `demo_advanced_raytrace_mirror_lights` 固定相机和物体，只把发光球依次放在立方体前、后、左、右、上五个面中心外侧，
