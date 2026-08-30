@@ -8,6 +8,9 @@
 static const gre_fvector4d light = {-2.8f, 3.2f, 9.5f, 1};
 static GRE_Object4d lamp;
 static uint32 reflectedLampHits;
+static uint32 contactRedPixels;
+static float32 redMinDistance = 100.0f, redMaxDistance;
+static uint32 nearContactRedPixels;
 static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
   gre_ray_scene_hit h;
   if (depth > 2 || !YMGRE_Ray_IntersectScene(r, os, .002f, 100, &h))
@@ -23,7 +26,13 @@ static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
     q.origin.x += q.direction.x * .05f;
     q.origin.y += q.direction.y * .05f;
     q.origin.z += q.direction.z * .05f;
-    return trace(&q, os, mirror, depth + 1);
+    GRErgb24 reflected = trace(&q, os, mirror, depth + 1);
+    const GRErgb24 mirrorBase = {45, 50, 58};
+    const float32 reflectivity = .82f;
+    return (GRErgb24){
+        (uint8)(mirrorBase.R * (1.0f - reflectivity) + reflected.R * reflectivity),
+        (uint8)(mirrorBase.G * (1.0f - reflectivity) + reflected.G * reflectivity),
+        (uint8)(mirrorBase.B * (1.0f - reflectivity) + reflected.B * reflectivity)};
   }
   GRErgb24 b = h.object->polygonList[h.polygonIndex].planeColor;
   gre_fvector4d l = {light.x - h.hit.position.x, light.y - h.hit.position.y,
@@ -77,13 +86,29 @@ int main(void) {
             refl++;
           if (h.object == lamp)
             lp++;
+          if (h.object == mirror && col.R > 80 && col.R > col.G * 2 &&
+              h.hit.position.x > -1.55f && h.hit.position.x < 1.55f &&
+              h.hit.position.z > 7.4f && h.hit.position.z < 10.6f) {
+            contactRedPixels++;
+            gre_ray reflected = {h.hit.position, {0}};
+            YMGRE_Ray_Reflect(&r.direction, &h.hit.normal, &reflected.direction);
+            reflected.origin.x += reflected.direction.x * .05f;
+            reflected.origin.y += reflected.direction.y * .05f;
+            reflected.origin.z += reflected.direction.z * .05f;
+            gre_ray_scene_hit rh;
+            if (YMGRE_Ray_IntersectObject(&reflected, cube, .002f, 100, &rh)) {
+              if (rh.hit.distance < redMinDistance) redMinDistance = rh.hit.distance;
+              if (rh.hit.distance > redMaxDistance) redMaxDistance = rh.hit.distance;
+              if (rh.hit.distance < .10f) nearContactRedPixels++;
+            }
+          }
         }
       }
       out->data[y * w + x] = GRE_FramePixel_From_RGB24(col);
     }
   int pass = refl > 100 && lp > 10 && reflectedLampHits > 2;
-  printf("ray mirror: reflection=%u light=%u reflectedLight=%u: %s\n", refl, lp,
-         reflectedLampHits,
+  printf("ray mirror: reflection=%u light=%u reflectedLight=%u contactRed=%u nearRed=%u redDistance=%.4f..%.4f: %s\n", refl, lp,
+         reflectedLampHits, contactRedPixels, nearContactRedPixels, redMinDistance, redMaxDistance,
          pass ? "PASS" : "FAIL");
   YMGRE_DemoView v = {out, 0, 0, w, hh};
   YMGRE_DemoHost_Show(w, hh, &v, 1, 60);
