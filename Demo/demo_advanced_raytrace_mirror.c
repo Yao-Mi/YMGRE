@@ -1,0 +1,10 @@
+#include "demo_host.h"
+#include "YMGRE_RayTracing.h"
+#include "YMGRE_Camera.h"
+#include "YMGRE_BasicMesh_Gener.h"
+#include "YMGRE_Coordinates_Transform.h"
+#include "YMGRE_Free.h"
+#include "YMGRE_List.h"
+#include <stdio.h>
+static GRErgb24 trace(const GRE_Ray r,const gre_list* os,GRE_Object4d mirror,int depth){if(depth>2)return (GRErgb24){8,10,16};gre_ray_scene_hit h;if(!YMGRE_Ray_IntersectScene(r,os,.002f,100,&h))return (GRErgb24){8,10,16};if(h.object==mirror){gre_ray q={h.hit.position,{0,0,0,0}};YMGRE_Ray_Reflect(&r->direction,&h.hit.normal,&q.direction);q.origin.x+=q.direction.x*.01f;q.origin.y+=q.direction.y*.01f;q.origin.z+=q.direction.z*.01f;return trace(&q,os,mirror,depth+1);}return h.object->polygonList[h.polygonIndex].planeColor;}
+int main(void){const uint16 w=520,hgt=380;GRE_Camera4d c=YMGRE_Creat_Camera(0,w,hgt,38,38,31,31);GRE_Object4d cube=YMGRE_MeshGener_Cube(2.8f,(GRErgb24){220,45,40},"mirror_cube","ray");GRE_Object4d mirror=YMGRE_MeshGener_RectPlane(12,12,12,12,(GRErgb24){150,155,165},"mirror_floor","ray");if(!c||!cube||!mirror)return 1;cube->WorldCoordinate=(gre_fvector4d){0,0,9,1};YMGRE_Object_LocalToWorld(cube);mirror->WorldCoordinate=(gre_fvector4d){0,-1.4f,10,1};YMGRE_Object_LocalToWorld(mirror);YMGRE_Camera_Frustum_Init(c,1,100);gre_fvector4d e={5,4,0,1},t={0,0,9,1};YMGRE_UVNCamera_PositionInit(c,&e,&t,NULL,0);gre_list os={0};YMGRE_List_Append(&os,sizeof(GRE_Object4d),cube);YMGRE_List_Append(&os,sizeof(GRE_Object4d),mirror);GRE_RenderTarget out=YMGRE_Camera_GetRenderTarget(c);uint32 refl=0;for(uint16 y=0;y<hgt;y++)for(uint16 x=0;x<w;x++){gre_ray r;GRErgb24 col={8,10,16};if(YMGRE_Ray_FromCameraPixel(c,x,y,&r)){gre_ray_scene_hit h;if(YMGRE_Ray_IntersectScene(&r,&os,.002f,100,&h)){col=trace(&r,&os,mirror,0);if(h.object==mirror&& (col.R>30||col.G>30||col.B>30))refl++;}}out->data[y*w+x]=GRE_FramePixel_From_RGB24(col);}printf("ray mirror: reflectionPixels=%u: %s\n",refl,refl>100?"PASS":"FAIL");YMGRE_DemoView v={out,0,0,w,hgt};YMGRE_DemoHost_Show(w,hgt,&v,1,60);YMGRE_List_Clear(&os,YMGRE_Free_Object);YMGRE_Free_Camera(c);return refl>100?0:1;}
