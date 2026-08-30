@@ -9,7 +9,7 @@
 typedef struct {
   GRE_Camera4d camera;
   gre_list objects;
-  GRE_Object4d mirror, lamp;
+  GRE_Object4d cube, mirror, lamp, marker;
   gre_fvector4d light;
   uint32 directLamp, reflectedLamp;
   uint32 directSpecular, reflectedSpecular;
@@ -17,6 +17,10 @@ typedef struct {
       reflectedSpecularY;
   float32 sampleSpecular;
   int sampleSpecularDepth;
+  int sampleCubeDepth;
+  int sampleMarkerDepth;
+  uint32 directMarker, reflectedMarker, directMarkerY, reflectedMarkerY;
+  uint16 directMinY, directMaxY, reflectedMinY, reflectedMaxY;
 } Stage;
 
 static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
@@ -29,6 +33,12 @@ static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
       s->reflectedLamp++;
     return (GRErgb24){255, 245, 210};
   }
+  if (h.object == s->marker) {
+    s->sampleMarkerDepth = depth;
+    return (GRErgb24){40, 255, 220};
+  }
+  if (h.object == s->cube)
+    s->sampleCubeDepth = depth;
   if (h.object == s->mirror) {
     gre_ray q = {h.hit.position, {0}};
     YMGRE_Ray_Reflect(&ray->direction, &h.hit.normal, &q.direction);
@@ -84,27 +94,32 @@ static int render(Stage *s, gre_fvector4d light) {
   const uint16 w = 300, h = 230;
   s->light = light;
   s->camera = YMGRE_Creat_Camera(0, w, h, 38, 38, 31, 31);
-  GRE_Object4d cube =
-      YMGRE_MeshGener_Cube(2.8f, (GRErgb24){220, 45, 40}, "cube", "ray");
+  s->cube = YMGRE_MeshGener_Cube(2.8f, (GRErgb24){220, 45, 40}, "cube", "ray");
   s->mirror = YMGRE_MeshGener_RectPlane(12, 12, 8, 8, (GRErgb24){150, 155, 165},
                                         "mirror", "ray");
   s->lamp = YMGRE_MeshGener_Sphere(.38f, 6, 8, (GRErgb24){255, 245, 210},
                                    "lamp", "ray");
-  if (!s->camera || !cube || !s->mirror || !s->lamp)
+  s->marker = YMGRE_MeshGener_Sphere(.16f, 6, 8, (GRErgb24){40, 255, 220},
+                                     "fixed_marker", "ray");
+  if (!s->camera || !s->cube || !s->mirror || !s->lamp || !s->marker)
     return 0;
-  cube->WorldCoordinate = (gre_fvector4d){0, 0, 9, 1};
+  s->cube->WorldCoordinate = (gre_fvector4d){0, 0, 9, 1};
   s->mirror->WorldCoordinate = (gre_fvector4d){0, -1.4f, 10, 1};
   s->lamp->WorldCoordinate = light;
-  YMGRE_Object_LocalToWorld(cube);
+  s->marker->WorldCoordinate = (gre_fvector4d){0, .65f, 7.35f, 1};
+  YMGRE_Object_LocalToWorld(s->cube);
   YMGRE_Object_LocalToWorld(s->mirror);
   YMGRE_Object_LocalToWorld(s->lamp);
+  YMGRE_Object_LocalToWorld(s->marker);
   YMGRE_Camera_Frustum_Init(s->camera, 1, 100);
   gre_fvector4d eye = {5, 4, 0, 1}, target = {0, 0, 9, 1};
   YMGRE_UVNCamera_PositionInit(s->camera, &eye, &target, NULL, 0);
-  YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), cube);
+  YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), s->cube);
   YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), s->mirror);
   YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), s->lamp);
+  YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), s->marker);
   GRE_RenderTarget out = YMGRE_Camera_GetRenderTarget(s->camera);
+  s->directMinY = s->reflectedMinY = h;
   for (uint16 y = 0; y < h; y++)
     for (uint16 x = 0; x < w; x++) {
       gre_ray ray;
@@ -116,7 +131,27 @@ static int render(Stage *s, gre_fvector4d light) {
             s->directLamp++;
           s->sampleSpecular = 0;
           s->sampleSpecularDepth = 0;
+          s->sampleCubeDepth = -1;
+          s->sampleMarkerDepth = -1;
           color = trace(s, &ray, 0);
+          if (s->sampleMarkerDepth == 0) {
+            s->directMarker++;
+            s->directMarkerY += y;
+          } else if (s->sampleMarkerDepth > 0) {
+            s->reflectedMarker++;
+            s->reflectedMarkerY += y;
+          }
+          if (s->sampleCubeDepth == 0) {
+            if (y < s->directMinY)
+              s->directMinY = y;
+            if (y > s->directMaxY)
+              s->directMaxY = y;
+          } else if (s->sampleCubeDepth > 0) {
+            if (y < s->reflectedMinY)
+              s->reflectedMinY = y;
+            if (y > s->reflectedMaxY)
+              s->reflectedMaxY = y;
+          }
           if (s->sampleSpecular > 8.0f) {
             if (s->sampleSpecularDepth > 0) {
               s->reflectedSpecular++;
@@ -158,6 +193,20 @@ int main(void) {
       printf("  reflected specular center=(%u,%u)\n",
              stages[i].reflectedSpecularX / stages[i].reflectedSpecular,
              stages[i].reflectedSpecularY / stages[i].reflectedSpecular);
+    printf("  cube bounds direct=%u..%u reflected=%u..%u\n",
+           stages[i].directMinY, stages[i].directMaxY, stages[i].reflectedMinY,
+           stages[i].reflectedMaxY);
+    printf("  fixed marker direct=%u reflected=%u", stages[i].directMarker,
+           stages[i].reflectedMarker);
+    if (stages[i].directMarker && stages[i].reflectedMarker)
+      printf(" centers y=%u -> %u",
+             stages[i].directMarkerY / stages[i].directMarker,
+             stages[i].reflectedMarkerY / stages[i].reflectedMarker);
+    printf("\n");
+    pass &= stages[i].directMarker > 0 && stages[i].reflectedMarker > 0;
+    if (stages[i].directMarker && stages[i].reflectedMarker)
+      pass &= stages[i].reflectedMarkerY / stages[i].reflectedMarker >
+              stages[i].directMarkerY / stages[i].directMarker;
     pass &= stages[i].directLamp > 0 && stages[i].reflectedLamp > 0;
     if (i == 0 || i == 3) {
       uint32 directCount =
