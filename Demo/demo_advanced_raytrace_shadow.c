@@ -23,11 +23,11 @@ int main(void)
 {
 	const uint16 width=560,height=420;
 	GRE_Camera4d camera=YMGRE_Creat_Camera(0,width,height,38,38,31,31);
-	GRE_Object4d cube=YMGRE_MeshGener_Cube(3.2f,(GRErgb24){210,135,45},"shadow_cube","ray");
+	GRE_Object4d cube=YMGRE_MeshGener_Cube(2.8f,(GRErgb24){210,135,45},"shadow_cube","ray");
 	GRE_Object4d floor=YMGRE_MeshGener_RectPlane(13,12,12,12,(GRErgb24){170,180,190},"shadow_floor","ray");
 	if(!camera||!cube||!floor)return 1;
 	cube->WorldCoordinate=(gre_fvector4d){0,0,9,1}; YMGRE_Object_LocalToWorld(cube);
-	floor->WorldCoordinate=(gre_fvector4d){0,-1.7f,10,1}; YMGRE_Object_LocalToWorld(floor);
+	floor->WorldCoordinate=(gre_fvector4d){0,-1.4f,10,1}; YMGRE_Object_LocalToWorld(floor);
 	YMGRE_Camera_Frustum_Init(camera,1,100);
 	gre_fvector4d eye={6,5,0,1},target={0,0,9,1}; YMGRE_UVNCamera_PositionInit(camera,&eye,&target,NULL,0);
 	gre_list objects={0}; YMGRE_List_Append(&objects,sizeof(GRE_Object4d),cube); YMGRE_List_Append(&objects,sizeof(GRE_Object4d),floor);
