@@ -86,6 +86,8 @@ int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,
 		gre_ray_scene_hit candidate;
 		if (YMGRE_Ray_IntersectObject(ray, object, tMin, closest, &candidate))
 		{
+			float32 tieEpsilon = 1e-5f * ((closest > 1.0f) ? closest : 1.0f);
+			if (found && candidate.hit.distance >= closest - tieEpsilon) continue;
 			found = 1;
 			closest = candidate.hit.distance;
 			*result = candidate;

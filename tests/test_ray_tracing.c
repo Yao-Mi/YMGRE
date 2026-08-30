@@ -35,6 +35,17 @@ int main(void)
 	scenePass = scenePass && nearest.object == front && nearest.hit.distance < 6.0f;
 	pass = pass && scenePass;
 	YMGRE_List_Clear(&objects, YMGRE_Free_Object);
+	GRE_Object4d tieFirst = YMGRE_MeshGener_Cube(2.0f, (GRErgb24){255,0,0}, "tie_first", "ray");
+	GRE_Object4d tieSecond = YMGRE_MeshGener_Cube(2.0f, (GRErgb24){0,0,255}, "tie_second", "ray");
+	tieFirst->WorldCoordinate.z = tieSecond->WorldCoordinate.z = 6.0f;
+	YMGRE_Object_LocalToWorld(tieFirst); YMGRE_Object_LocalToWorld(tieSecond);
+	gre_list ties = { 0 };
+	YMGRE_List_Append(&ties, sizeof(GRE_Object4d), tieFirst);
+	YMGRE_List_Append(&ties, sizeof(GRE_Object4d), tieSecond);
+	gre_ray_scene_hit tieHit = { 0 };
+	pass = pass && YMGRE_Ray_IntersectScene(&ray, &ties, .001f, 100.0f, &tieHit);
+	pass = pass && tieHit.object == tieFirst;
+	YMGRE_List_Clear(&ties, YMGRE_Free_Object);
 	gre_camera4d camera = { 0 };
 	camera.img.width = 100; camera.img.height = 100;
 	camera.perspectPlane.Dis = 1.0f;

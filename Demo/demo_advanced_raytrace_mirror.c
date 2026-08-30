@@ -12,6 +12,8 @@ static uint32 contactRedPixels;
 static float32 redMinDistance = 100.0f, redMaxDistance;
 static uint32 nearContactRedPixels;
 static uint32 objectEdgeRedPixels, mirrorEdgeRedPixels;
+static uint32 reflectedRedPolygons[12];
+static uint8 directCubeMaxR, reflectedCubeMaxR;
 static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
   gre_ray_scene_hit h;
   if (depth > 2 || !YMGRE_Ray_IntersectScene(r, os, .002f, 100, &h))
@@ -24,9 +26,13 @@ static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
   if (h.object == mirror) {
     gre_ray q = {h.hit.position, {0}};
     YMGRE_Ray_Reflect(&r->direction, &h.hit.normal, &q.direction);
-    q.origin.x += q.direction.x * .05f;
-    q.origin.y += q.direction.y * .05f;
-    q.origin.z += q.direction.z * .05f;
+    float32 side = q.direction.x * h.hit.normal.x +
+                   q.direction.y * h.hit.normal.y +
+                   q.direction.z * h.hit.normal.z;
+    float32 bias = side >= 0.0f ? .002f : -.002f;
+    q.origin.x += h.hit.normal.x * bias;
+    q.origin.y += h.hit.normal.y * bias;
+    q.origin.z += h.hit.normal.z * bias;
     GRErgb24 reflected = trace(&q, os, mirror, depth + 1);
     const GRErgb24 mirrorBase = {45, 50, 58};
     const float32 reflectivity = .82f;
@@ -87,6 +93,8 @@ int main(void) {
             refl++;
           if (h.object == lamp)
             lp++;
+          if (h.object == cube && col.R > directCubeMaxR)
+            directCubeMaxR = col.R;
           if (col.R > 80 && col.R > col.G * 2) {
             if (h.object == cube && h.hit.position.y < -1.25f)
               objectEdgeRedPixels++;
@@ -101,11 +109,14 @@ int main(void) {
             contactRedPixels++;
             gre_ray reflected = {h.hit.position, {0}};
             YMGRE_Ray_Reflect(&r.direction, &h.hit.normal, &reflected.direction);
-            reflected.origin.x += reflected.direction.x * .05f;
-            reflected.origin.y += reflected.direction.y * .05f;
-            reflected.origin.z += reflected.direction.z * .05f;
+            float32 bias = reflected.direction.y * h.hit.normal.y >= 0.0f ? .002f : -.002f;
+            reflected.origin.x += h.hit.normal.x * bias;
+            reflected.origin.y += h.hit.normal.y * bias;
+            reflected.origin.z += h.hit.normal.z * bias;
             gre_ray_scene_hit rh;
             if (YMGRE_Ray_IntersectObject(&reflected, cube, .002f, 100, &rh)) {
+              if (rh.polygonIndex < 12) reflectedRedPolygons[rh.polygonIndex]++;
+              if (col.R > reflectedCubeMaxR) reflectedCubeMaxR = col.R;
               if (rh.hit.distance < redMinDistance) redMinDistance = rh.hit.distance;
               if (rh.hit.distance > redMaxDistance) redMaxDistance = rh.hit.distance;
               if (rh.hit.distance < .10f) nearContactRedPixels++;
@@ -120,6 +131,11 @@ int main(void) {
          reflectedLampHits, objectEdgeRedPixels, mirrorEdgeRedPixels,
          contactRedPixels, nearContactRedPixels, redMinDistance, redMaxDistance,
          pass ? "PASS" : "FAIL");
+  printf("directCubeMaxR=%u reflectedCubeMaxR=%u reflected polygons:",
+         directCubeMaxR, reflectedCubeMaxR);
+  for (int i = 0; i < 12; i++) if (reflectedRedPolygons[i])
+    printf(" %d=%u", i, reflectedRedPolygons[i]);
+  printf("\n");
   YMGRE_DemoView v = {out, 0, 0, w, hh};
   YMGRE_DemoHost_Show(w, hh, &v, 1, 60);
   YMGRE_List_Clear(&os, YMGRE_Free_Object);
