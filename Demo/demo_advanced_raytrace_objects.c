@@ -46,12 +46,20 @@ int main(void)
 	YMGRE_List_Append(&objects, sizeof(GRE_Object4d), blue);
 	gre_fvector4d light = { -4, 5, 2, 1 };
 	GRE_RenderTarget out = YMGRE_Camera_GetRenderTarget(camera);
-	uint32 hitPixels = 0, redPixels = 0, bluePixels = 0;
+	uint32 hitPixels = 0, redPixels = 0, bluePixels = 0, overlapPixels = 0, orderErrors = 0;
 	for (uint16 y = 0; y < height; y++) for (uint16 x = 0; x < width; x++) {
 		gre_ray ray; gre_ray_scene_hit hit;
 		GRErgb24 color = { 10, 14, 22 };
 		if (YMGRE_Ray_FromCameraPixel(camera, x, y, &ray) &&
 			YMGRE_Ray_IntersectScene(&ray, &objects, 0.001f, 100.0f, &hit)) {
+			gre_ray_scene_hit redHit, blueHit;
+			int hasRed = YMGRE_Ray_IntersectObject(&ray, red, 0.001f, 100.0f, &redHit);
+			int hasBlue = YMGRE_Ray_IntersectObject(&ray, blue, 0.001f, 100.0f, &blueHit);
+			if (hasRed && hasBlue) {
+				overlapPixels++;
+				GRE_Object4d expected = redHit.hit.distance <= blueHit.hit.distance ? red : blue;
+				if (hit.object != expected) orderErrors++;
+			}
 			color = shade(hit.object->polygonList[hit.polygonIndex].planeColor,
 				&hit.hit.position, &hit.hit.normal, &light);
 			hitPixels++;
@@ -60,8 +68,8 @@ int main(void)
 		out->data[y * width + x] = GRE_FramePixel_From_RGB24(color);
 	}
 	int pass = hitPixels > 12000 && redPixels > 3000 && bluePixels > 3000;
-	printf("ray two objects: hits=%u red=%u blue=%u: %s\n",
-		hitPixels, redPixels, bluePixels, pass ? "PASS" : "FAIL");
+	printf("ray two objects: hits=%u red=%u blue=%u overlap=%u orderErrors=%u: %s\n",
+		hitPixels, redPixels, bluePixels, overlapPixels, orderErrors, pass && orderErrors == 0 ? "PASS" : "FAIL");
 	YMGRE_DemoView view = { out, 0, 0, width, height };
 	YMGRE_DemoHost_Show(width, height, &view, 1, 60);
 	YMGRE_List_Clear(&objects, YMGRE_Free_Object);
