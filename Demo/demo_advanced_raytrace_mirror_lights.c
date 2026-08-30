@@ -95,7 +95,13 @@ static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
     q.origin.x += h.hit.normal.x * bias;
     q.origin.y += h.hit.normal.y * bias;
     q.origin.z += h.hit.normal.z * bias;
-    return trace(s, &q, depth + 1);
+    GRErgb24 reflected = trace(s, &q, depth + 1);
+    const float32 reflectivity = .88f;
+    const GRErgb24 base = {42, 48, 58};
+    return (GRErgb24){
+        (uint8)(base.R * (1.0f - reflectivity) + reflected.R * reflectivity),
+        (uint8)(base.G * (1.0f - reflectivity) + reflected.G * reflectivity),
+        (uint8)(base.B * (1.0f - reflectivity) + reflected.B * reflectivity)};
   }
   return shadeSurface(s, ray, &h, depth);
 }
