@@ -11,6 +11,7 @@ static uint32 reflectedLampHits;
 static uint32 contactRedPixels;
 static float32 redMinDistance = 100.0f, redMaxDistance;
 static uint32 nearContactRedPixels;
+static uint32 objectEdgeRedPixels, mirrorEdgeRedPixels;
 static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
   gre_ray_scene_hit h;
   if (depth > 2 || !YMGRE_Ray_IntersectScene(r, os, .002f, 100, &h))
@@ -86,6 +87,14 @@ int main(void) {
             refl++;
           if (h.object == lamp)
             lp++;
+          if (col.R > 80 && col.R > col.G * 2) {
+            if (h.object == cube && h.hit.position.y < -1.25f)
+              objectEdgeRedPixels++;
+            if (h.object == mirror && h.hit.position.x > -1.55f &&
+                h.hit.position.x < 1.55f && h.hit.position.z > 7.4f &&
+                h.hit.position.z < 10.6f)
+              mirrorEdgeRedPixels++;
+          }
           if (h.object == mirror && col.R > 80 && col.R > col.G * 2 &&
               h.hit.position.x > -1.55f && h.hit.position.x < 1.55f &&
               h.hit.position.z > 7.4f && h.hit.position.z < 10.6f) {
@@ -107,8 +116,9 @@ int main(void) {
       out->data[y * w + x] = GRE_FramePixel_From_RGB24(col);
     }
   int pass = refl > 100 && lp > 10 && reflectedLampHits > 2;
-  printf("ray mirror: reflection=%u light=%u reflectedLight=%u contactRed=%u nearRed=%u redDistance=%.4f..%.4f: %s\n", refl, lp,
-         reflectedLampHits, contactRedPixels, nearContactRedPixels, redMinDistance, redMaxDistance,
+  printf("ray mirror: reflection=%u light=%u reflectedLight=%u objectEdgeRed=%u mirrorEdgeRed=%u contactRed=%u nearRed=%u redDistance=%.4f..%.4f: %s\n", refl, lp,
+         reflectedLampHits, objectEdgeRedPixels, mirrorEdgeRedPixels,
+         contactRedPixels, nearContactRedPixels, redMinDistance, redMaxDistance,
          pass ? "PASS" : "FAIL");
   YMGRE_DemoView v = {out, 0, 0, w, hh};
   YMGRE_DemoHost_Show(w, hh, &v, 1, 60);
