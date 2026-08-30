@@ -121,7 +121,7 @@ static int render(Stage *s, gre_fvector4d light) {
   s->cube->WorldCoordinate = (gre_fvector4d){0, 0, 9, 1};
   s->mirror->WorldCoordinate = (gre_fvector4d){0, -1.4f, 10, 1};
   s->lamp->WorldCoordinate = light;
-  s->marker->WorldCoordinate = (gre_fvector4d){-1.25f, 1.25f, 7.54f, 1};
+  s->marker->WorldCoordinate = (gre_fvector4d){1.25f, 1.25f, 7.54f, 1};
   YMGRE_Object_LocalToWorld(s->cube);
   YMGRE_Object_LocalToWorld(s->mirror);
   YMGRE_Object_LocalToWorld(s->lamp);
