@@ -54,7 +54,24 @@ static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
   float32 k = .25f + 2 * n / (1 + .03f * d * d);
   if (k > 1)
     k = 1;
-  return (GRErgb24){b.R * k, b.G * k, b.B * k};
+  gre_fvector4d view = {-r->direction.x, -r->direction.y, -r->direction.z, 0};
+  gre_fvector4d halfVector = {l.x + view.x, l.y + view.y, l.z + view.z, 0};
+  float32 specular = 0.0f;
+  if (n > 0.0f && YMGRE_Fvector4d_Len2(&halfVector) > 1e-8f) {
+    YMGRE_Fvector4d_Normalize(&halfVector);
+    float32 ndoth = h.hit.normal.x * halfVector.x +
+                    h.hit.normal.y * halfVector.y +
+                    h.hit.normal.z * halfVector.z;
+    if (ndoth > 0.0f)
+      specular = 210.0f * YMGRE_Pow(ndoth, 36.0f) /
+                 (1.0f + .02f * d * d);
+  }
+  float32 red = b.R * k + specular, green = b.G * k + specular,
+          blue = b.B * k + specular;
+  if (red > 255) red = 255;
+  if (green > 255) green = 255;
+  if (blue > 255) blue = 255;
+  return (GRErgb24){(uint8)red, (uint8)green, (uint8)blue};
 }
 int main(void) {
   const uint16 w = 520, hh = 380;
