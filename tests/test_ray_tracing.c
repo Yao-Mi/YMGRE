@@ -66,6 +66,36 @@ int main(void)
 	gre_fvector4d refracted;
 	pass = pass && YMGRE_Ray_Refract(&incident, &normal, 1.0f, 1.5f, &refracted);
 	pass = pass && refracted.y < -0.8f && refracted.z > 0.5f;
+	/* A planar mirror can be evaluated either with a virtual camera and the
+	 * real scene, or with a mirrored scene and the real camera. */
+	const float32 mirrorY = -1.4f;
+	gre_fvector4d cameraReal = { 5, 4, 0, 1 };
+	gre_fvector4d pointReal = { .3f, .2f, 7.6f, 1 };
+	gre_fvector4d lightReal = { 0, 0, 5, 1 };
+	gre_fvector4d normalReal = { .0f, .6f, -.8f, 0 };
+	gre_fvector4d cameraVirtual = cameraReal;
+	cameraVirtual.y = 2.0f * mirrorY - cameraReal.y;
+	gre_fvector4d viewA = { cameraVirtual.x-pointReal.x, cameraVirtual.y-pointReal.y,
+		cameraVirtual.z-pointReal.z, 0 };
+	gre_fvector4d lightA = { lightReal.x-pointReal.x, lightReal.y-pointReal.y,
+		lightReal.z-pointReal.z, 0 };
+	YMGRE_Fvector4d_Normalize(&viewA); YMGRE_Fvector4d_Normalize(&lightA);
+	gre_fvector4d halfA = { viewA.x+lightA.x, viewA.y+lightA.y, viewA.z+lightA.z, 0 };
+	YMGRE_Fvector4d_Normalize(&halfA);
+	float32 specA = YMGRE_Fvector4d_Dot(&normalReal, &halfA);
+	gre_fvector4d pointVirtual = pointReal, lightVirtual = lightReal, normalVirtual = normalReal;
+	pointVirtual.y = 2.0f * mirrorY - pointReal.y;
+	lightVirtual.y = 2.0f * mirrorY - lightReal.y;
+	normalVirtual.y = -normalReal.y;
+	gre_fvector4d viewB = { cameraReal.x-pointVirtual.x, cameraReal.y-pointVirtual.y,
+		cameraReal.z-pointVirtual.z, 0 };
+	gre_fvector4d lightB = { lightVirtual.x-pointVirtual.x, lightVirtual.y-pointVirtual.y,
+		lightVirtual.z-pointVirtual.z, 0 };
+	YMGRE_Fvector4d_Normalize(&viewB); YMGRE_Fvector4d_Normalize(&lightB);
+	gre_fvector4d halfB = { viewB.x+lightB.x, viewB.y+lightB.y, viewB.z+lightB.z, 0 };
+	YMGRE_Fvector4d_Normalize(&halfB);
+	float32 specB = YMGRE_Fvector4d_Dot(&normalVirtual, &halfB);
+	pass = pass && YMGRE_Fabs(specA-specB) < 1e-5f;
 	printf("ray triangle intersection: %s\n", pass ? "PASS" : "FAIL");
 	return pass ? 0 : 1;
 }
