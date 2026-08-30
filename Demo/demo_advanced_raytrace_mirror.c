@@ -10,8 +10,7 @@ static GRE_Object4d lamp;
 static uint32 reflectedLampHits;
 static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
   gre_ray_scene_hit h;
-  float32 minDistance = depth > 0 ? .08f : .002f;
-  if (depth > 2 || !YMGRE_Ray_IntersectScene(r, os, minDistance, 100, &h))
+  if (depth > 2 || !YMGRE_Ray_IntersectScene(r, os, .002f, 100, &h))
     return (GRErgb24){8, 10, 16};
   if (h.object == lamp) {
     if (depth > 0)
