@@ -1,6 +1,23 @@
 #include "YMGRE_RayTracing.h"
 #include "YMGRE_MathBase.h"
 
+static int rayIntersectsBoundSphere(const GRE_Ray ray, GRE_Object4d object,
+	float32 tMin, float32 tMax)
+{
+	if (object->boundType != GRE_Bounding_Sphere_R || object->BoundingSphereR <= 0.0f)
+		return 1;
+	gre_fvector4d center = object->WorldCoordinate;
+	float32 radius = object->BoundingSphereR * ((object->scale > 0.0f) ? object->scale : 1.0f);
+	float32 ox = ray->origin.x - center.x, oy = ray->origin.y - center.y, oz = ray->origin.z - center.z;
+	float32 b = ox * ray->direction.x + oy * ray->direction.y + oz * ray->direction.z;
+	float32 c = ox * ox + oy * oy + oz * oz - radius * radius;
+	float32 disc = b * b - c;
+	if (disc < 0.0f) return 0;
+	float32 root = YMGRE_Sqrt(disc);
+	float32 nearT = -b - root, farT = -b + root;
+	return farT >= tMin && nearT <= tMax;
+}
+
 int YMGRE_Ray_IntersectTriangle(const GRE_Ray ray,
 	const gre_fvector4d* p0, const gre_fvector4d* p1, const gre_fvector4d* p2,
 	float32 tMin, float32 tMax, GRE_RayHit hit)
@@ -36,6 +53,7 @@ int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result)
 {
 	if (ray == NULL || object == NULL || result == NULL || object->pointList == NULL) return 0;
+	if (!rayIntersectsBoundSphere(ray, object, tMin, tMax)) return 0;
 	int found = 0; float32 closest = tMax; gre_ray_hit candidate;
 	for (uint32 pi = 0; pi < (uint32)object->polygonNum; pi++)
 	{
