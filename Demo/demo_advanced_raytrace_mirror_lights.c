@@ -49,7 +49,27 @@ static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
   float32 k = .25f + 2 * n / (1 + .03f * d * d);
   if (k > 1)
     k = 1;
-  return (GRErgb24){b.R * k, b.G * k, b.B * k};
+  gre_fvector4d view = {-ray->direction.x, -ray->direction.y, -ray->direction.z,
+                        0};
+  gre_fvector4d halfVector = {l.x + view.x, l.y + view.y, l.z + view.z, 0};
+  float32 specular = 0;
+  if (n > 0 && YMGRE_Fvector4d_Len2(&halfVector) > 1e-8f) {
+    YMGRE_Fvector4d_Normalize(&halfVector);
+    float32 ndoth = h.hit.normal.x * halfVector.x +
+                    h.hit.normal.y * halfVector.y +
+                    h.hit.normal.z * halfVector.z;
+    if (ndoth > 0)
+      specular = 210.0f * YMGRE_Pow(ndoth, 36.0f) / (1.0f + .02f * d * d);
+  }
+  float32 red = b.R * k + specular, green = b.G * k + specular,
+          blue = b.B * k + specular;
+  if (red > 255)
+    red = 255;
+  if (green > 255)
+    green = 255;
+  if (blue > 255)
+    blue = 255;
+  return (GRErgb24){(uint8)red, (uint8)green, (uint8)blue};
 }
 static int render(Stage *s, gre_fvector4d light) {
   const uint16 w = 300, h = 230;
@@ -94,11 +114,11 @@ static int render(Stage *s, gre_fvector4d light) {
 }
 int main(void) {
   const char *names[5] = {"front", "back", "left", "right", "top"};
-  gre_fvector4d lights[5] = {{0, 0, 5.5f, 1},
-                             {0, 0, 12.5f, 1},
-                             {-3.5f, 0, 9, 1},
-                             {3.5f, 0, 9, 1},
-                             {0, 3.5f, 9, 1}};
+  gre_fvector4d lights[5] = {{0, 0, 5.0f, 1},
+                             {0, 0, 14.0f, 1},
+                             {-5.0f, 0, 9, 1},
+                             {5.0f, 0, 9, 1},
+                             {0, 5.0f, 9, 1}};
   Stage stages[5] = {0};
   YMGRE_DemoView views[5];
   int pass = 1;
