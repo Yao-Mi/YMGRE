@@ -16,7 +16,8 @@ static uint32 reflectedRedPolygons[12];
 static uint8 directCubeMaxR, reflectedCubeMaxR;
 static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
   gre_ray_scene_hit h;
-  if (depth > 2 || !YMGRE_Ray_IntersectScene(r, os, .002f, 100, &h))
+  float32 tMin = depth > 0 ? 1e-5f : .002f;
+  if (depth > 2 || !YMGRE_Ray_IntersectScene(r, os, tMin, 100, &h))
     return (GRErgb24){8, 10, 16};
   if (h.object == lamp) {
     if (depth > 0)
@@ -114,7 +115,7 @@ int main(void) {
             reflected.origin.y += h.hit.normal.y * bias;
             reflected.origin.z += h.hit.normal.z * bias;
             gre_ray_scene_hit rh;
-            if (YMGRE_Ray_IntersectObject(&reflected, cube, .002f, 100, &rh)) {
+            if (YMGRE_Ray_IntersectObject(&reflected, cube, 1e-5f, 100, &rh)) {
               if (rh.polygonIndex < 12) reflectedRedPolygons[rh.polygonIndex]++;
               if (col.R > reflectedCubeMaxR) reflectedCubeMaxR = col.R;
               if (rh.hit.distance < redMinDistance) redMinDistance = rh.hit.distance;
