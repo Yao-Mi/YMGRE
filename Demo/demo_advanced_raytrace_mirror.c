@@ -5,7 +5,7 @@
 #include "YMGRE_RayTracing.h"
 #include "demo_host.h"
 #include <stdio.h>
-static const gre_fvector4d light = {-2.8f, 3.2f, 9.5f, 1};
+static const gre_fvector4d light = {0.0f, 4.6f, 9.2f, 1};
 static GRE_Object4d lamp;
 static uint32 reflectedLampHits;
 static uint32 contactRedPixels;
