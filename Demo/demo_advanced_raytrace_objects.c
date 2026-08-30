@@ -35,8 +35,8 @@ int main(void)
 {
 	const uint16 width = 560, height = 420;
 	GRE_Camera4d camera = YMGRE_Creat_Camera(0, width, height, 38, 38, 31, 31);
-	GRE_Object4d red = makeCube(-2.2f, 9.0f, (GRErgb24){ 220, 45, 40 }, "ray_red");
-	GRE_Object4d blue = makeCube(2.2f, 11.0f, (GRErgb24){ 40, 80, 225 }, "ray_blue");
+	GRE_Object4d red = makeCube(-0.9f, 9.0f, (GRErgb24){ 220, 45, 40 }, "ray_red");
+	GRE_Object4d blue = makeCube(0.9f, 11.0f, (GRErgb24){ 40, 80, 225 }, "ray_blue");
 	if (camera == NULL || red == NULL || blue == NULL) return 1;
 	YMGRE_Camera_Frustum_Init(camera, 1, 100);
 	gre_fvector4d eye = { 0, 1.2f, 0, 1 }, target = { 0, 0, 10, 1 };
