@@ -11,6 +11,7 @@ typedef struct {
   gre_list objects;
   GRE_Object4d cube, mirror, lamp, marker;
   gre_fvector4d light;
+  gre_fvector4d eye;
   uint32 directLamp, reflectedLamp;
   uint32 directSpecular, reflectedSpecular;
   uint32 directSpecularX, directSpecularY, reflectedSpecularX,
@@ -42,8 +43,10 @@ static GRErgb24 shadeSurface(Stage *s, GRE_Ray ray, const gre_ray_scene_hit *h,
     k = 1;
   /* ray points from the mirror/virtual camera toward the surface; its
    * negative is the correct view vector for both direct and reflected hits. */
-  gre_fvector4d view = {-ray->direction.x, -ray->direction.y, -ray->direction.z,
-                        0};
+  gre_fvector4d view = {s->eye.x - h->hit.position.x,
+                        s->eye.y - h->hit.position.y,
+                        s->eye.z - h->hit.position.z, 0};
+  YMGRE_Fvector4d_Normalize(&view);
   gre_fvector4d halfVector = {l.x + view.x, l.y + view.y, l.z + view.z, 0};
   float32 specular = 0;
   if (n > 0 && YMGRE_Fvector4d_Len2(&halfVector) > 1e-8f) {
@@ -121,14 +124,15 @@ static int render(Stage *s, gre_fvector4d light) {
   s->cube->WorldCoordinate = (gre_fvector4d){0, 0, 9, 1};
   s->mirror->WorldCoordinate = (gre_fvector4d){0, -1.4f, 10, 1};
   s->lamp->WorldCoordinate = light;
-  s->marker->WorldCoordinate = (gre_fvector4d){1.25f, 1.25f, 7.54f, 1};
+  s->marker->WorldCoordinate = (gre_fvector4d){-1.25f, 1.25f, 7.54f, 1};
   YMGRE_Object_LocalToWorld(s->cube);
   YMGRE_Object_LocalToWorld(s->mirror);
   YMGRE_Object_LocalToWorld(s->lamp);
   YMGRE_Object_LocalToWorld(s->marker);
   YMGRE_Camera_Frustum_Init(s->camera, 1, 100);
-  gre_fvector4d eye = {5, 4, 0, 1}, target = {0, 0, 9, 1};
-  YMGRE_UVNCamera_PositionInit(s->camera, &eye, &target, NULL, 0);
+  s->eye = (gre_fvector4d){5, 4, 0, 1};
+  gre_fvector4d target = {0, 0, 9, 1};
+  YMGRE_UVNCamera_PositionInit(s->camera, &s->eye, &target, NULL, 0);
   YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), s->cube);
   YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), s->mirror);
   YMGRE_List_Append(&s->objects, sizeof(GRE_Object4d), s->lamp);
