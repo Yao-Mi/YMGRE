@@ -96,6 +96,11 @@ int main(void)
 	YMGRE_Fvector4d_Normalize(&halfB);
 	float32 specB = YMGRE_Fvector4d_Dot(&normalVirtual, &halfB);
 	pass = pass && YMGRE_Fabs(specA-specB) < 1e-5f;
+	gre_fvector4d shadePoint = {0, 0, 5, 1}, shadeNormal = {0, 0, -1, 0};
+	gre_fvector4d shadeView = {0, 0, -1, 0}, shadeLight = {0, 0, 0, 1};
+	GRErgb24 shaded = YMGRE_Ray_ShadeBlinnPhong((GRErgb24){180, 40, 30}, &shadePoint,
+		&shadeNormal, &shadeView, &shadeLight, (GRErgb24){255,255,255}, .1f, 4.0f, .01f, 180.0f, 24.0f);
+	pass = pass && shaded.R > 200 && shaded.G > 40 && shaded.B > 30;
 	printf("ray triangle intersection: %s\n", pass ? "PASS" : "FAIL");
 	return pass ? 0 : 1;
 }

@@ -37,5 +37,10 @@ void YMGRE_Ray_Reflect(const gre_fvector4d* incident, const gre_fvector4d* norma
 	gre_fvector4d* result);
 int YMGRE_Ray_Refract(const gre_fvector4d* incident, const gre_fvector4d* normal,
 	float32 etaIncident, float32 etaTransmitted, gre_fvector4d* result);
+GRErgb24 YMGRE_Ray_ShadeBlinnPhong(GRErgb24 baseColor,
+	const gre_fvector4d* position, const gre_fvector4d* normal,
+	const gre_fvector4d* viewDirection, const gre_fvector4d* lightPosition,
+	GRErgb24 lightColor, float32 ambient, float32 lightIntensity,
+	float32 attenuation, float32 specularStrength, float32 specularPower);
 
 #endif

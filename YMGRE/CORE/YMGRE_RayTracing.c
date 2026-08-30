@@ -153,3 +153,37 @@ int YMGRE_Ray_Refract(const gre_fvector4d* incident, const gre_fvector4d* normal
 	YMGRE_Fvector4d_Normalize(result);
 	return 1;
 }
+
+GRErgb24 YMGRE_Ray_ShadeBlinnPhong(GRErgb24 baseColor,
+	const gre_fvector4d* position, const gre_fvector4d* normal,
+	const gre_fvector4d* viewDirection, const gre_fvector4d* lightPosition,
+	GRErgb24 lightColor, float32 ambient, float32 lightIntensity,
+	float32 attenuation, float32 specularStrength, float32 specularPower)
+{
+	if (position == NULL || normal == NULL || viewDirection == NULL || lightPosition == NULL)
+		return (GRErgb24){0, 0, 0};
+	if (ambient < 0) ambient = 0; if (ambient > 1) ambient = 1;
+	if (specularPower < 1) specularPower = 1;
+	gre_fvector4d l = { lightPosition->x - position->x, lightPosition->y - position->y,
+		lightPosition->z - position->z, 0 };
+	float32 distance = YMGRE_Fvector4d_Len1(&l);
+	if (distance > 1e-8f) YMGRE_Fvector4d_Normalize(&l);
+	gre_fvector4d v = *viewDirection;
+	if (YMGRE_Fvector4d_Len2(&v) > 1e-8f) YMGRE_Fvector4d_Normalize(&v);
+	float32 ndotl = normal->x*l.x + normal->y*l.y + normal->z*l.z;
+	if (ndotl < 0) ndotl = 0;
+	float32 factor = 1.0f / (1.0f + attenuation * distance * distance);
+	float32 diffuse = lightIntensity * factor * ndotl;
+	gre_fvector4d h = { l.x + v.x, l.y + v.y, l.z + v.z, 0 };
+	float32 specular = 0;
+	if (ndotl > 0 && YMGRE_Fvector4d_Len2(&h) > 1e-8f) {
+		YMGRE_Fvector4d_Normalize(&h);
+		float32 ndoth = normal->x*h.x + normal->y*h.y + normal->z*h.z;
+		if (ndoth > 0) specular = specularStrength * factor * YMGRE_Pow(ndoth, specularPower);
+	}
+	float32 r = baseColor.R * (ambient + diffuse * lightColor.R / 255.0f) + specular * lightColor.R / 255.0f;
+	float32 g = baseColor.G * (ambient + diffuse * lightColor.G / 255.0f) + specular * lightColor.G / 255.0f;
+	float32 b = baseColor.B * (ambient + diffuse * lightColor.B / 255.0f) + specular * lightColor.B / 255.0f;
+	if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
+	return (GRErgb24){ (uint8)r, (uint8)g, (uint8)b };
+}
