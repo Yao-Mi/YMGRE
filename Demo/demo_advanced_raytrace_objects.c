@@ -39,7 +39,7 @@ int main(void)
 	GRE_Object4d blue = makeCube(0.9f, 11.0f, (GRErgb24){ 40, 80, 225 }, "ray_blue");
 	if (camera == NULL || red == NULL || blue == NULL) return 1;
 	YMGRE_Camera_Frustum_Init(camera, 1, 100);
-	gre_fvector4d eye = { 0, 1.2f, 0, 1 }, target = { 0, 0, 10, 1 };
+	gre_fvector4d eye = { 0, 4.8f, 0, 1 }, target = { 0, 0, 10, 1 };
 	YMGRE_UVNCamera_PositionInit(camera, &eye, &target, NULL, 0);
 	gre_list objects = { 0 };
 	YMGRE_List_Append(&objects, sizeof(GRE_Object4d), red);
