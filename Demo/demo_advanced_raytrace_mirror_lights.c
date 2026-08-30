@@ -25,49 +25,16 @@ typedef struct {
 static GRErgb24 shadeSurface(Stage *s, GRE_Ray ray, const gre_ray_scene_hit *h,
                              int depth) {
   GRErgb24 b = h->object->polygonList[h->polygonIndex].planeColor;
-  gre_fvector4d l = {s->light.x - h->hit.position.x,
-                     s->light.y - h->hit.position.y,
-                     s->light.z - h->hit.position.z, 0};
-  float32 d = YMGRE_Fvector4d_Len1(&l);
-  if (d < 1e-5f)
-    d = 1e-5f;
-  YMGRE_Fvector4d_Normalize(&l);
-  float32 n =
-      h->hit.normal.x * l.x + h->hit.normal.y * l.y + h->hit.normal.z * l.z;
-  if (n < 0)
-    n = 0;
-  float32 k = .25f + 2 * n / (1 + .03f * d * d);
-  if (k > 1)
-    k = 1;
-  /* ray points from the mirror/virtual camera toward the surface; its
-   * negative is the correct view vector for both direct and reflected hits. */
-  gre_fvector4d view = {s->eye.x - h->hit.position.x,
-                        s->eye.y - h->hit.position.y,
-                        s->eye.z - h->hit.position.z, 0};
-  YMGRE_Fvector4d_Normalize(&view);
-  gre_fvector4d halfVector = {l.x + view.x, l.y + view.y, l.z + view.z, 0};
-  float32 specular = 0;
-  if (n > 0 && YMGRE_Fvector4d_Len2(&halfVector) > 1e-8f) {
-    YMGRE_Fvector4d_Normalize(&halfVector);
-    float32 ndoth = h->hit.normal.x * halfVector.x +
-                    h->hit.normal.y * halfVector.y +
-                    h->hit.normal.z * halfVector.z;
-    if (ndoth > 0)
-      specular = 240.0f * YMGRE_Pow(ndoth, 14.0f) / (1.0f + .008f * d * d);
-  }
-  if (specular > s->sampleSpecular) {
-    s->sampleSpecular = specular;
-    s->sampleSpecularDepth = depth;
-  }
-  float32 red = b.R * k + specular, green = b.G * k + specular,
-          blue = b.B * k + specular;
-  if (red > 255)
-    red = 255;
-  if (green > 255)
-    green = 255;
-  if (blue > 255)
-    blue = 255;
-  return (GRErgb24){(uint8)red, (uint8)green, (uint8)blue};
+  /* The ray direction points toward the hit; shading expects hit-to-camera. */
+  gre_fvector4d view = {-ray->direction.x, -ray->direction.y,
+                        -ray->direction.z, 0};
+  GRErgb24 color = YMGRE_Ray_ShadeBlinnPhong(
+      b, &h->hit.position, &h->hit.normal, &view, &s->light,
+      (GRErgb24){255, 255, 255}, .25f, 2.0f, .03f, 240.0f, 14.0f);
+  /* Keep the existing pixel-location diagnostics independent of the formula. */
+  s->sampleSpecular = (color.G > (uint8)(b.G + 45)) ? 240.0f : 0.0f;
+  s->sampleSpecularDepth = depth;
+  return color;
 }
 
 static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
