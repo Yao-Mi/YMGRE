@@ -12,6 +12,11 @@ typedef struct {
   GRE_Object4d mirror, lamp;
   gre_fvector4d light;
   uint32 directLamp, reflectedLamp;
+  uint32 directSpecular, reflectedSpecular;
+  uint32 directSpecularX, directSpecularY, reflectedSpecularX,
+      reflectedSpecularY;
+  float32 sampleSpecular;
+  int sampleSpecularDepth;
 } Stage;
 
 static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
@@ -59,7 +64,11 @@ static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
                     h.hit.normal.y * halfVector.y +
                     h.hit.normal.z * halfVector.z;
     if (ndoth > 0)
-      specular = 210.0f * YMGRE_Pow(ndoth, 36.0f) / (1.0f + .02f * d * d);
+      specular = 240.0f * YMGRE_Pow(ndoth, 14.0f) / (1.0f + .008f * d * d);
+  }
+  if (specular > s->sampleSpecular) {
+    s->sampleSpecular = specular;
+    s->sampleSpecularDepth = depth;
   }
   float32 red = b.R * k + specular, green = b.G * k + specular,
           blue = b.B * k + specular;
@@ -105,7 +114,20 @@ static int render(Stage *s, gre_fvector4d light) {
         if (YMGRE_Ray_IntersectScene(&ray, &s->objects, .002f, 100, &hit)) {
           if (hit.object == s->lamp)
             s->directLamp++;
+          s->sampleSpecular = 0;
+          s->sampleSpecularDepth = 0;
           color = trace(s, &ray, 0);
+          if (s->sampleSpecular > 8.0f) {
+            if (s->sampleSpecularDepth > 0) {
+              s->reflectedSpecular++;
+              s->reflectedSpecularX += x;
+              s->reflectedSpecularY += y;
+            } else {
+              s->directSpecular++;
+              s->directSpecularX += x;
+              s->directSpecularY += y;
+            }
+          }
         }
       }
       out->data[y * w + x] = GRE_FramePixel_From_RGB24(color);
@@ -124,8 +146,39 @@ int main(void) {
   int pass = 1;
   for (int i = 0; i < 5; i++) {
     pass &= render(&stages[i], lights[i]);
-    printf("mirror light %s: direct=%u reflected=%u\n", names[i],
-           stages[i].directLamp, stages[i].reflectedLamp);
+    printf("mirror light %s: direct=%u reflected=%u specular=%u "
+           "reflectedSpecular=%u\n",
+           names[i], stages[i].directLamp, stages[i].reflectedLamp,
+           stages[i].directSpecular, stages[i].reflectedSpecular);
+    if (stages[i].directSpecular)
+      printf("  direct specular center=(%u,%u)\n",
+             stages[i].directSpecularX / stages[i].directSpecular,
+             stages[i].directSpecularY / stages[i].directSpecular);
+    if (stages[i].reflectedSpecular)
+      printf("  reflected specular center=(%u,%u)\n",
+             stages[i].reflectedSpecularX / stages[i].reflectedSpecular,
+             stages[i].reflectedSpecularY / stages[i].reflectedSpecular);
+    pass &= stages[i].directLamp > 0 && stages[i].reflectedLamp > 0;
+    if (i == 0 || i == 3) {
+      uint32 directCount =
+          stages[i].directSpecular ? stages[i].directSpecular : 1;
+      uint32 reflectedCount =
+          stages[i].reflectedSpecular ? stages[i].reflectedSpecular : 1;
+      uint32 directX = stages[i].directSpecularX / directCount;
+      uint32 directY = stages[i].directSpecularY / directCount;
+      uint32 reflectedX = stages[i].reflectedSpecularX / reflectedCount;
+      uint32 reflectedY = stages[i].reflectedSpecularY / reflectedCount;
+      uint32 dx =
+          directX > reflectedX ? directX - reflectedX : reflectedX - directX;
+      pass &=
+          stages[i].directSpecular > 100 && stages[i].reflectedSpecular > 100;
+      pass &= dx < 8 && reflectedY > directY + 20;
+    } else if (i == 4) {
+      pass &=
+          stages[i].directSpecular > 100 && stages[i].reflectedSpecular == 0;
+    } else {
+      pass &= stages[i].directSpecular == 0 && stages[i].reflectedSpecular == 0;
+    }
     views[i] = (YMGRE_DemoView){
         YMGRE_Camera_GetRenderTarget(stages[i].camera),
         (int16)((i < 3 ? i : i - 3) * 310 + (i >= 3 ? 155 : 0)),
