@@ -154,6 +154,22 @@ int YMGRE_Ray_Refract(const gre_fvector4d* incident, const gre_fvector4d* normal
 	return 1;
 }
 
+void YMGRE_Ray_SpawnFromSurface(const gre_fvector4d* position,
+	const gre_fvector4d* normal, const gre_fvector4d* direction,
+	float32 bias, GRE_Ray result)
+{
+	if (position == NULL || normal == NULL || direction == NULL || result == NULL) return;
+	if (bias < 0.0f) bias = -bias;
+	float32 side = direction->x * normal->x + direction->y * normal->y + direction->z * normal->z;
+	float32 offset = side >= 0.0f ? bias : -bias;
+	result->origin.x = position->x + normal->x * offset;
+	result->origin.y = position->y + normal->y * offset;
+	result->origin.z = position->z + normal->z * offset;
+	result->origin.w = 1.0f;
+	result->direction = *direction;
+	result->direction.w = 0.0f;
+}
+
 GRErgb24 YMGRE_Ray_ShadeBlinnPhong(GRErgb24 baseColor,
 	const gre_fvector4d* position, const gre_fvector4d* normal,
 	const gre_fvector4d* viewDirection, const gre_fvector4d* lightPosition,

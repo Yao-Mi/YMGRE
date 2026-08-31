@@ -66,6 +66,10 @@ int main(void)
 	gre_fvector4d refracted;
 	pass = pass && YMGRE_Ray_Refract(&incident, &normal, 1.0f, 1.5f, &refracted);
 	pass = pass && refracted.y < -0.8f && refracted.z > 0.5f;
+	gre_ray spawned;
+	gre_fvector4d surface = {0, 2, 0, 1};
+	YMGRE_Ray_SpawnFromSurface(&surface, &normal, &refracted, .002f, &spawned);
+	pass = pass && spawned.origin.y < surface.y && spawned.direction.y == refracted.y;
 	/* A planar mirror can be evaluated either with a virtual camera and the
 	 * real scene, or with a mirrored scene and the real camera. */
 	const float32 mirrorY = -1.4f;

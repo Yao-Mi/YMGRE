@@ -25,15 +25,10 @@ static GRErgb24 trace(GRE_Ray r, gre_list *os, GRE_Object4d mirror, int depth) {
     return (GRErgb24){255, 245, 210};
   }
   if (h.object == mirror) {
-    gre_ray q = {h.hit.position, {0}};
-    YMGRE_Ray_Reflect(&r->direction, &h.hit.normal, &q.direction);
-    float32 side = q.direction.x * h.hit.normal.x +
-                   q.direction.y * h.hit.normal.y +
-                   q.direction.z * h.hit.normal.z;
-    float32 bias = side >= 0.0f ? .002f : -.002f;
-    q.origin.x += h.hit.normal.x * bias;
-    q.origin.y += h.hit.normal.y * bias;
-    q.origin.z += h.hit.normal.z * bias;
+    gre_ray q;
+    gre_fvector4d reflectedDirection;
+    YMGRE_Ray_Reflect(&r->direction, &h.hit.normal, &reflectedDirection);
+    YMGRE_Ray_SpawnFromSurface(&h.hit.position, &h.hit.normal, &reflectedDirection, .002f, &q);
     GRErgb24 reflected = trace(&q, os, mirror, depth + 1);
     const GRErgb24 mirrorBase = {45, 50, 58};
     const float32 reflectivity = .82f;

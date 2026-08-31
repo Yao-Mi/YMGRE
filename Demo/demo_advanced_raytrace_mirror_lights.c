@@ -54,15 +54,10 @@ static GRErgb24 trace(Stage *s, GRE_Ray ray, int depth) {
   if (h.object == s->cube)
     s->sampleCubeDepth = depth;
   if (h.object == s->mirror) {
-    gre_ray q = {h.hit.position, {0}};
-    YMGRE_Ray_Reflect(&ray->direction, &h.hit.normal, &q.direction);
-    float32 side = q.direction.x * h.hit.normal.x +
-                   q.direction.y * h.hit.normal.y +
-                   q.direction.z * h.hit.normal.z,
-            bias = side >= 0 ? .002f : -.002f;
-    q.origin.x += h.hit.normal.x * bias;
-    q.origin.y += h.hit.normal.y * bias;
-    q.origin.z += h.hit.normal.z * bias;
+    gre_ray q;
+    gre_fvector4d reflectedDirection;
+    YMGRE_Ray_Reflect(&ray->direction, &h.hit.normal, &reflectedDirection);
+    YMGRE_Ray_SpawnFromSurface(&h.hit.position, &h.hit.normal, &reflectedDirection, .002f, &q);
     GRErgb24 reflected = trace(s, &q, depth + 1);
     const float32 reflectivity = .88f;
     const GRErgb24 base = {42, 48, 58};
