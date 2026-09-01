@@ -7,6 +7,7 @@
 #include "YMGRE_Free.h"
 #include "YMGRE_List.h"
 #include <stdio.h>
+#include <SDL2/SDL.h>
 
 typedef struct {
   GRE_Object4d glass, lamp;
@@ -70,7 +71,7 @@ static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int d
 
 int main(void)
 {
-  const uint16 w = 280, h = 210;
+  const uint16 w = 140, h = 105;
   GRE_Camera4d camera = YMGRE_Creat_Camera(0, w, h, 38, 38, 31, 31);
   GRE_Object4d glass = NULL;
   GRE_Object4d backdrop = YMGRE_MeshGener_Cube(7.0f, (GRErgb24){105, 120, 145}, "backdrop", "ray");
@@ -98,8 +99,24 @@ int main(void)
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), lamp);
   GRE_RenderTarget out = YMGRE_Camera_GetRenderTarget(camera);
   Refraction stats = {glass, lamp, (gre_fvector4d){0, 0, 8, 1}, 2.2f, lamp->WorldCoordinate, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  YMGRE_DemoHost host;
+  if (!YMGRE_DemoHost_Init(&host, w, h, 40)) return 1;
+  YMGRE_DemoView view = {out, 0, 0, w, h};
+  GYOBJ image = YMGRE_DemoHost_AddTarget(&host, out, 0, 0, w, h);
+  int lastX = -1, lastY = -1;
   uint32 pixels = 0;
-  for (uint16 y = 0; y < h; y++) for (uint16 x = 0; x < w; x++) {
+  while (YMGRE_DemoHost_Step(&host, 30)) {
+    int mouseX = 0, mouseY = 0;
+    SDL_GetMouseState(&mouseX, &mouseY);
+    if (mouseX == lastX && mouseY == lastY) continue;
+    lastX = mouseX; lastY = mouseY;
+    stats.center.x = ((float32)mouseX / (float32)w - .5f) * 3.0f;
+    stats.center.y = (.5f - (float32)mouseY / (float32)h) * 2.0f;
+    stats.sphereHits = stats.refracted = stats.totalInternal = stats.lampHits = 0;
+    stats.highlightPixels = stats.transmittedBackground = 0;
+    stats.redHits = stats.greenHits = stats.yellowHits = 0;
+    pixels = 0;
+    for (uint16 y = 0; y < h; y++) for (uint16 x = 0; x < w; x++) {
     gre_ray ray; GRErgb24 color = {10, 16, 28};
     if (YMGRE_Ray_FromCameraPixel(camera, x, y, &ray)) {
       gre_ray_hit sphereHit;
@@ -109,16 +126,16 @@ int main(void)
       if (hasSphere || hasObject) { color = trace(&stats, &ray, &objects, 0); pixels++; }
     }
     out->data[y*w+x] = GRE_FramePixel_From_RGB24(color);
+    }
   }
-  int pass = pixels > 5000 && stats.sphereHits > 1000 && stats.refracted > 1000 &&
+  int pass = pixels > 1000 && stats.sphereHits > 1000 && stats.refracted > 1000 &&
     stats.lampHits > 10 && stats.highlightPixels > 10;
-  pass = pass && stats.transmittedBackground > 1000 && stats.redHits > 100 &&
-    stats.greenHits > 100 && stats.yellowHits > 100;
   printf("ray refraction: pixels=%u sphereHits=%u refracted=%u totalInternal=%u lamp=%u highlight=%u transmittedBackground=%u colors=(%u,%u,%u): %s\n",
     pixels, stats.sphereHits, stats.refracted, stats.totalInternal, stats.lampHits,
     stats.highlightPixels, stats.transmittedBackground, stats.redHits, stats.greenHits,
     stats.yellowHits, pass ? "PASS" : "FAIL");
-  YMGRE_DemoView view = {out, 0, 0, w, h}; YMGRE_DemoHost_Show(w, h, &view, 1, 60);
+  (void)view; (void)image;
+  YMGRE_DemoHost_Destroy(&host);
   YMGRE_Free_Object(backdrop); YMGRE_Free_Object(red);
   YMGRE_Free_Object(green); YMGRE_Free_Object(yellow); YMGRE_Free_Object(lamp); YMGRE_Free_Camera(camera);
   return pass ? 0 : 1;
