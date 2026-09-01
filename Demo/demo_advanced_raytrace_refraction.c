@@ -92,7 +92,6 @@ int main(void)
   gre_fvector4d eye = {0, 0, 0, 1}, target = {0, 0, 8, 1};
   YMGRE_UVNCamera_PositionInit(camera, &eye, &target, NULL, 0);
   gre_list objects = {0};
-  YMGRE_List_Append(&objects, sizeof(GRE_Object4d), glass);
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), backdrop);
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), red);
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), green);
@@ -104,8 +103,11 @@ int main(void)
   for (uint16 y = 0; y < h; y++) for (uint16 x = 0; x < w; x++) {
     gre_ray ray; GRErgb24 color = {10, 16, 28};
     if (YMGRE_Ray_FromCameraPixel(camera, x, y, &ray)) {
-      gre_ray_scene_hit hit;
-      if (YMGRE_Ray_IntersectScene(&ray, &objects, .001f, 100, &hit)) { color = trace(&stats, &ray, &objects, 0); pixels++; }
+      gre_ray_hit sphereHit;
+      gre_ray_scene_hit objectHit;
+      int hasSphere = YMGRE_Ray_IntersectSphere(&ray, &glass->WorldCoordinate, 2.2f, .001f, 100.0f, &sphereHit);
+      int hasObject = YMGRE_Ray_IntersectScene(&ray, &objects, .001f, 100.0f, &objectHit);
+      if (hasSphere || hasObject) { color = trace(&stats, &ray, &objects, 0); pixels++; }
     }
     out->data[y*w+x] = GRE_FramePixel_From_RGB24(color);
   }
