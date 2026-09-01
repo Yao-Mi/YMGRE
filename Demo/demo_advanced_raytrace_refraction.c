@@ -10,6 +10,8 @@
 
 typedef struct {
   GRE_Object4d glass, lamp;
+  gre_fvector4d center;
+  float32 radius;
   gre_fvector4d light;
   uint32 sphereHits, refracted, totalInternal, lampHits, highlightPixels;
   uint32 transmittedBackground;
@@ -18,44 +20,52 @@ typedef struct {
 
 static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int depth)
 {
-  gre_ray_scene_hit hit;
-  if (depth > 4 || !YMGRE_Ray_IntersectScene(ray, objects, 1e-4f, 100.0f, &hit))
+  gre_ray_hit sh;
+  gre_ray_scene_hit oh;
+  int hs = YMGRE_Ray_IntersectSphere(ray, &s->center, s->radius, 1e-4f, 100.0f, &sh);
+  int ho = YMGRE_Ray_IntersectScene(ray, objects, 1e-4f, 100.0f, &oh);
+  if (depth > 4 || (!hs && !ho))
     return (GRErgb24){24, 34, 52};
-  if (hit.object == s->lamp) {
+  if (!hs || (ho && oh.hit.distance < sh.distance)) {
+    if (oh.object == s->lamp) {
     s->lampHits++;
     return (GRErgb24){255, 245, 205};
-  }
-  if (hit.object != s->glass) {
+    }
     if (depth >= 2) s->transmittedBackground++;
-    GRErgb24 c = hit.object->polygonList[hit.polygonIndex].planeColor;
+    GRErgb24 c = oh.object->polygonList[oh.polygonIndex].planeColor;
     if (c.R > 180 && c.G < 100) s->redHits++;
     else if (c.G > 150 && c.R < 100) s->greenHits++;
     else if (c.R > 180 && c.G > 150 && c.B < 100) s->yellowHits++;
     return c;
   }
   s->sphereHits++;
-  float32 cosi = -(ray->direction.x*hit.hit.normal.x + ray->direction.y*hit.hit.normal.y + ray->direction.z*hit.hit.normal.z);
+  float32 cosi = -(ray->direction.x*sh.normal.x + ray->direction.y*sh.normal.y + ray->direction.z*sh.normal.z);
   float32 etaIn = 1.0f, etaOut = 1.5f;
-  if (cosi < 0.0f) { etaIn = 1.5f; etaOut = 1.0f; }
+  gre_fvector4d n = sh.normal;
+  if (cosi < 0.0f) { cosi = -cosi; etaIn = 1.5f; etaOut = 1.0f; n.x=-n.x; n.y=-n.y; n.z=-n.z; }
   gre_fvector4d dir;
-  if (!YMGRE_Ray_Refract(&ray->direction, &hit.hit.normal, etaIn, etaOut, &dir)) {
+  if (!YMGRE_Ray_Refract(&ray->direction, &n, etaIn, etaOut, &dir)) {
     s->totalInternal++;
     return (GRErgb24){18, 22, 38};
   }
   s->refracted++;
   gre_ray next;
-  YMGRE_Ray_SpawnFromSurface(&hit.hit.position, &hit.hit.normal, &dir, .002f, &next);
+  YMGRE_Ray_SpawnFromSurface(&sh.position, &n, &dir, .002f, &next);
   GRErgb24 transmitted = trace(s, &next, objects, depth + 1);
+  gre_fvector4d reflectedDir; YMGRE_Ray_Reflect(&ray->direction, &n, &reflectedDir);
+  gre_ray reflectedRay; YMGRE_Ray_SpawnFromSurface(&sh.position, &n, &reflectedDir, .002f, &reflectedRay);
+  GRErgb24 reflected = trace(s, &reflectedRay, objects, depth + 1);
   if (depth > 0) return transmitted;
   gre_fvector4d view = {-ray->direction.x, -ray->direction.y, -ray->direction.z, 0};
   GRErgb24 surface = YMGRE_Ray_ShadeBlinnPhong(
-    (GRErgb24){35, 65, 90}, &hit.hit.position, &hit.hit.normal, &view, &s->light,
+    (GRErgb24){35, 65, 90}, &sh.position, &sh.normal, &view, &s->light,
     (GRErgb24){255, 255, 255}, .12f, 1.4f, .012f, 255.0f, 48.0f);
   if (surface.R > 150 && surface.G > 150 && surface.B > 150) s->highlightPixels++;
+  float32 kr = YMGRE_Ray_FresnelSchlick(cosi, etaIn, etaOut);
   return (GRErgb24){
-    (uint8)(transmitted.R * .82f + surface.R * .18f),
-    (uint8)(transmitted.G * .82f + surface.G * .18f),
-    (uint8)(transmitted.B * .82f + surface.B * .18f)};
+    (uint8)(transmitted.R * (1-kr) + reflected.R * kr + surface.R*.12f),
+    (uint8)(transmitted.G * (1-kr) + reflected.G * kr + surface.G*.12f),
+    (uint8)(transmitted.B * (1-kr) + reflected.B * kr + surface.B*.12f)};
 }
 
 int main(void)
@@ -89,7 +99,7 @@ int main(void)
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), yellow);
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), lamp);
   GRE_RenderTarget out = YMGRE_Camera_GetRenderTarget(camera);
-  Refraction stats = {glass, lamp, lamp->WorldCoordinate, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  Refraction stats = {glass, lamp, glass->WorldCoordinate, 2.2f, lamp->WorldCoordinate, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   uint32 pixels = 0;
   for (uint16 y = 0; y < h; y++) for (uint16 x = 0; x < w; x++) {
     gre_ray ray; GRErgb24 color = {10, 16, 28};
