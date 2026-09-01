@@ -70,6 +70,14 @@ int main(void)
 	gre_fvector4d surface = {0, 2, 0, 1};
 	YMGRE_Ray_SpawnFromSurface(&surface, &normal, &refracted, .002f, &spawned);
 	pass = pass && spawned.origin.y < surface.y && spawned.direction.y == refracted.y;
+	gre_fvector4d sphereCenter = {0, 0, 5, 1};
+	gre_ray sphereRay = {{0, 0, 0, 1}, {0, 0, 1, 0}};
+	gre_ray_hit sphereHit;
+	pass = pass && YMGRE_Ray_IntersectSphere(&sphereRay, &sphereCenter, 1.0f, .001f, 100.0f, &sphereHit);
+	pass = pass && YMGRE_Fabs(sphereHit.distance - 4.0f) < 1e-5f && sphereHit.normal.z < -0.99f;
+	float32 fresnelNormal = YMGRE_Ray_FresnelSchlick(1.0f, 1.0f, 1.5f);
+	float32 fresnelGrazing = YMGRE_Ray_FresnelSchlick(.1f, 1.0f, 1.5f);
+	pass = pass && fresnelNormal > .03f && fresnelNormal < .06f && fresnelGrazing > .5f;
 	/* A planar mirror can be evaluated either with a virtual camera and the
 	 * real scene, or with a mirrored scene and the real camera. */
 	const float32 mirrorY = -1.4f;

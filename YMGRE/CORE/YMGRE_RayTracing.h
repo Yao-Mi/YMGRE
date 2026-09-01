@@ -27,6 +27,8 @@ typedef struct gre_ray_scene_hit_{GRE_Object4d object;uint32 polygonIndex;gre_ra
 int YMGRE_Ray_IntersectTriangle(const GRE_Ray ray,
 	const gre_fvector4d* p0, const gre_fvector4d* p1, const gre_fvector4d* p2,
 	float32 tMin, float32 tMax, GRE_RayHit hit);
+int YMGRE_Ray_IntersectSphere(const GRE_Ray ray, const gre_fvector4d* center,
+	float32 radius, float32 tMin, float32 tMax, GRE_RayHit hit);
 int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
 int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,
@@ -37,6 +39,8 @@ void YMGRE_Ray_Reflect(const gre_fvector4d* incident, const gre_fvector4d* norma
 	gre_fvector4d* result);
 int YMGRE_Ray_Refract(const gre_fvector4d* incident, const gre_fvector4d* normal,
 	float32 etaIncident, float32 etaTransmitted, gre_fvector4d* result);
+float32 YMGRE_Ray_FresnelSchlick(float32 cosTheta,
+	float32 etaIncident, float32 etaTransmitted);
 void YMGRE_Ray_SpawnFromSurface(const gre_fvector4d* position,
 	const gre_fvector4d* normal, const gre_fvector4d* direction,
 	float32 bias, GRE_Ray result);

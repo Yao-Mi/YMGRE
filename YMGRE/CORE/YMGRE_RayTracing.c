@@ -49,6 +49,32 @@ int YMGRE_Ray_IntersectTriangle(const GRE_Ray ray,
 	return 1;
 }
 
+int YMGRE_Ray_IntersectSphere(const GRE_Ray ray, const gre_fvector4d* center,
+	float32 radius, float32 tMin, float32 tMax, GRE_RayHit hit)
+{
+	if (ray == NULL || center == NULL || hit == NULL || radius <= 0.0f) return 0;
+	float32 ox = ray->origin.x - center->x, oy = ray->origin.y - center->y,
+		 oz = ray->origin.z - center->z;
+	float32 a = ray->direction.x * ray->direction.x + ray->direction.y * ray->direction.y + ray->direction.z * ray->direction.z;
+	if (a < 1e-12f) return 0;
+	float32 halfB = ox * ray->direction.x + oy * ray->direction.y + oz * ray->direction.z;
+	float32 c = ox * ox + oy * oy + oz * oz - radius * radius;
+	float32 discriminant = halfB * halfB - a * c;
+	if (discriminant < 0.0f) return 0;
+	float32 root = YMGRE_Sqrt(discriminant), t = (-halfB - root) / a;
+	if (t < tMin || t > tMax) { t = (-halfB + root) / a; if (t < tMin || t > tMax) return 0; }
+	hit->distance = t; hit->u = hit->v = 0.0f;
+	hit->position.x = ray->origin.x + ray->direction.x * t;
+	hit->position.y = ray->origin.y + ray->direction.y * t;
+	hit->position.z = ray->origin.z + ray->direction.z * t;
+	hit->position.w = 1.0f;
+	hit->normal.x = (hit->position.x - center->x) / radius;
+	hit->normal.y = (hit->position.y - center->y) / radius;
+	hit->normal.z = (hit->position.z - center->z) / radius;
+	hit->normal.w = 0.0f;
+	return 1;
+}
+
 int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result)
 {
@@ -152,6 +178,18 @@ int YMGRE_Ray_Refract(const gre_fvector4d* incident, const gre_fvector4d* normal
 	result->w = 0.0f;
 	YMGRE_Fvector4d_Normalize(result);
 	return 1;
+}
+
+float32 YMGRE_Ray_FresnelSchlick(float32 cosTheta,
+	float32 etaIncident, float32 etaTransmitted)
+{
+	if (etaIncident <= 0.0f || etaTransmitted <= 0.0f) return 1.0f;
+	if (cosTheta < 0.0f) cosTheta = -cosTheta;
+	if (cosTheta > 1.0f) cosTheta = 1.0f;
+	float32 r0 = (etaIncident - etaTransmitted) / (etaIncident + etaTransmitted);
+	r0 *= r0;
+	float32 m = 1.0f - cosTheta;
+	return r0 + (1.0f - r0) * m * m * m * m * m;
 }
 
 void YMGRE_Ray_SpawnFromSurface(const gre_fvector4d* position,
