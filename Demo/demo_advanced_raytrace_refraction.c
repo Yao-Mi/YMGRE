@@ -13,6 +13,7 @@ typedef struct {
   gre_fvector4d light;
   uint32 sphereHits, refracted, totalInternal, lampHits, highlightPixels;
   uint32 transmittedBackground;
+  uint32 redHits, greenHits, yellowHits;
 } Refraction;
 
 static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int depth)
@@ -26,7 +27,11 @@ static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int d
   }
   if (hit.object != s->glass) {
     if (depth >= 2) s->transmittedBackground++;
-    return hit.object->polygonList[hit.polygonIndex].planeColor;
+    GRErgb24 c = hit.object->polygonList[hit.polygonIndex].planeColor;
+    if (c.R > 180 && c.G < 100) s->redHits++;
+    else if (c.G > 150 && c.R < 100) s->greenHits++;
+    else if (c.R > 180 && c.G > 150 && c.B < 100) s->yellowHits++;
+    return c;
   }
   s->sphereHits++;
   gre_fvector4d n = hit.hit.normal;
@@ -66,10 +71,10 @@ int main(void)
   GRE_Object4d lamp = YMGRE_MeshGener_Sphere(.32f, 8, 12, (GRErgb24){255, 245, 205}, "lamp", "ray");
   if (!camera || !glass || !backdrop || !red || !green || !yellow || !lamp) return 1;
   glass->WorldCoordinate = (gre_fvector4d){0, 0, 8, 1};
-  backdrop->WorldCoordinate = (gre_fvector4d){0, 0, 14, 1};
-  red->WorldCoordinate = (gre_fvector4d){-2.0f, 0, 10.8f, 1};
-  green->WorldCoordinate = (gre_fvector4d){0, 0, 10.8f, 1};
-  yellow->WorldCoordinate = (gre_fvector4d){2.0f, 0, 10.8f, 1};
+  backdrop->WorldCoordinate = (gre_fvector4d){0, 0, 18, 1};
+  red->WorldCoordinate = (gre_fvector4d){-2.2f, 0, 13.0f, 1};
+  green->WorldCoordinate = (gre_fvector4d){0, 0, 13.0f, 1};
+  yellow->WorldCoordinate = (gre_fvector4d){2.2f, 0, 13.0f, 1};
   lamp->WorldCoordinate = (gre_fvector4d){-3.0f, 3.6f, 5.0f, 1};
   YMGRE_Object_LocalToWorld(glass); YMGRE_Object_LocalToWorld(backdrop);
   YMGRE_Object_LocalToWorld(red); YMGRE_Object_LocalToWorld(green); YMGRE_Object_LocalToWorld(yellow);
@@ -85,7 +90,7 @@ int main(void)
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), yellow);
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), lamp);
   GRE_RenderTarget out = YMGRE_Camera_GetRenderTarget(camera);
-  Refraction stats = {glass, lamp, lamp->WorldCoordinate, 0, 0, 0, 0, 0, 0};
+  Refraction stats = {glass, lamp, lamp->WorldCoordinate, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   uint32 pixels = 0;
   for (uint16 y = 0; y < h; y++) for (uint16 x = 0; x < w; x++) {
     gre_ray ray; GRErgb24 color = {10, 16, 28};
@@ -97,10 +102,12 @@ int main(void)
   }
   int pass = pixels > 10000 && stats.sphereHits > 1000 && stats.refracted > 1000 &&
     stats.lampHits > 10 && stats.highlightPixels > 10;
-  pass = pass && stats.transmittedBackground > 1000;
-  printf("ray refraction: pixels=%u sphereHits=%u refracted=%u totalInternal=%u lamp=%u highlight=%u transmittedBackground=%u: %s\n",
+  pass = pass && stats.transmittedBackground > 1000 && stats.redHits > 100 &&
+    stats.greenHits > 100 && stats.yellowHits > 100;
+  printf("ray refraction: pixels=%u sphereHits=%u refracted=%u totalInternal=%u lamp=%u highlight=%u transmittedBackground=%u colors=(%u,%u,%u): %s\n",
     pixels, stats.sphereHits, stats.refracted, stats.totalInternal, stats.lampHits,
-    stats.highlightPixels, stats.transmittedBackground, pass ? "PASS" : "FAIL");
+    stats.highlightPixels, stats.transmittedBackground, stats.redHits, stats.greenHits,
+    stats.yellowHits, pass ? "PASS" : "FAIL");
   YMGRE_DemoView view = {out, 0, 0, w, h}; YMGRE_DemoHost_Show(w, h, &view, 1, 60);
   YMGRE_Free_Object(glass); YMGRE_Free_Object(backdrop); YMGRE_Free_Object(red);
   YMGRE_Free_Object(green); YMGRE_Free_Object(yellow); YMGRE_Free_Object(lamp); YMGRE_Free_Camera(camera);
