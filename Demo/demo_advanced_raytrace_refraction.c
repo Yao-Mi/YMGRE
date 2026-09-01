@@ -8,6 +8,7 @@
 #include "YMGRE_List.h"
 #include <stdio.h>
 #include <SDL2/SDL.h>
+#include "YMGUI_Invalidate.h"
 
 typedef struct {
   GRE_Object4d glass, lamp;
@@ -127,7 +128,10 @@ int main(void)
     }
     out->data[y*w+x] = GRE_FramePixel_From_RGB24(color);
     }
+    if (image != NULL) YMGUI_Obj_Invalidate(image);
   }
+  /* Present the completed framebuffer after the expensive render pass. */
+  YMGRE_DemoHost_Step(&host, 1);
   int pass = 1;
   printf("ray refraction: pixels=%u sphereHits=%u refracted=%u totalInternal=%u lamp=%u highlight=%u transmittedBackground=%u colors=(%u,%u,%u): %s\n",
     pixels, stats.sphereHits, stats.refracted, stats.totalInternal, stats.lampHits,
