@@ -88,7 +88,7 @@ int main(void)
   YMGRE_Object_LocalToWorld(red); YMGRE_Object_LocalToWorld(green); YMGRE_Object_LocalToWorld(yellow);
   YMGRE_Object_LocalToWorld(lamp);
   YMGRE_Camera_Frustum_Init(camera, 1, 100);
-  gre_fvector4d eye = {0, 0, 0, 1}, target = {0, 0, 8, 1};
+  gre_fvector4d eye = {3.8f, 1.8f, 0, 1}, target = {0, 0, 8, 1};
   YMGRE_UVNCamera_PositionInit(camera, &eye, &target, NULL, 0);
   gre_list objects = {0};
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), backdrop);
