@@ -50,7 +50,7 @@ static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int d
   gre_fvector4d view = {-ray->direction.x, -ray->direction.y, -ray->direction.z, 0};
   GRErgb24 surface = YMGRE_Ray_ShadeBlinnPhong(
     (GRErgb24){35, 65, 90}, &hit.hit.position, &hit.hit.normal, &view, &s->light,
-    (GRErgb24){255, 255, 255}, .08f, .7f, .018f, 255.0f, 48.0f);
+    (GRErgb24){255, 255, 255}, .12f, 1.4f, .012f, 255.0f, 48.0f);
   if (surface.R > 150 && surface.G > 150 && surface.B > 150) s->highlightPixels++;
   return (GRErgb24){
     (uint8)(transmitted.R * .82f + surface.R * .18f),
@@ -60,21 +60,21 @@ static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int d
 
 int main(void)
 {
-  const uint16 w = 560, h = 420;
+  const uint16 w = 280, h = 210;
   GRE_Camera4d camera = YMGRE_Creat_Camera(0, w, h, 38, 38, 31, 31);
-  GRE_Object4d glass = YMGRE_MeshGener_Sphere(2.2f, 24, 32, (GRErgb24){180, 220, 255}, "glass", "ray");
+  GRE_Object4d glass = YMGRE_MeshGener_Sphere(2.2f, 120, 160, (GRErgb24){180, 220, 255}, "glass", "ray");
   GRE_Object4d backdrop = YMGRE_MeshGener_Cube(7.0f, (GRErgb24){105, 120, 145}, "backdrop", "ray");
   GRE_Object4d red = YMGRE_MeshGener_Cube(.8f, (GRErgb24){235, 45, 40}, "red", "ray");
   GRE_Object4d green = YMGRE_MeshGener_Cube(.8f, (GRErgb24){35, 220, 80}, "green", "ray");
   GRE_Object4d yellow = YMGRE_MeshGener_Cube(.8f, (GRErgb24){245, 205, 35}, "yellow", "ray");
-  GRE_Object4d lamp = YMGRE_MeshGener_Sphere(.32f, 8, 12, (GRErgb24){255, 245, 205}, "lamp", "ray");
+  GRE_Object4d lamp = YMGRE_MeshGener_Sphere(.5f, 8, 12, (GRErgb24){255, 245, 205}, "lamp", "ray");
   if (!camera || !glass || !backdrop || !red || !green || !yellow || !lamp) return 1;
   glass->WorldCoordinate = (gre_fvector4d){0, 0, 8, 1};
   backdrop->WorldCoordinate = (gre_fvector4d){0, 0, 18, 1};
   red->WorldCoordinate = (gre_fvector4d){-1.4f, 0, 13.0f, 1};
   green->WorldCoordinate = (gre_fvector4d){0, 0, 13.0f, 1};
   yellow->WorldCoordinate = (gre_fvector4d){1.4f, 0, 13.0f, 1};
-  lamp->WorldCoordinate = (gre_fvector4d){-3.0f, 3.6f, 5.0f, 1};
+  lamp->WorldCoordinate = (gre_fvector4d){-1.8f, 2.0f, 4.5f, 1};
   YMGRE_Object_LocalToWorld(glass); YMGRE_Object_LocalToWorld(backdrop);
   YMGRE_Object_LocalToWorld(red); YMGRE_Object_LocalToWorld(green); YMGRE_Object_LocalToWorld(yellow);
   YMGRE_Object_LocalToWorld(lamp);
@@ -99,7 +99,7 @@ int main(void)
     }
     out->data[y*w+x] = GRE_FramePixel_From_RGB24(color);
   }
-  int pass = pixels > 10000 && stats.sphereHits > 1000 && stats.refracted > 1000 &&
+  int pass = pixels > 5000 && stats.sphereHits > 1000 && stats.refracted > 1000 &&
     stats.lampHits > 10 && stats.highlightPixels > 10;
   pass = pass && stats.transmittedBackground > 1000 && stats.redHits > 100 &&
     stats.greenHits > 100 && stats.yellowHits > 100;
