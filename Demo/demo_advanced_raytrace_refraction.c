@@ -72,20 +72,19 @@ int main(void)
 {
   const uint16 w = 280, h = 210;
   GRE_Camera4d camera = YMGRE_Creat_Camera(0, w, h, 38, 38, 31, 31);
-  GRE_Object4d glass = YMGRE_MeshGener_Sphere(2.2f, 120, 160, (GRErgb24){180, 220, 255}, "glass", "ray");
+  GRE_Object4d glass = NULL;
   GRE_Object4d backdrop = YMGRE_MeshGener_Cube(7.0f, (GRErgb24){105, 120, 145}, "backdrop", "ray");
   GRE_Object4d red = YMGRE_MeshGener_Cube(.8f, (GRErgb24){235, 45, 40}, "red", "ray");
   GRE_Object4d green = YMGRE_MeshGener_Cube(.8f, (GRErgb24){35, 220, 80}, "green", "ray");
   GRE_Object4d yellow = YMGRE_MeshGener_Cube(.8f, (GRErgb24){245, 205, 35}, "yellow", "ray");
   GRE_Object4d lamp = YMGRE_MeshGener_Sphere(.5f, 8, 12, (GRErgb24){255, 245, 205}, "lamp", "ray");
-  if (!camera || !glass || !backdrop || !red || !green || !yellow || !lamp) return 1;
-  glass->WorldCoordinate = (gre_fvector4d){0, 0, 8, 1};
+  if (!camera || !backdrop || !red || !green || !yellow || !lamp) return 1;
   backdrop->WorldCoordinate = (gre_fvector4d){0, 0, 18, 1};
   red->WorldCoordinate = (gre_fvector4d){-1.4f, 0, 13.0f, 1};
   green->WorldCoordinate = (gre_fvector4d){0, 0, 13.0f, 1};
   yellow->WorldCoordinate = (gre_fvector4d){1.4f, 0, 13.0f, 1};
   lamp->WorldCoordinate = (gre_fvector4d){-1.8f, 2.0f, 4.5f, 1};
-  YMGRE_Object_LocalToWorld(glass); YMGRE_Object_LocalToWorld(backdrop);
+  YMGRE_Object_LocalToWorld(backdrop);
   YMGRE_Object_LocalToWorld(red); YMGRE_Object_LocalToWorld(green); YMGRE_Object_LocalToWorld(yellow);
   YMGRE_Object_LocalToWorld(lamp);
   YMGRE_Camera_Frustum_Init(camera, 1, 100);
@@ -98,14 +97,14 @@ int main(void)
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), yellow);
   YMGRE_List_Append(&objects, sizeof(GRE_Object4d), lamp);
   GRE_RenderTarget out = YMGRE_Camera_GetRenderTarget(camera);
-  Refraction stats = {glass, lamp, glass->WorldCoordinate, 2.2f, lamp->WorldCoordinate, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  Refraction stats = {glass, lamp, (gre_fvector4d){0, 0, 8, 1}, 2.2f, lamp->WorldCoordinate, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   uint32 pixels = 0;
   for (uint16 y = 0; y < h; y++) for (uint16 x = 0; x < w; x++) {
     gre_ray ray; GRErgb24 color = {10, 16, 28};
     if (YMGRE_Ray_FromCameraPixel(camera, x, y, &ray)) {
       gre_ray_hit sphereHit;
       gre_ray_scene_hit objectHit;
-      int hasSphere = YMGRE_Ray_IntersectSphere(&ray, &glass->WorldCoordinate, 2.2f, .001f, 100.0f, &sphereHit);
+      int hasSphere = YMGRE_Ray_IntersectSphere(&ray, &stats.center, stats.radius, .001f, 100.0f, &sphereHit);
       int hasObject = YMGRE_Ray_IntersectScene(&ray, &objects, .001f, 100.0f, &objectHit);
       if (hasSphere || hasObject) { color = trace(&stats, &ray, &objects, 0); pixels++; }
     }
@@ -120,7 +119,7 @@ int main(void)
     stats.highlightPixels, stats.transmittedBackground, stats.redHits, stats.greenHits,
     stats.yellowHits, pass ? "PASS" : "FAIL");
   YMGRE_DemoView view = {out, 0, 0, w, h}; YMGRE_DemoHost_Show(w, h, &view, 1, 60);
-  YMGRE_Free_Object(glass); YMGRE_Free_Object(backdrop); YMGRE_Free_Object(red);
+  YMGRE_Free_Object(backdrop); YMGRE_Free_Object(red);
   YMGRE_Free_Object(green); YMGRE_Free_Object(yellow); YMGRE_Free_Object(lamp); YMGRE_Free_Camera(camera);
   return pass ? 0 : 1;
 }
