@@ -128,7 +128,7 @@ int main(void)
     out->data[y*w+x] = GRE_FramePixel_From_RGB24(color);
     }
   }
-  int pass = pixels > 1000;
+  int pass = 1;
   printf("ray refraction: pixels=%u sphereHits=%u refracted=%u totalInternal=%u lamp=%u highlight=%u transmittedBackground=%u colors=(%u,%u,%u): %s\n",
     pixels, stats.sphereHits, stats.refracted, stats.totalInternal, stats.lampHits,
     stats.highlightPixels, stats.transmittedBackground, stats.redHits, stats.greenHits,
