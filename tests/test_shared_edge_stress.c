@@ -11,7 +11,7 @@
 static GRE_FramePixel frame[TEST_W * TEST_H];
 static float32 depth[TEST_W * TEST_H];
 static gre_vertex4d vertex[POINT_NUM];
-static uint16 triangleIndex[TRIANGLE_NUM][3];
+static GRE_Index triangleIndex[TRIANGLE_NUM][3];
 static gre_polygon4d polygon[TRIANGLE_NUM];
 static uint8 polygonHide[TRIANGLE_NUM];
 static GRErgb24 polygonColor[TRIANGLE_NUM];

@@ -70,7 +70,7 @@ static void renderCameraTriangles(GRE_Object4d object, GRE_Vertex4d points,
 		if (material && material->unlit) color = (GRErgb24){DefaultPolygonClv,DefaultPolygonClv,DefaultPolygonClv};
 		for (uint16 j = 1; j + 1 < count; j++)
 		{
-			uint16 indices[3] = {0, j, (uint16)(j+1)};
+			GRE_Index indices[3] = {0, j, (GRE_Index)(j+1)};
 			gre_polygon4d triangle = *source;
 			triangle.index = indices;
 			YMGRE_TriangleRaster_Fill(clipped, &triangle, color, material, camera);
@@ -83,12 +83,29 @@ static void renderCameraTriangles(GRE_Object4d object, GRE_Vertex4d points,
 	{
 		GRE_Polygon4d polygon = &object->polygonList[pi];
 		if ((hidden ? hidden[pi] : polygon->ishide) || polygon->num != 3) continue;
+		/* Integer line samples need the same face depth as filled pixels. Using
+		 * interpolated endpoint depths after snapping x/y causes self-occlusion. */
+		gre_vertex4d input[3], clipped[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+		for (int j = 0; j < 3; j++) input[j] = points[polygon->index[j]];
+		uint16 count = YMGRE_Polygon_FrustumClip(input, 3, clipped,
+			YMGRE_FRUSTUM_CLIP_VERTEX_MAX, camera);
+		if (count < 3) continue;
+		YMGRE_VertexList_CameraToViewPlane(clipped, count, camera->perspectPlane.Dis);
+		YMGRE_VertexList_ViewPlaneToWindows(clipped, count, camera);
+		gre_fvector4d depthPlane;
+		uint8 hasPlane = 0;
+		for (uint16 j = 1; j + 1 < count && !hasPlane; j++) {
+			GRE_Index indices[3] = {0, j, (GRE_Index)(j + 1)};
+			gre_polygon4d triangle = *polygon;
+			triangle.index = indices;
+			hasPlane = YMGRE_Triangle_DepthPlane(clipped, &triangle, &depthPlane);
+		}
+		if (!hasPlane) continue;
 		for (int j = 0; j < 3; j++)
 		{
 			gre_fvector4d a = points[polygon->index[j]].pos;
 			gre_fvector4d b = points[polygon->index[(j+1)%3]].pos;
 			if (!clipCameraLine(&a, &b, camera)) continue;
-			float32 za=a.z, zb=b.z;
 			YMGRE_Point_CameraToViewPlane(&a, camera->perspectPlane.Dis);
 			YMGRE_Point_CameraToViewPlane(&b, camera->perspectPlane.Dis);
 			YMGRE_Point_ViewPlaneToWindows(&a, camera);
@@ -97,9 +114,8 @@ static void renderCameraTriangles(GRE_Object4d object, GRE_Vertex4d points,
 			int y0=GREMax(0,GREMin(camera->img.height-1,(int)(a.y+.5f)));
 			int x1=GREMax(0,GREMin(camera->img.width-1,(int)(b.x+.5f)));
 			int y1=GREMax(0,GREMin(camera->img.height-1,(int)(b.y+.5f)));
-			extern GRErgb24 GRE_brush;
-			YMGRE_Img_LineDepth(camera->img.data, camera->img.zbuff, camera->img.width,
-				camera->img.height, x0,y0,za,x1,y1,zb,GRE_brush,1);
+			YMGRE_Img_LineDepthPlane(camera->img.data, camera->img.width, camera->img.zbuff,
+				&depthPlane, x0, y0, x1, y1);
 		}
 	}
 }
@@ -480,7 +496,7 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 					YMGRE_VertexList_ViewPlaneToWindows_wN(clipped, count, cam);
 					for (uint16 vi = 1; vi + 1 < count; vi++)
 					{
-						uint16 indices[3] = { 0, vi, (uint16)(vi + 1) };
+						GRE_Index indices[3] = { 0, vi, (GRE_Index)(vi + 1) };
 						gre_polygon4d triangle = *source;
 						triangle.num = 3;
 						triangle.index = indices;

@@ -27,7 +27,7 @@ static GRE_Object4d createTriangle(int stage, const char* materialName)
 	object->pointList[1] = (gre_vertex4d){ { 145, -110, 180, 1 }, 1, 1 };
 	object->pointList[2] = (gre_vertex4d){ { 0, 140, 180, 1 }, 0.5f, 0 };
 	object->polygonList[0].num = 3;
-	object->polygonList[0].index = GRE_PolyIndex_Malloc(3 * sizeof(uint16));
+	object->polygonList[0].index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index));
 	object->polygonList[0].index[0] = 0;
 	object->polygonList[0].index[1] = 2;
 	object->polygonList[0].index[2] = 1;

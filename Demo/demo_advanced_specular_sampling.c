@@ -47,13 +47,13 @@ static GRE_Object4d createPanel(int columns, int rows, uint8 renderMode)
 		uint16 lowerRight = lowerLeft + 1;
 		uint16 upperLeft = lowerLeft + (uint16)(columns + 1);
 		uint16 upperRight = upperLeft + 1;
-		uint16 indices[6] = { lowerLeft, upperLeft, upperRight,
+		GRE_Index indices[6] = { lowerLeft, upperLeft, upperRight,
 			lowerLeft, upperRight, lowerRight };
 		for (int triangle = 0; triangle < 2; triangle++)
 		{
 			GRE_Polygon4d polygon = &object->polygonList[polygonIndex++];
 			polygon->num = 3;
-			polygon->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16));
+			polygon->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index));
 			for (int i = 0; i < 3; i++) polygon->index[i] = indices[triangle * 3 + i];
 			polygon->pN = (gre_fvector4d){ 0, 0, -1, 0 };
 			polygon->planeColor = (GRErgb24){ 255, 255, 255 };

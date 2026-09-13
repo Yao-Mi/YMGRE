@@ -16,6 +16,12 @@ if(NOT YMGRE_CAMERA_COLOR_DEPTH STREQUAL "16" AND NOT YMGRE_CAMERA_COLOR_DEPTH S
 	message(FATAL_ERROR "YMGRE_CAMERA_COLOR_DEPTH must be 16 or 24")
 endif()
 
+set(YMGRE_INDEX_BITS 16 CACHE STRING "Mesh index width (16 for MCU, 32 for large meshes)")
+set_property(CACHE YMGRE_INDEX_BITS PROPERTY STRINGS 16 32)
+if(NOT YMGRE_INDEX_BITS STREQUAL "16" AND NOT YMGRE_INDEX_BITS STREQUAL "32")
+	message(FATAL_ERROR "YMGRE_INDEX_BITS must be 16 or 32")
+endif()
+
 if(YMGRE_BUILD_DEMOS)
 	set(YMGRE_BUILD_YMGUI_HOST ON)
 endif()
@@ -73,6 +79,7 @@ target_include_directories(ymgre PUBLIC
 	YMGRE/CONFIG YMGRE/CORE YMGRE/DEBUG YMGRE/IOFILE YMGRE/OPOBJ
 )
 target_compile_definitions(ymgre PUBLIC
+	YMGRE_INDEX_BITS=${YMGRE_INDEX_BITS}
 	YMGRE_CAMERA_COLOR_DEPTH=${YMGRE_CAMERA_COLOR_DEPTH}
 )
 target_link_libraries(ymgre PUBLIC m)
@@ -225,6 +232,14 @@ if(YMGRE_BUILD_TESTS)
 	add_executable(test_triangle_rasterization tests/test_triangle_rasterization.c)
 	target_link_libraries(test_triangle_rasterization PRIVATE ymgre)
 	add_test(NAME triangle_rasterization COMMAND test_triangle_rasterization)
+	add_executable(test_index_width tests/test_index_width.c
+		YMGRE/CORE/YMGRE_SceneManager.c project_Demo/scene_baker/scene_model_export.c)
+	target_include_directories(test_index_width PRIVATE project_Demo/scene_baker)
+	target_link_libraries(test_index_width PRIVATE ymgre)
+	add_test(NAME index_width COMMAND test_index_width)
+	add_executable(test_wire_overlay tests/test_wire_overlay.c)
+	target_link_libraries(test_wire_overlay PRIVATE ymgre)
+	add_test(NAME wire_overlay COMMAND test_wire_overlay)
 	add_executable(test_perspective_depth tests/test_perspective_depth.c)
 	target_link_libraries(test_perspective_depth PRIVATE ymgre)
 	add_test(NAME perspective_depth COMMAND test_perspective_depth)

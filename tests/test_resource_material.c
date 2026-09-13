@@ -79,7 +79,7 @@ static void testMaterialBasics(void)
 	points[2].pos = (gre_fvector4d){ 28.0f, 28.0f, 100.0f, 1.0f };
 	points[2].u = 0.99f;
 	points[2].v = 0.99f;
-	uint16 indices[3] = { 0, 1, 2 };
+	GRE_Index indices[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	polygon.num = 3;
 	polygon.index = indices;

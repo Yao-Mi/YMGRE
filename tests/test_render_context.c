@@ -64,7 +64,7 @@ static GRE_Object4d makeTriangle(void)
 	object->pointList[1].pos = (gre_fvector4d){ 0.0f, 20.0f, 100.0f, 1.0f };
 	object->pointList[2].pos = (gre_fvector4d){ 20.0f, -20.0f, 100.0f, 1.0f };
 	object->polygonList[0].num = 3;
-	object->polygonList[0].index = GRE_PolyIndex_Malloc(3 * sizeof(uint16));
+	object->polygonList[0].index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index));
 	object->polygonList[0].index[0] = 0;
 	object->polygonList[0].index[1] = 1;
 	object->polygonList[0].index[2] = 2;

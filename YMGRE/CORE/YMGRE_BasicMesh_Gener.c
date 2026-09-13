@@ -83,7 +83,7 @@ GRE_Object4d YMGRE_Gener_RectPlane(uint16 w, uint16 h,float32 blockSize,char* ob
 		int idxnum = curobj->polygonList[i].num;//边索引数
 		cptobj->polygonList[i].ishide = 0;//默认为不隐藏
 		cptobj->polygonList[i].num = idxnum;
-		cptobj->polygonList[i].index = GRE_PolyIndex_Malloc(idxnum * sizeof(uint16));
+		cptobj->polygonList[i].index = GRE_PolyIndex_Malloc(idxnum * sizeof(GRE_Index));
 		//边索引保存
 		for (int k = 0; k < idxnum; k++)
 		{
@@ -274,7 +274,7 @@ GRE_Object4d YMGRE_MeshGener_Sphere(float32 radius,uint16 latitude , uint16 long
 		// 1 2 3 ... N2-1
 		int polynum = 3;//三角形
 		myobj->polygonList[i].num = polynum;
-		myobj->polygonList[i].index = GRE_PolyIndex_Malloc(polynum * sizeof(uint32*));
+		myobj->polygonList[i].index = GRE_PolyIndex_Malloc(polynum * sizeof(GRE_Index));
 
 		myobj->polygonList[i].index[0] = 0;
 		myobj->polygonList[i].index[1] = i + 1; //北极点偏移量为 1
@@ -288,7 +288,7 @@ GRE_Object4d YMGRE_MeshGener_Sphere(float32 radius,uint16 latitude , uint16 long
 		//indx = (N1 - 1) * N2;
 		int ii = indx + i;
 		myobj->polygonList[ii].num = polynum;//三角形
-		myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(uint32*));
+		myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(GRE_Index));
 
 		myobj->polygonList[ii].index[0] = indx - N2 + i + 1;
 		myobj->polygonList[ii].index[1] = indx + 1;//北极点
@@ -311,7 +311,7 @@ GRE_Object4d YMGRE_MeshGener_Sphere(float32 radius,uint16 latitude , uint16 long
 			//indx = i * N2
 			int polynum = 4;//四边形
 			myobj->polygonList[ii].num = polynum;
-			myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(uint32*));
+			myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(GRE_Index));
 
 			myobj->polygonList[ii].index[0] = indx - N2 + j + 1; //+1代表北极点偏移为1
 			myobj->polygonList[ii].index[1] = indx + j + 1;
@@ -423,7 +423,7 @@ GRE_Object4d YMGRE_MeshGener_Cylinder(float32 radius, float32 height, char* name
 		// 1 2 3 ... N2-1
 		int polynum = 3;//三角形
 		myobj->polygonList[i].num = polynum;
-		myobj->polygonList[i].index = GRE_PolyIndex_Malloc(polynum * sizeof(uint32*));
+		myobj->polygonList[i].index = GRE_PolyIndex_Malloc(polynum * sizeof(GRE_Index));
 
 		myobj->polygonList[i].index[0] = 0;
 		myobj->polygonList[i].index[1] = i + 1; //北极点偏移量为 1
@@ -437,7 +437,7 @@ GRE_Object4d YMGRE_MeshGener_Cylinder(float32 radius, float32 height, char* name
 		//indx = (N1 - 1) * N2;
 		int ii = indx + i;
 		myobj->polygonList[ii].num = polynum;//三角形
-		myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(uint32*));
+		myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(GRE_Index));
 
 		myobj->polygonList[ii].index[0] = indx - N2 + i + 1;
 		myobj->polygonList[ii].index[1] = indx + 1;//北极点
@@ -460,7 +460,7 @@ GRE_Object4d YMGRE_MeshGener_Cylinder(float32 radius, float32 height, char* name
 			//indx = i * N2
 			int polynum = 4;//四边形
 			myobj->polygonList[ii].num = polynum;
-			myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(uint32*));
+			myobj->polygonList[ii].index = GRE_PolyIndex_Malloc(polynum * sizeof(GRE_Index));
 
 			myobj->polygonList[ii].index[0] = indx - N2 + j + 1; //+1代表北极点偏移为1
 			myobj->polygonList[ii].index[1] = indx + j + 1;
@@ -528,11 +528,11 @@ GRE_Object4d YMGRE_MeshGener_Cylinder(float32 radius, float32 height, char* name
 /////////////////////////////////////////// 基础三角网格生成 ///////////////////////////////////////////
 
 //设置单个三角面索引，同时根据顶点绕序计算平面法向量
-static void meshSetTriangle(GRE_Object4d object, int polygonIndex, uint16 i0, uint16 i1, uint16 i2, GRErgb24 color)
+static void meshSetTriangle(GRE_Object4d object, int polygonIndex, GRE_Index i0, GRE_Index i1, GRE_Index i2, GRErgb24 color)
 {
 	GRE_Polygon4d polygon = &object->polygonList[polygonIndex];
 	polygon->num = 3;
-	polygon->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16));
+	polygon->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index));
 	gre_log_explain(polygon->index == NULL, GRE_LOG_Mem1, "基础网格索引内存申请失败");
 	polygon->index[0] = i0;
 	polygon->index[1] = i1;
@@ -549,7 +549,7 @@ static void meshSetTriangle(GRE_Object4d object, int polygonIndex, uint16 i0, ui
 
 //封闭凸多面体按三角形中心方向修正为外向绕序
 static void meshSetTriangleOutward(GRE_Object4d object, int polygonIndex,
-	uint16 i0, uint16 i1, uint16 i2, GRErgb24 color)
+	GRE_Index i0, GRE_Index i1, GRE_Index i2, GRErgb24 color)
 {
 	gre_fvector4d u;
 	gre_fvector4d v;
@@ -586,9 +586,11 @@ GRE_Object4d YMGRE_MeshGener_RectPlane(float32 width, float32 depth, uint16 rows
 		GRE_LOG_ParamI, "矩形平面尺寸或分段数错误");
 	uint32 rowPointNum = (uint32)rows + 1;
 	uint32 columnPointNum = (uint32)columns + 1;
-	gre_log_explain(rowPointNum > 65535u / columnPointNum,
+	gre_log_explain(rowPointNum > YMGRE_MAX_VERTICES / columnPointNum,
 		GRE_LOG_ParamI, "矩形平面顶点数超过索引范围");
 	uint32 pointNumValue = rowPointNum * columnPointNum;
+	gre_log_explain((uint32)rows > (uint32)INT_MAX / 2u / columns,
+		GRE_LOG_ParamI, "矩形平面面数超过范围");
 	uint32 polygonNumValue = 2u * rows * columns;
 	int pointNum = pointNumValue;
 	int polygonNum = polygonNumValue;
@@ -596,10 +598,10 @@ GRE_Object4d YMGRE_MeshGener_RectPlane(float32 width, float32 depth, uint16 rows
 	float32 halfWidth = width * 0.5f;
 	float32 halfDepth = depth * 0.5f;
 
-	for (uint16 row = 0; row <= rows; row++)
+	for (uint32 row = 0; row <= rows; row++)
 	{
 		float32 z = -halfDepth + depth * row / rows;
-		for (uint16 column = 0; column <= columns; column++)
+		for (uint32 column = 0; column <= columns; column++)
 		{
 			float32 x = -halfWidth + width * column / columns;
 			int point = row * (columns + 1) + column;
@@ -614,10 +616,10 @@ GRE_Object4d YMGRE_MeshGener_RectPlane(float32 width, float32 depth, uint16 rows
 	{
 		for (uint16 column = 0; column < columns; column++)
 		{
-			uint16 topLeft = row * (columns + 1) + column;
-			uint16 topRight = topLeft + 1;
-			uint16 bottomLeft = topLeft + columns + 1;
-			uint16 bottomRight = bottomLeft + 1;
+			GRE_Index topLeft = row * (columns + 1) + column;
+			GRE_Index topRight = topLeft + 1;
+			GRE_Index bottomLeft = topLeft + columns + 1;
+			GRE_Index bottomRight = bottomLeft + 1;
 			meshSetTriangle(object, polygon++, topLeft, bottomLeft, topRight, color);
 			meshSetTriangle(object, polygon++, topRight, bottomLeft, bottomRight, color);
 		}
@@ -728,10 +730,10 @@ GRE_Object4d YMGRE_MeshGener_Cylinder(float32 radius, float32 height, uint16 seg
 	for (uint16 i = 0; i < segments; i++)
 	{
 		uint16 next = (i + 1 == segments) ? 0 : i + 1;
-		uint16 top = 2 + i;
-		uint16 topNext = 2 + next;
-		uint16 bottom = 2 + segments + i;
-		uint16 bottomNext = 2 + segments + next;
+		GRE_Index top = 2 + i;
+		GRE_Index topNext = 2 + next;
+		GRE_Index bottom = 2 + segments + i;
+		GRE_Index bottomNext = 2 + segments + next;
 		int polygon = 4 * i;
 		meshSetTriangle(object, polygon, 0, topNext, top, color);//上表面
 		meshSetTriangle(object, polygon + 1, 1, bottom, bottomNext, color);//下表面
@@ -768,8 +770,8 @@ GRE_Object4d YMGRE_MeshGener_Cone(float32 radius, float32 height, uint16 segment
 	for (uint16 i = 0; i < segments; i++)
 	{
 		uint16 next = (i + 1 == segments) ? 0 : i + 1;
-		uint16 currentPoint = 2 + i;
-		uint16 nextPoint = 2 + next;
+		GRE_Index currentPoint = 2 + i;
+		GRE_Index nextPoint = 2 + next;
 		meshSetTriangle(object, 2 * i, 0, nextPoint, currentPoint, color);//侧面
 		meshSetTriangle(object, 2 * i + 1, 1, currentPoint, nextPoint, color);//底面
 	}
@@ -787,7 +789,10 @@ GRE_Object4d YMGRE_MeshGener_Sphere(float32 radius, uint16 latitude, uint16 long
 {
 	gre_log_explain((radius <= 0.0f) || (latitude < 2) || (longitude < 3), GRE_LOG_ParamI,
 		"球体半径、纬度或经度分段数错误");
-	int pointNum = 2 + (latitude - 1) * longitude;
+	uint32 rings = (uint32)latitude - 1;
+	gre_log_explain(rings > (YMGRE_MAX_VERTICES - 2u) / longitude ||
+		rings > (uint32)INT_MAX / 2u / longitude, GRE_LOG_ParamI, "球体顶点或面数超过范围");
+	int pointNum = 2 + rings * longitude;
 	int polygonNum = 2 * longitude * (latitude - 1);
 	GRE_Object4d object = YMGRE_Creat_Object(pointNum, polygonNum, name, materiaName);
 	object->pointList[0].pos = (gre_fvector4d){ 0, radius, 0, 1 };
@@ -822,15 +827,15 @@ GRE_Object4d YMGRE_MeshGener_Sphere(float32 radius, uint16 latitude, uint16 long
 		for (uint16 col = 0; col < longitude; col++)
 		{
 			uint16 next = (col + 1 == longitude) ? 0 : col + 1;
-			uint16 top = 1 + row * longitude + col;
-			uint16 topNext = 1 + row * longitude + next;
-			uint16 bottom = top + longitude;
-			uint16 bottomNext = topNext + longitude;
+			GRE_Index top = 1 + row * longitude + col;
+			GRE_Index topNext = 1 + row * longitude + next;
+			GRE_Index bottom = top + longitude;
+			GRE_Index bottomNext = topNext + longitude;
 			meshSetTriangle(object, polygon++, top, topNext, bottomNext, color);
 			meshSetTriangle(object, polygon++, top, bottomNext, bottom, color);
 		}
 	}
-	uint16 lastRing = 1 + (latitude - 2) * longitude;
+	GRE_Index lastRing = 1 + (latitude - 2) * longitude;
 	for (uint16 col = 0; col < longitude; col++)
 	{
 		uint16 next = (col + 1 == longitude) ? 0 : col + 1;
@@ -852,9 +857,10 @@ GRE_Object4d YMGRE_MeshGener_Torus(float32 majorRadius, float32 tubeRadius,
 	gre_log_explain((majorRadius <= 0.0f) || (tubeRadius <= 0.0f) ||
 		(majorRadius <= tubeRadius) || (majorSegments < 3) || (tubeSegments < 3),
 		GRE_LOG_ParamI, "圆环半径或分段数错误");
-	gre_log_explain((uint32)majorSegments > 65535u / tubeSegments,
+	gre_log_explain((uint32)majorSegments > YMGRE_MAX_VERTICES / tubeSegments,
 		GRE_LOG_ParamI, "圆环顶点数超过索引范围");
 	uint32 pointNumValue = (uint32)majorSegments * tubeSegments;
+	gre_log_explain(pointNumValue > (uint32)INT_MAX / 2u, GRE_LOG_ParamI, "圆环面数超过范围");
 	uint32 polygonNumValue = 2u * pointNumValue;
 	GRE_Object4d object = YMGRE_Creat_Object(pointNumValue, polygonNumValue, name, materiaName);
 
@@ -882,10 +888,10 @@ GRE_Object4d YMGRE_MeshGener_Torus(float32 majorRadius, float32 tubeRadius,
 		for (uint16 tube = 0; tube < tubeSegments; tube++)
 		{
 			uint16 nextTube = (tube + 1 == tubeSegments) ? 0 : tube + 1;
-			uint16 current = major * tubeSegments + tube;
-			uint16 nextV = major * tubeSegments + nextTube;
-			uint16 nextU = nextMajor * tubeSegments + tube;
-			uint16 diagonal = nextMajor * tubeSegments + nextTube;
+			GRE_Index current = major * tubeSegments + tube;
+			GRE_Index nextV = major * tubeSegments + nextTube;
+			GRE_Index nextU = nextMajor * tubeSegments + tube;
+			GRE_Index diagonal = nextMajor * tubeSegments + nextTube;
 			//圆环不是凸体，使用参数曲面的固定外向绕序
 			meshSetTriangle(object, polygon++, current, nextV, nextU, color);
 			meshSetTriangle(object, polygon++, nextU, nextV, diagonal, color);
@@ -909,9 +915,10 @@ static GRE_Object4d meshGenerateCapsule(float32 radius, float32 cylinderHeight,
 		(hemisphereSegments == 0) || (longitude < 3), GRE_LOG_ParamI,
 		"胶囊体尺寸或分段数错误");
 	uint32 ringNum = 2u * hemisphereSegments;
-	gre_log_explain(ringNum > 65533u / longitude,
+	gre_log_explain(ringNum > (YMGRE_MAX_VERTICES - 2u) / longitude,
 		GRE_LOG_ParamI, "胶囊体顶点数超过索引范围");
 	uint32 pointNumValue = 2u + ringNum * longitude;
+	gre_log_explain(ringNum > (uint32)INT_MAX / 2u / longitude, GRE_LOG_ParamI, "胶囊面数超过范围");
 	uint32 polygonNumValue = 2u * ringNum * longitude;
 	GRE_Object4d object = YMGRE_Creat_Object(pointNumValue, polygonNumValue, name, materiaName);
 	float32 halfHeight = cylinderHeight * 0.5f;
@@ -939,7 +946,7 @@ static GRE_Object4d meshGenerateCapsule(float32 radius, float32 cylinderHeight,
 		float32 angle = YMGRE_Pai * (ring + (legacy ? 1 : 0)) / (2.0f * hemisphereSegments);
 		float32 ringRadius = radius * YMGRE_Cos(angle);
 		float32 y = -halfHeight - radius * YMGRE_Sin(angle);
-		uint16 ringIndex = hemisphereSegments + ring;
+		uint32 ringIndex = hemisphereSegments + ring;
 		for (uint16 column = 0; column < longitude; column++)
 		{
 			float32 theta = YMGRE_2Pai * column / longitude;
@@ -956,21 +963,21 @@ static GRE_Object4d meshGenerateCapsule(float32 radius, float32 cylinderHeight,
 		uint16 next = (column + 1 == longitude) ? 0 : column + 1;
 		meshSetTriangleOutward(object, polygon++, 0, 1 + column, 1 + next, color);
 	}
-	for (uint16 ring = 0; ring + 1 < ringNum; ring++)
+	for (uint32 ring = 0; ring + 1 < ringNum; ring++)
 	{
 		for (uint16 column = 0; column < longitude; column++)
 		{
 			uint16 next = (column + 1 == longitude) ? 0 : column + 1;
-			uint16 top = 1 + ring * longitude + column;
-			uint16 topNext = 1 + ring * longitude + next;
-			uint16 bottom = top + longitude;
-			uint16 bottomNext = topNext + longitude;
+			GRE_Index top = 1 + ring * longitude + column;
+			GRE_Index topNext = 1 + ring * longitude + next;
+			GRE_Index bottom = top + longitude;
+			GRE_Index bottomNext = topNext + longitude;
 			meshSetTriangleOutward(object, polygon++, top, topNext, bottom, color);
 			meshSetTriangleOutward(object, polygon++, topNext, bottomNext, bottom, color);
 		}
 	}
-	uint16 lastRing = 1 + (ringNum - 1) * longitude;
-	uint16 bottomPole = pointNumValue - 1;
+	GRE_Index lastRing = 1 + (ringNum - 1) * longitude;
+	GRE_Index bottomPole = pointNumValue - 1;
 	for (uint16 column = 0; column < longitude; column++)
 	{
 		uint16 next = (column + 1 == longitude) ? 0 : column + 1;

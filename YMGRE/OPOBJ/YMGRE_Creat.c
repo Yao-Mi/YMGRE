@@ -186,6 +186,10 @@ GRE_Camera4d YMGRE_Creat_CameraFromTarget(int16 id, GRE_RenderTarget target, flo
 /***********************************************************   物体创建  *****************************************************************************/
 GRE_Object4d YMGRE_Creat_Object(int pointNum,int polygonNum,char* name,char* materiaName)
 {
+	gre_log_explain(pointNum < 0 || (uint32)pointNum > YMGRE_MAX_VERTICES || polygonNum < 0 ||
+		(size_t)pointNum > SIZE_MAX / sizeof(gre_vertex4d) ||
+		(size_t)polygonNum > SIZE_MAX / sizeof(gre_polygon4d), GRE_LOG_ParamI,
+		"模型数量超过当前索引或内存范围");
 	GRE_Object4d myobj = GRE_malloc0(sizeof(gre_object4d));
 	myobj->pointNum = pointNum;
 	myobj->pointList = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
@@ -278,7 +282,7 @@ int YMGRE_Object_GenerateVertexAttributes(GRE_Object4d object)
 	{
 		GRE_Polygon4d polygon=&object->polygonList[i];
 		if (polygon->num != 3) continue;
-		uint16 i0=polygon->index[0],i1=polygon->index[1],i2=polygon->index[2];
+		GRE_Index i0=polygon->index[0],i1=polygon->index[1],i2=polygon->index[2];
 		if(i0>=object->pointNum||i1>=object->pointNum||i2>=object->pointNum) continue;
 		GRE_Vertex4d p0=&object->pointList[i0],p1=&object->pointList[i1],p2=&object->pointList[i2];
 		gre_fvector4d e1={p1->pos.x-p0->pos.x,p1->pos.y-p0->pos.y,p1->pos.z-p0->pos.z,0};
@@ -295,7 +299,7 @@ int YMGRE_Object_GenerateVertexAttributes(GRE_Object4d object)
 			tangent.y=(e1.y*dv2-e2.y*dv1)*inv;
 			tangent.z=(e1.z*dv2-e2.z*dv1)*inv;
 		}
-		uint16 ids[3]={i0,i1,i2};
+		GRE_Index ids[3]={i0,i1,i2};
 		for(int j=0;j<3;j++)
 		{
 			YMGRE_Fvector4d_AddTo(&object->pointList_wN[ids[j]].normal,&face);

@@ -1,97 +1,193 @@
-# YMGRE
+<h1 align="center">YMGRE</h1>
+<p align="center"><strong>用 C 构建的 CPU 三维渲染引擎</strong></p>
+<p align="center">光栅化 · 光线追踪 · 材质与光照 · 可配置索引 · 独立静态库</p>
 
-#### 介绍
-C语言从零实现跨平台渲染引擎
+<p align="center">
+  <a href="#快速开始">快速开始</a> ·
+  <a href="sdk/MANUAL.md">使用手册</a> ·
+  <a href="build/YMGRE_libs/">预编译 SDK</a> ·
+  <a href="Demo/README.md">Demo 导航</a> ·
+  <a href="tests/README.md">测试与验收</a> ·
+  <a href="README.en.md">English</a>
+</p>
 
-#### 软件架构
-软件架构说明
+![地球纹理、光照、法线贴图与高度置换对照](docs/images/earth.png)
 
+*实际 Demo 渲染：同一球体的纹理、光照、法线贴图和高度置换对照。*
 
-#### 安装教程
+YMGRE 从顶点变换、视锥裁剪、三角形填充和深度缓冲出发，逐步实现纹理采样、逐顶点/逐像素光照，以及基于射线求交的阴影、反射与折射。
+核心使用 C99，通过颜色缓冲和深度缓冲输出结果，可接入桌面窗口或自有 LCD 显示层。
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+项目同时提供**可直接链接的静态库、使用手册和独立 Demo**。日常开发可以围绕公开头文件使用库；需要扩展或定位问题时再进入引擎实现。
 
-#### 使用说明
+## 渲染效果
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+下面的图片均来自本仓库 Demo 的真实运行画面。显示层使用 YMGUI/SDL，截图只做 PNG 编码转换。
 
-#### Demo 覆盖
+| 镜面反射 | 玻璃折射 |
+|:---:|:---:|
+| ![立方体和光源的镜面反射](docs/images/advanced_raytrace_mirror.png) | ![玻璃球折射及高光](docs/images/advanced_raytrace_refraction.png) |
+| 反射射线命中场景，显示物体和光源倒影 | 解析球体的入射/出射折射与表面高光 |
 
-基础流程 Demo 按单一职责覆盖以下层次：
+| 透视贴图 | 法线贴图 |
+|:---:|:---:|
+| ![倾斜平面的透视校正棋盘格](docs/images/advanced_perspective.png) | ![平坦法线和扰动法线贴图对照](docs/images/advanced_normal_map.png) |
+| 倾斜平面的纹理与深度按透视关系插值 | 同一平面使用不同法线，改变受光细节 |
 
-| 类别 | Demo | 观察目标 |
-|---|---|---|
-| 网格 | `demo_basic_shapes`、`demo_extended_shapes` | 基础和扩展网格生成 |
-| 光栅 | `demo_polygon_fill`、`demo_raster_primitives` | 线、三角形、多边形填充 |
-| 稳定性 | `demo_fragment_stitching`、`demo_shared_edge_stress`、`demo_degenerate_geometry` | 共享边、裂缝和退化输入 |
-| 深度/裁剪 | `demo_depth_overlap`、`demo_frustum_clipping`、`demo_window_clipping`、`demo_backface_culling` | Z-buffer 和各级剔除裁剪 |
-| 材质/光照 | `demo_material_texture`、`demo_lighting` | UV 纹理及环境光、点光、聚光 |
-| 相机/输出 | `demo_camera_viewport`、`demo_stereo_view`、`demo_render_target` | 视口、多相机和输出目标 |
-| 拓扑/管线 | `demo_polygon_triangulation`、`demo_polygon_pipeline` | 三角化和多边形主管线 |
+截图来源、像素配置和复现方式见 [图片说明](docs/images/README.md)。
 
-高级顶点流程使用独立的小型 Demo：
+## 能做什么
 
-分阶段画面、数值公式、容差和失败判据见 [`tests/README.md`](tests/README.md#高级顶点流程验收标准)。
-这些 Demo 面向 PC 开发、差分和性能评估；MCU 产品路径继续使用原有基础管线，不要求运行高级流程。
-
-| Demo | 观察目标 |
+| 模块 | 已有能力 |
 |---|---|
-| `demo_advanced_vertex` | 单个 RGB 三角形，验证 `GRErgb24` 顶点颜色插值 |
-| `demo_advanced_stages` | 两排八个大三角形，逐项验证高级顶点材质流程 |
-| `demo_advanced_point_light` | 两排六个大三角形，逐项验证点光位置、入射角、衰减、棋盘和顶点颜色 |
-| `demo_advanced_perspective` | 大角度倾斜棋盘，验证透视校正 UV 和深度 |
-| `demo_advanced_perspective_verify` | 倾斜棋盘加固定采样点，输出仿射与透视 UV 数值对照 |
-| `demo_advanced_clipping` | 近裁剪面穿越三角形，观察裁剪后四边形和顶点颜色连续性 |
-| `demo_advanced_clipping_planes` | 两排六格，验证近远左右上下六个视锥面的高级属性裁剪 |
-| `demo_advanced_depth` | 两种提交顺序的重叠高级平面，验证深度结果一致 |
-| `demo_advanced_cube` | 高级立方体，观察多面硬边、共享顶点和逐面光照 |
-| `demo_advanced_lighting` | 三格高级光照：环境光、高光点光、彩色双点光源 |
-| `demo_advanced_specular` | 三格高光专项：关闭高光、开启高光、移动光源 |
-| `demo_advanced_spot_light` | 三格聚光灯专项：点光基准、正向聚光、改变聚光方向 |
-| `demo_advanced_material_channels` | 三格材质通道专项：环境色、漫反射色、镜面色独立验证 |
-| `demo_advanced_specular_texture` | 三格黑白棋盘，验证镜面高光不被颜色纹理或顶点色吞掉 |
-| `demo_advanced_gloss` | 三格对比高光指数 8/30/96，验证材质高光由宽变窄 |
-| `demo_advanced_spot_specular` | 三格验证聚光灯镜面高光受锥角约束并跟随灯位 |
-| `demo_advanced_light_accumulation` | 红光、蓝光及红蓝同时开启，验证多光源逐像素加法 |
-| `demo_advanced_light_order` | 交换红蓝灯提交顺序并倍增灯光，验证顺序无关和饱和钳位 |
-| `demo_advanced_backlight` | 正面光、无背面补光、有背面补光三格验证 `shadowK` |
-| `demo_advanced_earth_normal_map` | 地球纹理、UV 接缝、法线贴图及高度置换综合展示 |
-| `demo_advanced_height_map` | 高度贴图平面对照、正负位移及球体轮廓验证 |
-| `demo_advanced_normal_specular` | 关闭高光、平坦法线高光、扰动法线高光三格对照 |
-| `demo_advanced_specular_sampling` | 粗顶点、逐片元、细分顶点三格验证高光采样频率 |
-| `demo_advanced_render_modes` | Face/Vertex/Pixel 三种高级渲染模式对照 |
-| `demo_advanced_normals` | 同一低面数圆柱左右对照，验证逐面和顶点法线光照差异 |
-| `demo_advanced_normal_map` | 两块正视平面左右对照，验证切线生成、TBN 和法线贴图 |
-| `demo_advanced_normal_map_detail` | 三块大平面，验证平坦/扰动法线贴图及混合 `tangentW` 的受光细节 |
-| `demo_advanced_mirror_uv` | 左右对照镜像 U，验证切线手性与法线方向整体镜像 |
+| 几何 | 平面、立方体、球体、圆柱、圆锥、圆环、胶囊体及规则多面体；多边形三角化 |
+| 光栅管线 | 坐标变换、背面剔除、视锥/窗口裁剪、三角形与多边形填充、深度与线框 |
+| 材质 | UV 纹理、顶点色、法线贴图、高光通道、高度置换、已有光照贴图的采样 |
+| 光照 | 环境光、点光源、聚光灯；逐面、逐顶点、逐像素三种采样方式 |
+| 光线追踪 | 网格、球体、平面、AABB、圆柱求交；着色、反射、折射和 Fresnel 函数 |
+| 资源与场景 | 静态 Ogre 网格/材质读取、BMP 图像、物体/材质/光源/相机管理 |
+| 输出与内存 | RGB565 / RGB888 源码配置；外部帧缓冲、独立或共享渲染工作区 |
+| 索引配置 | 公共类型 `GRE_Index`，编译时选择 `uint16` 或 `uint32` |
 
-构建后可以分别运行，例如：
+**MCU 可以保留基础管线和 16 位索引，PC 可以选择高级材质及更大的网格。** 实际性能和可用规模取决于硬件、分辨率、模型和所选算法；本机静态库不能直接用于不同架构的 MCU。
 
-```bash
-./build/demo_advanced_vertex
-./build/demo_advanced_point_light
-./build/demo_advanced_perspective
-./build/demo_advanced_normals
-./build/demo_advanced_normal_map
+## 快速开始
+
+### 直接使用预编译 SDK
+
+取得整个 [build/YMGRE_libs](build/YMGRE_libs/) 目录，或使用一键发布生成的压缩包。
+在 SDK 目录运行：
+
+```sh
+./build_demos.sh 16       # GRE_Index = uint16
+./build_demos.sh 32       # GRE_Index = uint32
 ```
 
-#### 参与贡献
+默认构建无窗口示例，不需要引擎源码、YMGUI 或 SDL。示例会生成 `cube.ppm`，并输出索引大小、像素大小和有效像素数量。
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+目前发布包为 **Linux x86_64 / Release / RGB565**，提供两种索引位宽；具体编译器和配置记录在 `BUILD_INFO.json`。
 
+### 在自己的工程中链接
 
-#### 特技
+```cmake
+cmake_minimum_required(VERSION 3.16)
+project(my_demo C)
+set(CMAKE_C_STANDARD 99)
 
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+find_package(YMGRE CONFIG REQUIRED)
+add_executable(my_demo main.c)
+target_link_libraries(my_demo PRIVATE YMGRE::ymgre)
+```
+
+```sh
+cmake -S . -B build16 \
+  -DYMGRE_DIR=/absolute/path/YMGRE_libs/cmake \
+  -DYMGRE_INDEX_BITS=16
+cmake --build build16
+```
+
+`YMGRE::ymgre` 自动传递匹配的头文件路径、索引位宽、像素格式和数学库依赖。
+完整可编译入口见 [最小示例](sdk/examples/demo_sdk_minimal.c)，相机、材质、内存所有权及调用顺序见 [使用手册](sdk/MANUAL.md)。
+
+### 运行窗口 Demo
+
+YMGRE 与 YMGUI **分别发布、分别维护**。YMGRE 包不包含 YMGUI 的头文件、静态库或嵌入 YMGUI 的窗口程序。
+窗口 Demo 保留源码，显式接入外部 YMGUI SDK：
+
+```sh
+./build_demos.sh 16 /absolute/path/YMGUI_libs/cmake
+./examples-build16/bin/demo_basic_shapes
+./examples-build16/bin/demo_advanced_raytrace_mirror
+```
+
+外部 YMGUI 包需提供兼容的 CMake 目标和 RGB565 配置；目前预留接口的详细约定见 [手册第 5 节](sdk/MANUAL.md#5-重新编译整套示例)。
+源码仓库中的 Demo 可直接使用仓库内的 YMGUI 子模块构建。
+
+## 一键编译与发布
+
+维护引擎时，在本仓库执行：
+
+```sh
+./sdk/build.sh
+```
+
+脚本编译两份核心库、复制头文件和示例、验证独立链接，然后生成 SDK、压缩包及 SHA256 校验文件：
+
+```text
+build/
+├── YMGRE_libs/
+│   ├── include/YMGRE/        # 公开头文件
+│   ├── lib/                  # index16 / index32 两份核心静态库
+│   ├── cmake/                # find_package 接入配置
+│   ├── examples/             # 30 个 Demo 源码与应用侧窗口接入代码
+│   ├── bin/                  # 已编译的无窗口示例
+│   ├── docs/images/          # 随包携带的效果图
+│   ├── build_demos.sh
+│   ├── README.md
+│   └── 手册.md
+├── YMGRE_libs-linux-x86_64.tar.gz
+└── YMGRE_libs-linux-x86_64.tar.gz.sha256
+```
+
+默认发布流程不需要 YMGUI。提供外部包时，可以额外验收全部窗口 Demo：
+
+```sh
+./sdk/build.sh --ymgui-dir /absolute/path/YMGUI_libs/cmake
+```
+
+`.gitignore` 只对 `build/YMGRE_libs/` 放行，其他构建输出继续忽略。发布过程日志在 `build/_ymgre_sdk/`。
+
+## 从源码构建
+
+桌面 Demo 需要 C 编译器、CMake、pkg-config、SDL2 开发包，以及仓库的 YMGUI 子模块。
+
+```sh
+git submodule update --init --recursive
+cmake -S . -B build/dev \
+  -DYMGRE_INDEX_BITS=16 \
+  -DYMGRE_CAMERA_COLOR_DEPTH=24
+cmake --build build/dev -j4
+ctest --test-dir build/dev --output-on-failure
+./build/dev/demo_basic_shapes
+```
+
+只构建核心和模块测试时，可以关闭桌面显示依赖：
+
+```sh
+cmake -S . -B build/core \
+  -DYMGRE_BUILD_DEMOS=OFF \
+  -DYMGRE_BUILD_YMGUI_HOST=OFF
+cmake --build build/core -j4
+ctest --test-dir build/core --output-on-failure
+```
+
+索引位宽和颜色格式属于编译配置。库与应用的所有编译单元必须保持一致，切换后重新编译；不要把不同配置的库混到同一个程序中。
+
+## Demo 与应用入口
+
+| 想看什么 | 从这里开始 |
+|---|---|
+| 最小调用与离线输出 | [`demo_sdk_minimal.c`](sdk/examples/demo_sdk_minimal.c) |
+| 基础几何和拓扑 | `demo_basic_shapes`、`demo_extended_shapes`、`demo_polygon_triangulation` |
+| 深度、裁剪与公共边 | `demo_depth_overlap`、`demo_frustum_clipping`、`demo_shared_edge_stress` |
+| 材质和光照 | `demo_material_texture`、`demo_lighting`、`demo_advanced_normal_map` |
+| 高级管线差异 | `demo_advanced_render_modes`、`demo_advanced_specular_sampling` |
+| 光追、镜面与玻璃 | `demo_advanced_raytrace_mirror`、`demo_advanced_raytrace_refraction` |
+| 地球纹理综合展示 | `demo_advanced_earth_normal_map`，使用仓库 `Resource/` 中的纹理 |
+| 场景编辑、UV、画板和烘焙 | [`project_Demo/scene_baker`](project_Demo/scene_baker/README.md) |
+
+完整 Demo 导航见 [Demo/README.md](Demo/README.md)。
+场景编辑器、UV 编辑和烘焙生成工具属于应用层，未封装进当前核心 SDK；它们展示如何在引擎上构建更完整的工具。
+
+## 测试与当前范围
+
+模块测试覆盖深度、裁剪、材质、退化几何、射线求交等；索引测试还包含超过 65535 顶点编号的读写、渲染和求交。
+SDK 发布另行验证消费者仅链接预编译库即可运行，结果保存在包内 `verification/`。
+数值判据与视觉验收方式见 [tests/README.md](tests/README.md)。
+
+当前相机主管线使用透视投影。16 位配置保留单子网格 65535 顶点上限；32 位配置仍受计数类型、内存和具体工具容量约束。
+Ogre 读取对应现有静态模型路径，支持范围和资源约定见手册。MCU 发布需要按芯片、ABI、浮点选项和内存策略单独交叉编译。
+
+## 许可
+
+YMGRE 使用 [Apache License 2.0](LICENSE)。YMGUI 及其他外部依赖由各自项目维护和授权。

@@ -8,8 +8,8 @@ int main(void)
 		{ { 10, -10, 100, 1 }, 1, 0 },
 		{ { 0, 10, 100, 1 }, 0.5f, 1 }
 	};
-	uint16 frontIndex[3] = { 0, 1, 2 };
-	uint16 backIndex[3] = { 0, 2, 1 };
+	GRE_Index frontIndex[3] = { 0, 1, 2 };
+	GRE_Index backIndex[3] = { 0, 2, 1 };
 	gre_polygon4d polygon[2] = { 0 };
 	gre_object4d object = { 0 };
 	uint8 polygonHide[2] = { 0 };

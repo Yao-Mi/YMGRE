@@ -740,7 +740,7 @@ void YMGRE_TriangleRaster_Fill(GRE_Vertex4d vertexList, GRE_Polygon4d polygon,
 	/* Convert before splitting: every screen-space interpolation, including the
 	 * split vertex, must use 1/z. Keep caller vertices and the z buffer in camera z. */
 	gre_vertex4d projected[3];
-	uint16 indices[3] = { 0, 1, 2 };
+	GRE_Index indices[3] = { 0, 1, 2 };
 	gre_polygon4d localPolygon = *polygon;
 	localPolygon.index = indices;
 	for (int i = 0; i < 3; ++i)

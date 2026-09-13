@@ -8,7 +8,7 @@
 static void drawTriangle(GRE_Camera4d camera, GRErgb24 color, float32 depth, float32 offsetX)
 {
 	gre_vertex4d vertex[3] = { 0 };
-	uint16 index[3] = { 0, 1, 2 };
+	GRE_Index index[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	gre_object4d object = { 0 };
 	uint8 polygonHide[1] = { 0 };

@@ -42,7 +42,7 @@ static GRE_Object4d makeEarth(int stage)
 	{
 		uint16 a = y * nw + x, b = a + 1, c = a + nw, d = c + 1;
 		uint16 ix[6] = { a, d, c, a, b, d };
-		for (int t = 0; t < 2; t++) { GRE_Polygon4d q = &o->polygonList[p++]; q->num = 3; q->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16)); for (int j = 0; j < 3; j++) q->index[j] = ix[t * 3 + j]; q->planeColor = (GRErgb24){255,255,255}; gre_fvector4d* cp = &o->pointList[ix[t * 3]].pos; q->pN = (gre_fvector4d){-cp->x, -cp->y, -cp->z, 0}; }
+		for (int t = 0; t < 2; t++) { GRE_Polygon4d q = &o->polygonList[p++]; q->num = 3; q->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index)); for (int j = 0; j < 3; j++) q->index[j] = ix[t * 3 + j]; q->planeColor = (GRErgb24){255,255,255}; gre_fvector4d* cp = &o->pointList[ix[t * 3]].pos; q->pN = (gre_fvector4d){-cp->x, -cp->y, -cp->z, 0}; }
 	}
 	if (stage == 3)
 	{

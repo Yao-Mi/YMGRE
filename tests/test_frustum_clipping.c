@@ -15,7 +15,7 @@ static int projectedCullingPass(GRE_Camera4d camera)
 	float d=camera->perspectPlane.pD,u=camera->perspectPlane.pU;
 	/* No vertex is inside, yet this triangle covers the center of the viewport. */
 	gre_vertex4d points[3]={{{l*2,d*2,100,1},0,0},{{r*2,d*2,100,1},1,0},{{0,u*2,100,1},.5f,1}};
-	uint16 indices[3]={0,1,2};gre_polygon4d polygon={0};polygon.num=3;polygon.index=indices;
+	GRE_Index indices[3]={0,1,2};gre_polygon4d polygon={0};polygon.num=3;polygon.index=indices;
 	gre_object4d object={0};object.pointNum=3;object.pointList_=points;object.polygonNum=1;object.polygonList=&polygon;
 	gre_vertex4d_wN advanced[3]={0};
 	for(int entry=0;entry<3;entry++) {
@@ -63,7 +63,7 @@ static int nearPlaneRenderingPass(void)
 	object->pointList[1]=(gre_vertex4d){{-1.8338690f,-2.0286086f,-.07847003f,1},1,0};
 	object->pointList[2]=(gre_vertex4d){{-.14434498f,-1.4311551f,2.8039882f,1},0,1};
 	gre_vertex4d original[3];memcpy(original,object->pointList,sizeof(original));
-	GRE_Polygon4d face=object->polygonList;face->num=3;face->index=GRE_PolyIndex_Malloc(3*sizeof(uint16));
+	GRE_Polygon4d face=object->polygonList;face->num=3;face->index=GRE_PolyIndex_Malloc(3*sizeof(GRE_Index));
 	for(int i=0;i<3;i++)face->index[i]=i;
 	face->pN=(gre_fvector4d){0,1,0,0};face->planeColor=(GRErgb24){92,155,220};
 	object->isVisible=1;object->boundType=GRE_Bounding_Sphere_R;object->BoundingSphereR=10;

@@ -46,7 +46,7 @@ static void renderHandedness(GRE_FrameBuffer frame, float32 w0, float32 w1, floa
 	vertices[0].tangentW = w0;
 	vertices[1].tangentW = w1;
 	vertices[2].tangentW = w2;
-	uint16 indices[3] = { 0, 1, 2 };
+	GRE_Index indices[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	polygon.num = 3;
 	polygon.index = indices;
@@ -93,7 +93,7 @@ static void renderVertexIdentity(GRE_FrameBuffer frame, uint8 withWhiteMaterial)
 	vertices[0].color = (GRErgb24){ 255, 35, 35 };
 	vertices[1].color = (GRErgb24){ 35, 255, 70 };
 	vertices[2].color = (GRErgb24){ 40, 90, 255 };
-	uint16 indices[3] = { 0, 1, 2 };
+	GRE_Index indices[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	polygon.num = 3; polygon.index = indices;
 	GRE_Material material = NULL;
@@ -145,7 +145,7 @@ static int textureBoundaryIsStable(void)
 		vertices[i].normal = (gre_fvector4d){ 0, 0, 1, 0 };
 		vertices[i].color = (GRErgb24){ 255, 255, 255 };
 	}
-	uint16 indices[3] = { 0, 1, 2 };
+	GRE_Index indices[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	polygon.num = 3; polygon.index = indices;
 
@@ -197,7 +197,7 @@ static int vertexLitRasterUsesCachedLighting(void)
 		vertices[i].color = (GRErgb24){ 255, 255, 255 };
 		vertices[i].vertexLighting = (GRErgb24){ 210, 70, 35 };
 	}
-	uint16 indices[3] = { 0, 1, 2 };
+	GRE_Index indices[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	polygon.num = 3; polygon.index = indices;
 	GRE_Material material = YMGRE_Creat_Material("vertex_lit");
@@ -229,7 +229,7 @@ static int vertexSpecularBypassesBlackAlbedo(void)
 		vertices[i].vertexLighting = (GRErgb24){ 200, 200, 200 };
 		vertices[i].vertexSpecular = (GRErgb24){ 25, 80, 220 };
 	}
-	uint16 indices[3] = { 0, 1, 2 };
+	GRE_Index indices[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	polygon.num = 3; polygon.index = indices;
 	GRE_Material material = YMGRE_Creat_Material("black_albedo");

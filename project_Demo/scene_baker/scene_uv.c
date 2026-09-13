@@ -164,7 +164,7 @@ static int stageMesh(Part* part,const Chart* charts,double scale)
     dst->polygonNum=src->polygonNum;
     for(int i=0;i<src->polygonNum;i++) {
         dst->polygonList[i]=src->polygonList[i];
-        dst->polygonList[i].index=GRE_PolyIndex_Malloc(3*sizeof(uint16));
+        dst->polygonList[i].index=GRE_PolyIndex_Malloc(3*sizeof(GRE_Index));
         if(!dst->polygonList[i].index)goto done;
     }
     for(int i=0;i<slots;i++)table[i]=-1;
@@ -205,7 +205,7 @@ int SceneUv_Generate(GRE_Object4d mesh,int* islands,char* error,size_t capacity)
     Part parts[64]={0};int count=0,total=0,chartCount=0,ok=0;Chart *charts=NULL,*order=NULL;
     const char* reason="无法展开：内存不足或存在无效、退化三角形";
     for(GRE_Object4d p=mesh;p;p=p->nextObject) {
-        if(count==64||p->polygonNum<1||p->polygonNum>UV_MAX_FACES-total||p->pointNum<1||p->pointNum>65535||
+        if(count==64||p->polygonNum<1||p->polygonNum>UV_MAX_FACES-total||p->pointNum<1||p->pointNum>YMGRE_MAX_VERTICES||
            !p->pointList||!p->polygonList||p->importedUvCount>8||(p->importedUvs&&!p->importedUvCount)) {
             reason="自动展开支持最多 20000 个三角形、64 个子网格及 8 套 UV";goto done;
         }
@@ -280,7 +280,7 @@ int SceneUv_Sphere(GRE_Object4d src,unsigned latitude,unsigned longitude,char* e
             unsigned original=grid?face:y==0?x:y==latitude-1?src->polygonNum-longitude+x:
                 longitude+((y-1)*longitude+x)*2+t;
             dst->polygonList[face]=src->polygonList[original];
-            dst->polygonList[face].index=GRE_PolyIndex_Malloc(3*sizeof(uint16));
+            dst->polygonList[face].index=GRE_PolyIndex_Malloc(3*sizeof(GRE_Index));
             if(!dst->polygonList[face].index)goto done;
             for(int j=0;j<3;j++)dst->polygonList[face].index[j]=indices[t*3+j];
         }
@@ -323,7 +323,7 @@ static int generateAtlas(GRE_Object4d mesh,const gre_fvector4d* center,const gre
     Chart* charts=NULL;double extent=0;
     if(error&&capacity)snprintf(error,capacity,"展开失败：无效网格、超过 2 万三角形或内存不足");
     for(GRE_Object4d p=mesh;p;p=p->nextObject) {
-        if(count==64||p->pointNum<1||p->pointNum>65535||p->polygonNum<1||p->polygonNum>UV_MAX_FACES-total||
+        if(count==64||p->pointNum<1||p->pointNum>YMGRE_MAX_VERTICES||p->polygonNum<1||p->polygonNum>UV_MAX_FACES-total||
            !p->pointList||!p->polygonList||p->importedUvCount>8||(p->importedUvs&&!p->importedUvCount))goto done;
         int i=count++;parts[i].source=p;total+=p->polygonNum;
         float* positions=malloc((size_t)p->pointNum*3*sizeof(float));
@@ -459,7 +459,7 @@ int SceneUv_Primitive(GRE_Object4d mesh,unsigned shape,const gre_fvector4d* cent
     Part part={.source=mesh};int ok=0,charts=1;V3* local=NULL;
     if(error&&capacity)snprintf(error,capacity,"基本形状展开失败：无效网格或内存不足");
     if(!mesh||mesh->nextObject||shape>7||shape==3||!center||!axes||!isfinite(scale)||scale<=0||
-       mesh->pointNum<1||mesh->pointNum>65535||mesh->polygonNum<1||mesh->polygonNum>UV_MAX_FACES||
+       mesh->pointNum<1||mesh->pointNum>YMGRE_MAX_VERTICES||mesh->polygonNum<1||mesh->polygonNum>UV_MAX_FACES||
        !mesh->pointList||!mesh->polygonList||mesh->importedUvCount>8||(mesh->importedUvs&&!mesh->importedUvCount))return 0;
     local=malloc(mesh->pointNum*sizeof(*local));part.faces=calloc(mesh->polygonNum,sizeof(*part.faces));if(!local||!part.faces)goto done;
     for(int i=0;i<mesh->pointNum;i++) {

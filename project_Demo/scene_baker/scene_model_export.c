@@ -49,8 +49,12 @@ static int writeMesh(const char* path,GRE_Object4d mesh,const gre_fvector4d* ori
     for(GRE_Object4d part=mesh;part;part=part->nextObject,partIndex++) {
         unsigned uvCount=part->importedUvs?part->importedUvCount:1,stride=24+8*uvCount;
         long sub=begin(f,OGRE_SUBMESH);fprintf(f,"%s\n",materialName(part));fputc(0,f);
-        u32(f,part->polygonNum*3);fputc(0,f);
-        for(int i=0;i<part->polygonNum;i++)for(int j=0;j<3;j++)u16(f,part->polygonList[i].index[j]);
+        int wide=part->pointNum>65536;
+        u32(f,(uint32)part->polygonNum*3u);fputc(wide,f);
+        for(int i=0;i<part->polygonNum;i++)for(int j=0;j<3;j++) {
+            if(wide)u32(f,part->polygonList[i].index[j]);
+            else u16(f,part->polygonList[i].index[j]);
+        }
         long geometry=begin(f,OGRE_GEOMETRY);u32(f,part->pointNum);
         long declaration=begin(f,OGRE_GEOMETRY_VERTEX_DECLARATION);
         element(f,2,1,0,0);element(f,2,4,12,0);
@@ -85,7 +89,7 @@ static int exportModel(GRE_Object4d mesh,GRE_List materials,GRE_Material fallbac
     char directory[3840],path[4096],materialPath[4096];unsigned count=0;
     if(!mesh || !materials || !meshPath || !pathCapacity || !stem || !*stem || strlen(stem)>80 || strchr(stem,'/') || strchr(stem,'\\'))goto invalid;
     for(GRE_Object4d part=mesh;part;part=part->nextObject) {
-        if(++count>64||part->pointNum<1||part->pointNum>65535||part->polygonNum<1||!part->pointList||!part->polygonList||
+        if(++count>64||part->pointNum<1||part->pointNum>YMGRE_MAX_VERTICES||part->polygonNum<1||(uint32)part->polygonNum>UINT32_MAX/12u||!part->pointList||!part->polygonList||
             strlen(materialName(part))>=20||strpbrk(materialName(part)," \t\r\n{}")||part->importedUvCount>8||
             (part->importedUvs && !part->importedUvCount))goto invalid;
         for(int i=0;i<part->polygonNum;i++)for(int j=0;j<3;j++)
@@ -145,7 +149,7 @@ int SceneModel_ExportBaked(GRE_Object4d source,GRE_Lightmap map,GRE_Material bas
     char* error,size_t capacity)
 {
     if(!source || !directory || !*directory || source->nextObject || !map || !map->pixels || !map->uv1 ||
-        map->triangleCount!=(unsigned)source->polygonNum || map->triangleCount>21845) {
+        map->triangleCount!=(unsigned)source->polygonNum || map->triangleCount>YMGRE_MAX_VERTICES/3u) {
         snprintf(error,capacity,"烘焙图与三角网格不匹配");return 0;
     }
     char materialName[20];snprintf(materialName,sizeof(materialName),"Baked_%.6s",directory+ (strlen(directory)>6?strlen(directory)-6:0));
@@ -160,7 +164,7 @@ int SceneModel_ExportBaked(GRE_Object4d source,GRE_Lightmap map,GRE_Material bas
     for(int i=0;i<source->polygonNum;i++) {
         GRE_Polygon4d face=&source->polygonList[i],dest=&mesh->polygonList[i];
         dest->num=3;dest->pN=face->pN;dest->planeColor=(GRErgb24){255,255,255};
-        dest->index=GRE_PolyIndex_Malloc(3*sizeof(uint16));
+        dest->index=GRE_PolyIndex_Malloc(3*sizeof(GRE_Index));
         if(!dest->index){free(pixels);YMGRE_Free_Object(mesh);return 0;}
         for(int j=0;j<3;j++) {
             int n=i*3+j;dest->index[j]=n;mesh->pointList[n]=source->pointList[face->index[j]];

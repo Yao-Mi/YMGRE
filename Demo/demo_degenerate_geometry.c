@@ -12,7 +12,7 @@ static void drawPolygon(GRE_Camera4d camera, const float32 point[][2], uint16 po
 	GRErgb24 color, uint8 showLines)
 {
 	gre_vertex4d vertex[8] = { 0 };
-	uint16 index[8] = { 0 };
+	GRE_Index index[8] = { 0 };
 	gre_polygon4d polygon = { 0 };
 	gre_object4d object = { 0 };
 	uint8 polygonHide[1] = { 0 };

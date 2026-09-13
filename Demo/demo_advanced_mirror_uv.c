@@ -20,8 +20,8 @@ static GRE_Object4d createPanel(uint8 mirrored, const char* materialName)
 	object->pointList[1] = (gre_vertex4d){ { 125, -125, 180, 1 }, u1, 1 };
 	object->pointList[2] = (gre_vertex4d){ { 125, 125, 180, 1 }, u1, 0 };
 	object->pointList[3] = (gre_vertex4d){ { -125, 125, 180, 1 }, u0, 0 };
-	uint16 indices[6] = { 0, 3, 2, 0, 2, 1 };
-	for (int i = 0; i < 2; i++) { GRE_Polygon4d p = &object->polygonList[i]; p->num = 3; p->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16)); for (int j = 0; j < 3; j++) p->index[j] = indices[i * 3 + j]; p->pN = (gre_fvector4d){ 0, 0, -1, 0 }; p->planeColor = (GRErgb24){ 220, 220, 220 }; }
+	GRE_Index indices[6] = { 0, 3, 2, 0, 2, 1 };
+	for (int i = 0; i < 2; i++) { GRE_Polygon4d p = &object->polygonList[i]; p->num = 3; p->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index)); for (int j = 0; j < 3; j++) p->index[j] = indices[i * 3 + j]; p->pN = (gre_fvector4d){ 0, 0, -1, 0 }; p->planeColor = (GRErgb24){ 220, 220, 220 }; }
 	object->BoundingSphereR = 180; object->boundType = GRE_Bounding_Sphere_R;
 	YMGRE_Object_GenerateVertexAttributes(object);
 	object->renderMode = GRE_RenderMode_Pixel;

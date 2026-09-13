@@ -31,12 +31,12 @@ static GRE_Object4d createPanel(void)
 	object->pointList[1] = (gre_vertex4d){ { 125, -105, 180, 1 }, 1, 1 };
 	object->pointList[2] = (gre_vertex4d){ { 125, 105, 180, 1 }, 1, 0 };
 	object->pointList[3] = (gre_vertex4d){ { -125, 105, 180, 1 }, 0, 0 };
-	uint16 indices[6] = { 0, 3, 2, 0, 2, 1 };
+	GRE_Index indices[6] = { 0, 3, 2, 0, 2, 1 };
 	for (int i = 0; i < 2; i++)
 	{
 		GRE_Polygon4d polygon = &object->polygonList[i];
 		polygon->num = 3;
-		polygon->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16));
+		polygon->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index));
 		for (int j = 0; j < 3; j++) polygon->index[j] = indices[i * 3 + j];
 		polygon->pN = (gre_fvector4d){ 0, 0, -1, 0 };
 		polygon->planeColor = kDiffuse;

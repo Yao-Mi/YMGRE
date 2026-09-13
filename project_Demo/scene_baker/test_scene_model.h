@@ -45,7 +45,7 @@ static int runTankRoundtrip(void)
     }
     TANK_CHECK(!memcmp(original->importedUvs,restored->importedUvs,original->pointNum*6*2*sizeof(float32)));
     TANK_CHECK(!memcmp(original->importedNormals,restored->importedNormals,original->pointNum*sizeof(gre_fvector4d)));
-    for(int i=0;i<original->polygonNum;i++)TANK_CHECK(!memcmp(original->polygonList[i].index,restored->polygonList[i].index,3*sizeof(uint16)));
+    for(int i=0;i<original->polygonNum;i++)TANK_CHECK(!memcmp(original->polygonList[i].index,restored->polygonList[i].index,3*sizeof(GRE_Index)));
     TANK_CHECK(!strcmp(original->materiaName,restored->materiaName));
     GRE_Material a=YMGRE_Material_Find(&originalContext.MaterialList,original->materiaName);
     GRE_Material b=YMGRE_Material_Find(&outputContext.MaterialList,restored->materiaName);

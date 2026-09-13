@@ -20,7 +20,7 @@ static uint8 pointInTriangle(const gre_fvector4d* p, const gre_fvector4d* a,
 
 // 对简单多边形执行耳切：每次移除一个不包含其他顶点的凸耳。
 uint16 YMGRE_Polygon_Triangulate(const gre_fvector4d* vertices, uint16 vertexNum,
-	uint16* triangleIndices, uint16 triangleCapacity)
+	GRE_Index* triangleIndices, uint16 triangleCapacity)
 {
 	if (vertices == NULL || triangleIndices == NULL || vertexNum < 3 ||
 		triangleCapacity < vertexNum - 2)

@@ -31,6 +31,8 @@ int main(void)
     YMGRE_List_Append(&lights,sizeof(GRE_Light4d),ambient);YMGRE_List_Append(&lights,sizeof(GRE_Light4d),lamp);
     CHECK(finish(r,camera,&objects,&lights,&materials)==100);GRErgb24 lit=center(camera);
     CHECK(lit.R>140);CHECK(fabsf(camera->img.zbuff[32*64+32]-5)<.01f);
+    /* Off-axis rays travel farther, but this front face still has camera z = 5. */
+    CHECK(fabsf(camera->img.zbuff[34*64+35]-5)<.01f);
     GRE_Object4d blocker=YMGRE_MeshGener_Cube(.8f,(GRErgb24){255,255,255},"blocker","ray-test");CHECK(blocker);
     blocker->mirrorKs=0;
     for(int i=0;i<blocker->pointNum;i++){blocker->pointList[i].pos.x-=1.5f;blocker->pointList[i].pos.z-=2.5f;}

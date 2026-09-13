@@ -93,7 +93,7 @@ int main(void)
     vertices[0].lightmapU=0.1f;vertices[1].lightmapU=0.9f;vertices[2].lightmapU=0.1f;
     GRErgb24 texels[2]={{128,255,255},{255,0,0}},irradiance[2]={{64,64,64},{192,192,192}};
     gre_material material={0};material.diffuse=(GRErgb24){128,128,128};material.width=2;material.height=1;material.pixel=texels;
-    gre_lightmap tiny={.width=2,.height=1,.pixels=irradiance,.enabled=1};uint16 indices[3]={0,1,2};
+    gre_lightmap tiny={.width=2,.height=1,.pixels=irradiance,.enabled=1};GRE_Index indices[3]={0,1,2};
     gre_polygon4d triangle={.num=3,.index=indices};
     YMGRE_CameraImage_Init(camera,(GRErgb24){0,0,0});
     YMGRE_TriangleRaster_FillLightmap_wN(vertices,&triangle,&material,&tiny,camera);
@@ -111,7 +111,7 @@ int main(void)
     gre_list empty={0};GRE_Lightmap black=SceneBake_Create(cube,&empty,32,error,sizeof(error));CHECK(black);
     for(unsigned i=0;i<32*32;i++)CHECK(black->pixels[i].R==0 && black->pixels[i].G==0 && black->pixels[i].B==0);
     YMGRE_Free_Lightmap(black);
-    uint16 old=cube->polygonList[0].index[1];cube->polygonList[0].index[1]=cube->polygonList[0].index[0];
+    GRE_Index old=cube->polygonList[0].index[1];cube->polygonList[0].index[1]=cube->polygonList[0].index[0];
     CHECK(!SceneBake_Create(cube,&lights,256,error,sizeof(error)));cube->polygonList[0].index[1]=old;
     /* A truncated resource is rejected without attaching partial state. */
     CHECK(SceneBake_Save(map,hash,root,path,sizeof(path),error,sizeof(error)));

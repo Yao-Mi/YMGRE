@@ -198,10 +198,10 @@ int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	{
 		GRE_Polygon4d polygon = &object->polygonList[pi];
 		if (polygon->index == NULL || polygon->num < 3) continue;
-		uint16 first = polygon->index[0];
+		GRE_Index first = polygon->index[0];
 		for (int corner = 1; corner + 1 < polygon->num; corner++)
 		{
-			uint16 i1 = polygon->index[corner], i2 = polygon->index[corner + 1];
+			GRE_Index i1 = polygon->index[corner], i2 = polygon->index[corner + 1];
 			if (first >= object->pointNum || i1 >= object->pointNum || i2 >= object->pointNum) continue;
 			if (!YMGRE_Ray_IntersectTriangle(ray, &object->pointList[first].pos,
 				&object->pointList[i1].pos, &object->pointList[i2].pos,

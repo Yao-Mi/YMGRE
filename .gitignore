@@ -20,3 +20,9 @@ baked_scene/*
 # 运行输出
 *.log
 *.bmp~
+
+# 发布 SDK：只保留 build/YMGRE_libs，其余构建产物仍忽略。
+!/build/
+/build/*
+!/build/YMGRE_libs/
+!/build/YMGRE_libs/**

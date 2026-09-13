@@ -85,7 +85,7 @@ static int countColor(GRErgb24 color)
 static void drawPolygon(const gre_fvector4d point[], uint16 pointNum, GRErgb24 color)
 {
 	gre_vertex4d vertex[8] = { 0 };
-	uint16 index[8] = { 0 };
+	GRE_Index index[8] = { 0 };
 	gre_polygon4d polygon = { 0 };
 	gre_object4d object = { 0 };
 	uint8 polygonHide[1] = { 0 };
@@ -107,7 +107,7 @@ static void drawPolygon(const gre_fvector4d point[], uint16 pointNum, GRErgb24 c
 static void drawTriangle(const gre_fvector4d point[3], GRErgb24 color)
 {
 	gre_vertex4d vertex[3] = { 0 };
-	uint16 index[3] = { 0, 1, 2 };
+	GRE_Index index[3] = { 0, 1, 2 };
 	gre_polygon4d polygon = { 0 };
 	gre_object4d object = { 0 };
 	uint8 polygonHide[1] = { 0 };

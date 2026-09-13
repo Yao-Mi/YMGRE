@@ -42,7 +42,7 @@ static GRE_Object4d irregular(void)
     for(int y=0;y<6;y++)for(int x=0;x<6;x++)if(x<3||y<3) {
         int vertices[6]={y*7+x,y*7+x+1,(y+1)*7+x+1,y*7+x,(y+1)*7+x+1,(y+1)*7+x};
         for(int t=0;t<2;t++) {
-            GRE_Polygon4d p=m->polygonList+f++;memset(p,0,sizeof(*p));p->num=3;p->index=GRE_PolyIndex_Malloc(6);
+            GRE_Polygon4d p=m->polygonList+f++;memset(p,0,sizeof(*p));p->num=3;p->index=GRE_PolyIndex_Malloc(3*sizeof(GRE_Index));
             for(int j=0;j<3;j++)p->index[j]=vertices[t*3+j];
         }
     }
@@ -142,7 +142,7 @@ int main(void)
     printf("Irregular curved L: %d islands / %d triangles\n",islands,bent->polygonNum);
     cube->nextObject=bent;CHECK(SceneUv_Generate(cube,&islands,error,sizeof(error))&&atlasValid(cube));
     /* A failed later submesh must leave all live vertex/index buffers unchanged. */
-    GRE_Vertex4d before=cube->pointList;uint16 old=bent->polygonList[0].index[1];
+    GRE_Vertex4d before=cube->pointList;GRE_Index old=bent->polygonList[0].index[1];
     bent->polygonList[0].index[1]=bent->polygonList[0].index[0];
     CHECK(!SceneUv_Generate(cube,NULL,error,sizeof(error))&&cube->pointList==before);
     bent->polygonList[0].index[1]=old;CHECK(atlasValid(cube));

@@ -43,7 +43,7 @@ static int sevenEdgeRegression(void)
 	static GRE_FramePixel frame[560*540]; static float32 depth[560*540];
 	gre_camera4d camera={0};camera.img.width=560;camera.img.height=540;
 	camera.img.data=frame;camera.img.zbuff=depth;camera.frustum.Znear=1;camera.frustum.Zfar=500;
-	uint16 indices[3]={0,1,2};gre_polygon4d polygon={0};polygon.num=3;polygon.index=indices;
+	GRE_Index indices[3]={0,1,2};gre_polygon4d polygon={0};polygon.num=3;polygon.index=indices;
 	gre_object4d object={0};object.pointNum=3;object.pointList_=points;object.polygonNum=1;object.polygonList=&polygon;
 	uint8 hide=0;GRErgb24 ink={40,255,80};YMGRE_Img_SetBrushColor(ink);
 	for(int external=0;external<2;external++) {

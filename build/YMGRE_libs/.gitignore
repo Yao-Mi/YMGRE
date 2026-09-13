@@ -1,0 +1,4 @@
+# 使用者在 SDK 内生成的本地构建和图片不属于发布包。
+/examples-build*/
+/core-build/
+/cube.ppm

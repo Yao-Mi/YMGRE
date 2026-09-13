@@ -29,7 +29,7 @@ int main(void)
 	points[2].pos = (gre_fvector4d){ 70, 160, 100.0f, 1.0f };
 	points[3].pos = (gre_fvector4d){ 20, 160, 100.0f, 1.0f };
 	points[4].pos = (gre_fvector4d){ 5, 45, 100.0f, 1.0f };
-	uint16 index[5] = { 0, 1, 2, 3, 4 };
+	GRE_Index index[5] = { 0, 1, 2, 3, 4 };
 	gre_polygon4d polygon = { 0 };
 	polygon.num = 5;
 	polygon.index = index;

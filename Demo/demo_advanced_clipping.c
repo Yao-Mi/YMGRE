@@ -42,14 +42,14 @@ int main(void)
 		YMGRE_VertexList_CameraToViewPlane_wN(clipped, count, render.perspectPlane.Dis);
 		YMGRE_VertexList_ViewPlaneToWindows_wN(clipped, count, &render);
 		gre_polygon4d polygonStorage = { 0 };
-		uint16 polygonIndices[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+		GRE_Index polygonIndices[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
 		GRE_Polygon4d polygon = &polygonStorage;
 		polygon->num = count;
 		polygon->index = polygonIndices;
 		for (uint16 i = 0; i < count; i++) polygon->index[i] = i;
 		for (uint16 i = 1; i + 1 < count; i++)
 		{
-			uint16 tri[3] = { 0, i, (uint16)(i + 1) };
+			GRE_Index tri[3] = { 0, i, (uint16)(i + 1) };
 			GRE_Polygon4d triangle = polygon;
 			triangle->index = tri;
 			triangle->num = 3;

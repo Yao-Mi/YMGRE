@@ -346,6 +346,8 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 
 			//  unsigned int indexCount
 			uint32 indexCount = ReadInt(file);
+			gre_log_explain(indexCount % 3 || indexCount / 3 > INT_MAX ||
+				indexCount > SIZE_MAX / sizeof(uint32), GRE_LOG_FILE, "无效的模型索引数量");
 			int polyonNumber = indexCount / 3; //三角片元个数
 
 			// bool indexes32Bit
@@ -354,7 +356,7 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 			uint32* polyIndex32 = NULL;
 			if (indexes32Bit)
 			{
-				gre_log_explain(indexes32Bit, GRE_LOG_ParamI, "模型顶点数超过65535");
+				// File indices are validated before conversion to GRE_Index.
 				// unsigned int* faceVertexIndices (indexCount)
 				polyIndex32 = GRE_PolyIndex_Malloc(indexCount * sizeof(uint32));
 				YMGRE_fread(polyIndex32, sizeof(uint32), indexCount, file);// 读取模型顶点索引
@@ -372,6 +374,13 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 
 			// unsigned int vertexCount
 			uint32 vertexCount = ReadInt(file);
+			gre_log_explain(vertexCount == 0 || vertexCount > YMGRE_MAX_VERTICES,
+				GRE_LOG_FILE, "顶点数量超过当前索引配置范围");
+			for (uint32 i = 0; i < indexCount; i++) {
+				uint32 index = indexes32Bit ? polyIndex32[i] : polyIndex16[i];
+				gre_log_explain(index >= vertexCount || index > YMGRE_INDEX_MAX,
+					GRE_LOG_FILE, "顶点索引越界或超过当前索引配置范围");
+			}
 			int pointNumber = vertexCount;// 模型顶点个数
 
 			// Chunk--M_GEOMETRY_VERTEX_DECLARATION
@@ -412,12 +421,14 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 			uint16 GEOMETRY_VERTEX_BUFFER_DATA = ReadChunk(file);
 
 			if(!uvCount)uvCount=1;
-			gre_log_explain(vertexCount>65535 || vertexSize<32 || vertexSize%4 || normalOffset+12>vertexSize,
+			gre_log_explain(vertexCount>YMGRE_MAX_VERTICES || vertexSize<32 || vertexSize%4 || normalOffset+12>vertexSize,
 				GRE_LOG_FILE,"不支持的顶点布局");
 			for(int uv=0;uv<uvCount;uv++)gre_log_explain(uvOffsets[uv]==0xFFFF || uvOffsets[uv]+8>vertexSize || uvOffsets[uv]%4,
 				GRE_LOG_FILE,"不支持的UV布局");
 			int32 vertexNum = vertexSize / sizeof(float32);
 			// data buffer
+			gre_log_explain(vertexCount > INT_MAX / vertexNum || vertexCount > SIZE_MAX / vertexSize,
+				GRE_LOG_FILE, "顶点缓冲区过大");
 			int32 bufferSize = vertexCount * vertexNum;
 
 			// 读取顶点数据
@@ -478,8 +489,8 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 						GRE_Polygon4d plythis = &curObject->polygonList[i];
 						plythis->ishide = 0;
 						plythis->num = 3;
-						plythis->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16));
-						//可能存在int32截断错误
+						plythis->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index));
+						//索引范围已在转换前校验
 						plythis->index[0] = polyIndex32[3 * i + 0];
 						plythis->index[1] = polyIndex32[3 * i + 1];
 						plythis->index[2] = polyIndex32[3 * i + 2];
@@ -508,7 +519,7 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 						GRE_Polygon4d plythis = &curObject->polygonList[i];
 						plythis->ishide = 0;
 						plythis->num = 3;
-						plythis->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16));
+						plythis->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index));
 						plythis->index[0] = polyIndex16[3 * i + 0];
 						plythis->index[1] = polyIndex16[3 * i + 1];
 						plythis->index[2] = polyIndex16[3 * i + 2];

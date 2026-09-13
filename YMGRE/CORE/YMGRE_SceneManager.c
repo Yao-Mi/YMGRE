@@ -133,7 +133,7 @@ GRE_Object4d YMGRE_Object_Clone(GRE_Object4d thiso)
 				int idxnum = curobj->polygonList[i].num;//边索引数
 				cptobj->polygonList[i].ishide = 0;//默认为不隐藏
 				cptobj->polygonList[i].num = idxnum;
-				cptobj->polygonList[i].index = GRE_PolyIndex_Malloc(idxnum * sizeof(uint16));
+				cptobj->polygonList[i].index = GRE_PolyIndex_Malloc(idxnum * sizeof(GRE_Index));
 				//边索引保存
 				for (int k = 0; k < idxnum; k++)
 				{

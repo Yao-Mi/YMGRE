@@ -15,8 +15,8 @@ static GRE_Object4d createQuad(float32 z, GRErgb24 color, const char* name)
 	o->pointList[1] = (gre_vertex4d){ { 125, -100, z, 1 }, 1, 1 };
 	o->pointList[2] = (gre_vertex4d){ { 125, 100, z, 1 }, 1, 0 };
 	o->pointList[3] = (gre_vertex4d){ { -125, 100, z, 1 }, 0, 0 };
-	uint16 indices[6] = { 0, 3, 2, 0, 2, 1 };
-	for (int i = 0; i < 2; i++) { GRE_Polygon4d p = &o->polygonList[i]; p->num = 3; p->index = GRE_PolyIndex_Malloc(3 * sizeof(uint16)); for (int j = 0; j < 3; j++) p->index[j] = indices[i * 3 + j]; p->pN = (gre_fvector4d){ 0, 0, -1, 0 }; p->planeColor = color; }
+	GRE_Index indices[6] = { 0, 3, 2, 0, 2, 1 };
+	for (int i = 0; i < 2; i++) { GRE_Polygon4d p = &o->polygonList[i]; p->num = 3; p->index = GRE_PolyIndex_Malloc(3 * sizeof(GRE_Index)); for (int j = 0; j < 3; j++) p->index[j] = indices[i * 3 + j]; p->pN = (gre_fvector4d){ 0, 0, -1, 0 }; p->planeColor = color; }
 	o->BoundingSphereR = 170; o->boundType = GRE_Bounding_Sphere_R; YMGRE_Object_GenerateVertexAttributes(o); o->renderMode = GRE_RenderMode_Face; for (int i = 0; i < 4; i++) o->pointList_wN[i].color = color; return o;
 }
 
