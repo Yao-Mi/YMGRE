@@ -145,6 +145,15 @@ GRE_Object4d YMGRE_Object_Clone(GRE_Object4d thiso)
 				//颜色
 				cptobj->polygonList[i].planeColor = curobj->polygonList[i].planeColor;
 			}
+			if(curobj->importedUvs) {
+				cptobj->importedUvCount=curobj->importedUvCount;
+				size_t bytes=(size_t)curobj->pointNum*curobj->importedUvCount*2*sizeof(float32);
+				cptobj->importedUvs=GRE_malloc1(bytes);GRE_memcpy(cptobj->importedUvs,curobj->importedUvs,bytes);
+			}
+			if(curobj->importedNormals) {
+				size_t bytes=(size_t)curobj->pointNum*sizeof(gre_fvector4d);
+				cptobj->importedNormals=GRE_malloc1(bytes);GRE_memcpy(cptobj->importedNormals,curobj->importedNormals,bytes);
+			}
 			//镜面反射率
 			cptobj->mirrorKs = curobj->mirrorKs;
 		}

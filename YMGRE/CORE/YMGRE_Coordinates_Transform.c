@@ -74,6 +74,8 @@ void YMGRE_Object_WorldToCameraTo_wN(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE
 		out[i].tangent = myobj->pointList_wN[i].tangent;
 		out[i].tangent.w = 0;
 		out[i].tangentW = myobj->pointList_wN[i].tangentW;
+		out[i].lightmapU = myobj->pointList_wN[i].lightmapU;
+		out[i].lightmapV = myobj->pointList_wN[i].lightmapV;
 		out[i].color = myobj->pointList_wN[i].color;
 		out[i].vertexLighting = myobj->pointList_wN[i].vertexLighting;
 		out[i].vertexSpecular = myobj->pointList_wN[i].vertexSpecular;

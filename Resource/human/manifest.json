@@ -1,0 +1,37 @@
+{
+  "source": "Lowpolymesh_Eliber.blend",
+  "source_object": "Base mesh",
+  "vertices": 7168,
+  "source_vertices": 1797,
+  "triangles": 3584,
+  "bones": 63,
+  "max_weight_drop": 0.08022867153691729,
+  "bounds_min": [
+    -5.708669662475586,
+    -5.891019821166992,
+    -0.8056249022483826
+  ],
+  "bounds_max": [
+    5.708669662475586,
+    5.360527992248535,
+    1.6007723808288574
+  ],
+  "texture_images": 0,
+  "animations": 0,
+  "mesh_sha256": "99740415e019903ba0c7baa38dc6a2003d58ef8e7c6b58043ef6831a1062d133",
+  "ske_ska": {
+    "format": "YMSKE v1",
+    "influences": 6,
+    "weights": "All original nonzero influences retained and normalized; no truncation",
+    "frames": 1,
+    "frame_rate": 1,
+    "loop": false,
+    "pose": "bind pose; source contains no animation clips",
+    "files": {
+      "human.ske": "09a24102245f77c91b33d290c9de4c8245ef6314bfdc6ad1007a1c4151f05ec6",
+      "human.ska": "80784aea85a0b0af897ce2e7ba81bf6825fde247449f10ca8f688d85d462b67b",
+      "human.ske.txt": "a0e5e80f51d4e2035794ce0b07829627b51c4f21ef7a37cf7082d20cd282ab69",
+      "human.ska.txt": "cd465bfb40b232753287a375f9eddbc402900d4a217b461e14761bc6cf443386"
+    }
+  }
+}

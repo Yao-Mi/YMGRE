@@ -1,0 +1,10 @@
+#include "demo_host.h"
+#include "YMGRE_RayTracing.h"
+#include "YMGRE_Camera.h"
+#include "YMGRE_Creat.h"
+#include "YMGRE_BasicMesh_Gener.h"
+#include "YMGRE_Coordinates_Transform.h"
+#include "YMGRE_Free.h"
+#include "YMGRE_List.h"
+#include <stdio.h>
+int main(void){const uint16 w=560,h=420;GRE_Camera4d c=YMGRE_Creat_Camera(0,w,h,38,38,31,31);GRE_Object4d mesh=YMGRE_MeshGener_Cylinder(1.6f,3.4f,32,(GRErgb24){45,105,225},"meshCylinder","ray");if(!c||!mesh)return 1;mesh->WorldCoordinate=(gre_fvector4d){2.2f,0,9,1};YMGRE_Object_LocalToWorld(mesh);YMGRE_Camera_Frustum_Init(c,1,100);gre_fvector4d eye={5,3,0,1},target={0,0,9,1};YMGRE_UVNCamera_PositionInit(c,&eye,&target,NULL,0);gre_list os={0};YMGRE_List_Append(&os,sizeof(GRE_Object4d),mesh);gre_fvector4d center={-2.2f,0,9,1},light={-5,5,3,1};GRE_RenderTarget out=YMGRE_Camera_GetRenderTarget(c);uint32 ah=0,mh=0,norm=0;for(uint16 y=0;y<h;y++)for(uint16 x=0;x<w;x++){gre_ray r;GRErgb24 col={12,16,26};if(YMGRE_Ray_FromCameraPixel(c,x,y,&r)){gre_ray_hit a;gre_ray_scene_hit m;int ha=YMGRE_Ray_IntersectCylinder(&r,&center,1.6f,1.7f,.001f,100,&a);int hm=YMGRE_Ray_IntersectScene(&r,&os,.001f,100,&m);if(ha&&(!hm||a.distance<m.hit.distance)){gre_fvector4d v={-r.direction.x,-r.direction.y,-r.direction.z,0};col=YMGRE_Ray_ShadeBlinnPhong((GRErgb24){225,50,40},&a.position,&a.normal,&v,&light,(GRErgb24){255,255,255},.12f,1.4f,.02f,40,24);ah++;if(YMGRE_Fabs(a.normal.x)+YMGRE_Fabs(a.normal.y)+YMGRE_Fabs(a.normal.z)>.9f)norm++;}else if(hm){gre_fvector4d v={-r.direction.x,-r.direction.y,-r.direction.z,0};col=YMGRE_Ray_ShadeBlinnPhong(m.object->polygonList[m.polygonIndex].planeColor,&m.hit.position,&m.hit.normal,&v,&light,(GRErgb24){255,255,255},.12f,1.4f,.02f,40,24);mh++;}}out->data[y*w+x]=GRE_FramePixel_From_RGB24(col);}int pass=ah>5000&&mh>5000&&norm==ah;printf("ray cylinder: analytic=%u mesh=%u normals=%u: %s\n",ah,mh,norm,pass?"PASS":"FAIL");YMGRE_DemoView v={out,0,0,w,h};YMGRE_DemoHost_Show(w,h,&v,1,60);YMGRE_Free_Object(mesh);YMGRE_Free_Camera(c);return pass?0:1;}

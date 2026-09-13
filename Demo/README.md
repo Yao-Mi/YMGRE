@@ -200,3 +200,21 @@ cmake --build build --target demo_polygon_triangulation -j
 ```
 
 左侧为原始凹多边形，右侧为耳切法生成的三角网格并叠加内部边，用于检查边界、绕序和三角形拼接。
+
+## 统一窗口与输入接口
+
+`demo_host.h` 提供 `YMGRE_DemoHost_BindKeys`，应用只声明键与按住位、单次动作位、可选选择值的对应关系。`HeldKeys` 查询按住状态，`TakeActions` / `TakeValue` 取出并清除单次事件；`ClearInput` 清空输入。ASCII 字符键与 `YMGRE_KEY_*` 特殊键不依赖平台头文件。多个键可对应同一按住位，释放一个别名不会清除仍按下的另一个键。窗口失焦清除按住状态，平台线程同步全部在宿主内部完成。
+
+```c
+const YMGRE_DemoKeyBinding keys[] = {
+    {'w', 1, 0, 0},
+    {YMGRE_KEY_SPACE, 0, 1, 0}
+};
+YMGRE_DemoHost_BindKeys(&host, keys, 2);
+unsigned held = YMGRE_DemoHost_HeldKeys(&host);
+unsigned actions = YMGRE_DemoHost_TakeActions(&host);
+```
+
+宿主还提供 `Time`（单调秒）、`SetTitle`、`DefaultScale`、`LastError`。输入绑定在 `Destroy` 时自动清理，不需要应用注册平台事件观察器或使用原子变量。输入读取和每帧事件处理不分配堆内存。
+
+SDL 实现留在 GRE 宿主与其窗口 HAL 内部；软件显示和 GLX 兼容默认值由宿主初始化。`YMGRE_HEADLESS=1` 选择无可见窗口的测试后端；`InjectKey` 和 `InjectFocusLost` 通过真实后端事件路径注入测试输入。测试 `demo_host_input` 覆盖按住、别名键、单次动作、重复按键抑制、选择值、失焦、外部窗口隔离和销毁。

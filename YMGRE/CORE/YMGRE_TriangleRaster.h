@@ -19,4 +19,8 @@ void YMGRE_TriangleRaster_Fill_wN(GRE_Vertex4d_wN vertexList, GRE_Polygon4d poly
 	GRE_Material material, GRE_List lights, gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera,
 	float32 mirrorKs, GRE_Camera4d camera);
 
+void YMGRE_TriangleRaster_FillLightmap_wN(GRE_Vertex4d_wN vertexList,
+	GRE_Polygon4d polygon, GRE_Material material, GRE_Lightmap lightmap,
+	GRE_Camera4d camera);
+
 #endif // !YMGRE_TRIANGLE_RASTER_H

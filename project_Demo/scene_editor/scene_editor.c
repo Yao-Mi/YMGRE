@@ -1421,7 +1421,7 @@ static void buildUi(EditorUi* ui)
 	SceneEditorIo_Build(ctx,saveSceneToPath,loadSceneFromPath,sceneDialogCancelled,ui);
 	g_unsavedPrompt=YMGUI_Creat_MsgBox_Creat(ctx);
 	g_sceneOpenError=YMGUI_Creat_MsgBox_Creat(ctx);
-	ui->status=label(root,14,650,996,24,"就绪",muted);
+	ui->status=label(root,14,650,780,24,"就绪",muted);
 	clearSelection("就绪");YMGUI_Inject_SetCtx(ctx);YMGUI_SetFocus(ctx,ui->viewport);
 }
 
@@ -1670,7 +1670,7 @@ static int runSelfTest(void)
 int main(void)
 {
 	EditorUi ui={0};g_ui=&ui;setenv("YMGRE_WINDOW_SCALE","1",1);
-	if(!YMGRE_DemoHost_Init(&ui.host,1024,680,40))return 1;
+	if(!YMGRE_DemoHost_Init(&ui.host,1024,680,680))return 1;
 	SceneEditorFont_Init();initScene();buildUi(&ui);historyReset();
 	SDL_LCD_SetCloseRequestCb(quitRequested,NULL);
 	const char* limit=getenv("YMGRE_MAX_FRAMES");ui.frameLimit=limit?atoi(limit):0;

@@ -1,0 +1,12 @@
+material human_skin
+{
+ technique
+ {
+  pass
+  {
+   ambient 0.8 0.8 0.8
+   diffuse 0.8 0.8 0.8
+   specular 0.15 0.15 0.15
+  }
+ }
+}

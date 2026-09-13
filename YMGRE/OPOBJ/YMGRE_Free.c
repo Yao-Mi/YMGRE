@@ -40,12 +40,24 @@ void YMGRE_Free_Camera(void* data)
 }
 
 //物体内存释放
+void YMGRE_Free_Lightmap(GRE_Lightmap lightmap)
+{
+	if (lightmap == NULL) return;
+	GRE_free1(lightmap->uv1);
+	GRE_ImageBuff_Free(lightmap->pixels);
+	GRE_ImageBuff_Free(lightmap->specularPixels);
+	GRE_free0(lightmap);
+}
+
 void YMGRE_Free_Object(void* data)
 {
 	GRE_Object4d pthis = data;
 	while (pthis != NULL)
 	{
 		GRE_Object4d nextObject = pthis->nextObject;
+		YMGRE_Free_Lightmap(pthis->lightmap);
+		GRE_free1(pthis->importedUvs);
+		GRE_free1(pthis->importedNormals);
 		//顶点
 	GRE_free1(pthis->pointList);
 	GRE_free1(pthis->pointList_);

@@ -78,6 +78,28 @@ int main(void)
 	float32 fresnelNormal = YMGRE_Ray_FresnelSchlick(1.0f, 1.0f, 1.5f);
 	float32 fresnelGrazing = YMGRE_Ray_FresnelSchlick(.1f, 1.0f, 1.5f);
 	pass = pass && fresnelNormal > .03f && fresnelNormal < .06f && fresnelGrazing > .5f;
+	gre_fvector4d planeCenter = {0, -1, 5, 1}, planeNormal = {0, 1, 0, 0};
+	gre_fvector4d planeU = {1, 0, 0, 0}, planeV = {0, 0, 1, 0};
+	gre_ray planeRay = {{0, 2, 5, 1}, {0, -1, 0, 0}};
+	gre_ray_hit planeHit;
+	pass = pass && YMGRE_Ray_IntersectPlaneRect(&planeRay, &planeCenter,
+		&planeNormal, &planeU, &planeV, 2.0f, 3.0f, .001f, 100.0f, &planeHit);
+	pass = pass && YMGRE_Fabs(planeHit.distance - 3.0f) < 1e-5f;
+	gre_ray outsidePlaneRay = {{3, 2, 5, 1}, {0, -1, 0, 0}};
+	pass = pass && !YMGRE_Ray_IntersectPlaneRect(&outsidePlaneRay, &planeCenter,
+		&planeNormal, &planeU, &planeV, 2.0f, 3.0f, .001f, 100.0f, &planeHit);
+	gre_ray parallelPlaneRay = {{0, 2, 5, 1}, {1, 0, 0, 0}};
+	pass = pass && !YMGRE_Ray_IntersectPlane(&parallelPlaneRay, &planeCenter,
+		&planeNormal, .001f, 100.0f, &planeHit);
+	gre_fvector4d boxMin = {-1, -1, 4, 1}, boxMax = {1, 1, 6, 1};
+	gre_ray boxRay = {{0, 0, 0, 1}, {0, 0, 1, 0}};
+	pass = pass && YMGRE_Ray_IntersectAABB(&boxRay, &boxMin, &boxMax,
+		.001f, 100.0f, &planeHit);
+	pass = pass && YMGRE_Fabs(planeHit.distance - 4.0f) < 1e-5f && planeHit.normal.z < -0.99f;
+	gre_fvector4d cylCenter = {0, 0, 5, 1};
+	gre_ray cylRay = {{0, 0, 0, 1}, {0, 0, 1, 0}};
+	pass = pass && YMGRE_Ray_IntersectCylinder(&cylRay, &cylCenter, 1.0f, 2.0f, .001f, 100.0f, &planeHit);
+	pass = pass && YMGRE_Fabs(planeHit.distance - 4.0f) < 1e-5f && planeHit.normal.z < -0.99f;
 	/* A planar mirror can be evaluated either with a virtual camera and the
 	 * real scene, or with a mirrored scene and the real camera. */
 	const float32 mirrorY = -1.4f;

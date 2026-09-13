@@ -166,11 +166,12 @@ static int textureBoundaryIsStable(void)
 		lightPos,&matrix,0,&camera);
 
 	int stable = 1;
+	GRErgb24 expected = GRE_FramePixel_To_RGB24(GRE_FramePixel_From_RGB24(dark));
 	for (int y = 5; y <= 27; y++)
 	{
-		GRErgb24 got = frame[y * TEST_W + 16];
-		if (abs((int)got.R - dark.R) > 1 || abs((int)got.G - dark.G) > 1 ||
-			abs((int)got.B - dark.B) > 1)
+		GRErgb24 got = GRE_FramePixel_To_RGB24(frame[y * TEST_W + 16]);
+		if (abs((int)got.R - expected.R) > 1 || abs((int)got.G - expected.G) > 1 ||
+			abs((int)got.B - expected.B) > 1)
 			stable = 0;
 	}
 	YMGRE_List_Clear(&lights,noFree);

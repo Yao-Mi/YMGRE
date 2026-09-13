@@ -13,7 +13,7 @@
 // 从路径里面截取文件名称, 并添加.material后缀
 static inline char* GetMaterialFromSamePath(const char* path)
 {
-	static char Path[256];
+	static char Path[4096];
 	const char meterial[] = ".material";
 	gre_log_explain(strlen(path) >= sizeof(Path), GRE_LOG_FILE, "材质文件路径过长");
 	
@@ -39,7 +39,7 @@ static inline char* GetMaterialFromSamePath(const char* path)
 //从路径中截取文件路径，并添加图片文件名
 static inline char* GetImageFromSamePath(const char* path, const char* imageName)
 {
-	static char Path[256];
+	static char Path[4096];
 	gre_log_explain(strlen(path) >= sizeof(Path), GRE_LOG_FILE, "贴图文件路径过长");
 	int len = 0;
 	while (path[len] != '\0')
@@ -61,7 +61,7 @@ static inline char* GetImageFromSamePath(const char* path, const char* imageName
 //从路径中获取mesh名字
 static inline char* GetMeshNameFromPath(const char* path)
 {
-	static char Path[256];
+	static char Path[4096];
 	gre_log_explain(strlen(path) >= sizeof(Path), GRE_LOG_FILE, "网格文件路径过长");
 	int len = 0;
 	while (path[len] != '\0')
@@ -159,6 +159,24 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 							continue;
 						}
 
+                        /* YMGRE ray material extension; older readers can ignore this line. */
+                        if (YMGRE_Memcmp(info,"ymgre_ray ",10)==0) {
+                            unsigned type,red,green,blue;float reflection,ior,highlight=.2f;
+                            if(sscanf(info,"ymgre_ray %u %f %f %u %u %u %f",&type,&reflection,&ior,&red,&green,&blue,&highlight)>=6 &&
+                               type<=2 && reflection>=0 && reflection<=1 && ior>=1 && ior<=3 && red<=255 && green<=255 && blue<=255 && highlight>=0 && highlight<=1) {
+                                if(!materail->advanced){materail->advanced=GRE_malloc0(sizeof(gre_material_advanced));
+                                    if(materail->advanced)memset(materail->advanced,0,sizeof(gre_material_advanced));}
+                                if(materail->advanced){materail->advanced->rayType=type;materail->advanced->reflectivity=reflection;
+                                    materail->advanced->ior=ior;materail->advanced->raySpecularStrength=highlight;materail->advanced->transmissionColor=(GRErgb24){red,green,blue};}
+                            }
+                            continue;
+                        }
+						// Ogre lighting off marks a texture with illumination already baked.
+						if (YMGRE_Memcmp(info, "lighting ", 9) == 0) {
+							char mode[16];if(sscanf(info,"lighting %15s",mode)==1)materail->unlit=!strcmp(mode,"off");
+							continue;
+						}
+
 						// 镜面高光指数（0 保持默认值 30）
 						if (YMGRE_Memcmp(info, "specular_power", sizeof("specular_power") - 1) == 0)
 						{
@@ -166,7 +184,8 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 							float32 power = YMGRE_Strtof(info, &info);
 							power = GREMax(0.0f, GREMin(power, 255.0f));
 							if (materail->advanced == NULL)
-								materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+								{ materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+								memset(materail->advanced,0,sizeof(gre_material_advanced)); }
 							materail->advanced->specularPower = (uint8)(power + 0.5f);
 							continue;
 						}
@@ -195,7 +214,8 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 							}
 							textureName[mi] = '\0';
 							if (materail->advanced == NULL)
-								materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+								{ materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+								memset(materail->advanced,0,sizeof(gre_material_advanced)); }
 							YMGRE_Bmp_File_LoadTo_Image(GetImageFromSamePath(scriptName, textureName),
 								&materail->advanced->normalPixel, &materail->advanced->normalWidth,
 								&materail->advanced->normalHeight);
@@ -358,6 +378,8 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 			uint16 GEOMETRY_VERTEX_DECLARATION = ReadChunk(file);
 			// Chunk--M_GEOMETRY_VERTEX_ELEMENT
 			uint16 GEOMETRY_VERTEX_ELEMENT = ReadChunk(file);
+			uint16 normalOffset=12,uvOffsets[8]={24},uvCount=0;
+			for(int uv=1;uv<8;uv++)uvOffsets[uv]=0xFFFF;
 			//跳过
 			while (!YMGRE_feof(file) && GEOMETRY_VERTEX_ELEMENT == OGRE_GEOMETRY_VERTEX_ELEMENT)
 			{
@@ -371,6 +393,10 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 				uint16 offset = ReadShort(file);
 				// unsigned short index;	// index of the semantic (for colours and texture coords)
 				uint16 index = ReadShort(file);
+				if(source==0 && semantic==4 && type==2)normalOffset=offset;
+				if(source==0 && semantic==7 && type==1 && index<8) {
+					uvOffsets[index]=offset;if(uvCount<=index)uvCount=index+1;
+				}
 				GEOMETRY_VERTEX_ELEMENT = ReadChunk(file);
 			}
 
@@ -385,6 +411,11 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 			// Chunk--M_GEOMETRY_VERTEX_BUFFER_DATA
 			uint16 GEOMETRY_VERTEX_BUFFER_DATA = ReadChunk(file);
 
+			if(!uvCount)uvCount=1;
+			gre_log_explain(vertexCount>65535 || vertexSize<32 || vertexSize%4 || normalOffset+12>vertexSize,
+				GRE_LOG_FILE,"不支持的顶点布局");
+			for(int uv=0;uv<uvCount;uv++)gre_log_explain(uvOffsets[uv]==0xFFFF || uvOffsets[uv]+8>vertexSize || uvOffsets[uv]%4,
+				GRE_LOG_FILE,"不支持的UV布局");
 			int32 vertexNum = vertexSize / sizeof(float32);
 			// data buffer
 			int32 bufferSize = vertexCount * vertexNum;
@@ -404,6 +435,10 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 				curObject->nextObject = YMGRE_Creat_Object(pointNumber, polyonNumber, name, materiaName);
 				curObject = curObject->nextObject;
 			}
+			curObject->importedUvCount=uvCount;
+			curObject->importedUvs=GRE_malloc1((size_t)pointNumber*uvCount*2*sizeof(float32));
+			curObject->importedNormals=GRE_malloc1((size_t)pointNumber*sizeof(gre_fvector4d));
+			gre_log_explain(!curObject->importedUvs || !curObject->importedNormals,GRE_LOG_FILE,"无法分配网格属性");
 			//物体初始化
 			{
 				//多边形顶点加载
@@ -420,8 +455,14 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 					//vex.ny	= vertexArray[i + 4];
 					//vex.nz	= vertexArray[i + 5];
 					// 顶点纹理坐标UV，在[0,1]范围内
-					pointList[ptid].u = vertexArray[i + 6];
-					pointList[ptid].v = vertexArray[i + 7];
+					pointList[ptid].u = vertexArray[i + uvOffsets[0]/4];
+					pointList[ptid].v = vertexArray[i + uvOffsets[0]/4+1];
+					curObject->importedNormals[ptid]=(gre_fvector4d){vertexArray[i+normalOffset/4],
+						vertexArray[i+normalOffset/4+1],vertexArray[i+normalOffset/4+2],0};
+					for(int uv=0;uv<uvCount;uv++) {
+						curObject->importedUvs[(ptid*uvCount+uv)*2]=vertexArray[i+uvOffsets[uv]/4];
+						curObject->importedUvs[(ptid*uvCount+uv)*2+1]=vertexArray[i+uvOffsets[uv]/4+1];
+					}
 					//变换后的顶点也具有相同的纹理
 					curObject->pointList_[ptid].u = pointList[ptid].u;
 					curObject->pointList_[ptid].v = pointList[ptid].v;
@@ -511,12 +552,16 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 			// float maxx, maxy, maxz
 			// float radius
 			YMGRE_fread(bounds, sizeof(float32), 7, file);//读取包围盒
-			head->BoundingBoxMax = (gre_fvector4d){ .x = bounds[0], .y = bounds[1], .z = bounds[2] };
-			head->BoundingBoxMin = (gre_fvector4d){ .x = bounds[3], .y = bounds[4], .z = bounds[5] };
+			head->BoundingBoxMin = (gre_fvector4d){ .x = bounds[0], .y = bounds[1], .z = bounds[2] };
+			head->BoundingBoxMax = (gre_fvector4d){ .x = bounds[3], .y = bounds[4], .z = bounds[5] };
 			head->boundType = GRE_Bounding_Box_AABB;//使用AABB盒进行包围
 			//包围圆
-			float32 maxR0 = (bounds[0] > bounds[1])? bounds[0]: bounds[1];
-			head->BoundingSphereR = (maxR0 > bounds[2]) ? maxR0 : bounds[2];
+			head->BoundingSphereR = 0;
+			for(GRE_Object4d part=head;part;part=part->nextObject)for(int i=0;i<part->pointNum;i++) {
+				gre_fvector4d p=part->pointList[i].pos;p.w=0;
+				float32 r=YMGRE_Fvector4d_Len1(&p);
+				if(r>head->BoundingSphereR)head->BoundingSphereR=r;
+			}
 
 			//Chunk--M_SUBMESH_NAME_TABLE
 			uint16 SUBMESH_NAME_TABLE = ReadChunk(file);
@@ -628,7 +673,7 @@ static inline void Get_XZV(char* source, int32* x, int32* z, int32* value)
 //获取根目录
 static inline char* GetRootNameFromPath(const char* path)
 {
-	static char Path[256];
+	static char Path[4096];
 	gre_log_explain(strlen(path) >= sizeof(Path), GRE_LOG_FILE, "地图文件路径过长");
 	int len = 0;
 	while (path[len] != '\0')

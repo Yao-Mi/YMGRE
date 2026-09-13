@@ -7,6 +7,7 @@
 #include "YMGRE_Free.h"
 #include "YMGRE_List.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <SDL2/SDL.h>
 #include "YMGUI_Invalidate.h"
 
@@ -38,7 +39,9 @@ static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int d
     if (c.R > 180 && c.G < 100) s->redHits++;
     else if (c.G > 150 && c.R < 100) s->greenHits++;
     else if (c.R > 180 && c.G > 150 && c.B < 100) s->yellowHits++;
-    return c;
+    gre_fvector4d view = {-ray->direction.x, -ray->direction.y, -ray->direction.z, 0};
+    return YMGRE_Ray_ShadeBlinnPhong(c, &oh.hit.position, &oh.hit.normal, &view,
+      &s->light, (GRErgb24){255,255,255}, .12f, 1.4f, .012f, 80.0f, 24.0f);
   }
   s->sphereHits++;
   float32 cosi = -(ray->direction.x*sh.normal.x + ray->direction.y*sh.normal.y + ray->direction.z*sh.normal.z);
@@ -64,15 +67,18 @@ static GRErgb24 trace(Refraction *s, GRE_Ray ray, const gre_list *objects, int d
     (GRErgb24){255, 255, 255}, .12f, 1.4f, .012f, 255.0f, 48.0f);
   if (surface.R > 150 && surface.G > 150 && surface.B > 150) s->highlightPixels++;
   float32 kr = YMGRE_Ray_FresnelSchlick(cosi, etaIn, etaOut);
+  float32 rr = transmitted.R * (1-kr) + reflected.R * kr + surface.R*.12f;
+  float32 gg = transmitted.G * (1-kr) + reflected.G * kr + surface.G*.12f;
+  float32 bb = transmitted.B * (1-kr) + reflected.B * kr + surface.B*.12f;
+  if (rr > 255) rr = 255; if (gg > 255) gg = 255; if (bb > 255) bb = 255;
+  if (rr < 0) rr = 0; if (gg < 0) gg = 0; if (bb < 0) bb = 0;
   return (GRErgb24){
-    (uint8)(transmitted.R * (1-kr) + reflected.R * kr + surface.R*.12f),
-    (uint8)(transmitted.G * (1-kr) + reflected.G * kr + surface.G*.12f),
-    (uint8)(transmitted.B * (1-kr) + reflected.B * kr + surface.B*.12f)};
+    (uint8)rr, (uint8)gg, (uint8)bb};
 }
 
 int main(void)
 {
-  const uint16 w = 140, h = 105;
+  const uint16 w = 560, h = 420;
   GRE_Camera4d camera = YMGRE_Creat_Camera(0, w, h, 38, 38, 31, 31);
   GRE_Object4d glass = NULL;
   GRE_Object4d backdrop = YMGRE_MeshGener_Cube(7.0f, (GRErgb24){105, 120, 145}, "backdrop", "ray");
@@ -109,10 +115,15 @@ int main(void)
   while (YMGRE_DemoHost_Step(&host, 30)) {
     int mouseX = 0, mouseY = 0;
     SDL_GetMouseState(&mouseX, &mouseY);
+    int scale = 2;
+    const char *scaleText = getenv("YMGRE_WINDOW_SCALE");
+    if (scaleText != NULL && atoi(scaleText) > 0) scale = atoi(scaleText);
+    mouseX /= scale;
+    mouseY /= scale;
     if (mouseX == lastX && mouseY == lastY) continue;
     lastX = mouseX; lastY = mouseY;
-    stats.center.x = ((float32)mouseX / (float32)w - .5f) * 3.0f;
-    stats.center.y = (.5f - (float32)mouseY / (float32)h) * 2.0f;
+    stats.center.x = (.5f - (float32)mouseX / (float32)w) * 6.0f;
+    stats.center.y = (.5f - (float32)mouseY / (float32)h) * 6.0f;
     stats.sphereHits = stats.refracted = stats.totalInternal = stats.lampHits = 0;
     stats.highlightPixels = stats.transmittedBackground = 0;
     stats.redHits = stats.greenHits = stats.yellowHits = 0;

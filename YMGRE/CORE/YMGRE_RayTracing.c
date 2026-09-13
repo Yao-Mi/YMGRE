@@ -75,6 +75,119 @@ int YMGRE_Ray_IntersectSphere(const GRE_Ray ray, const gre_fvector4d* center,
 	return 1;
 }
 
+int YMGRE_Ray_IntersectPlane(const GRE_Ray ray, const gre_fvector4d* point,
+	const gre_fvector4d* normal, float32 tMin, float32 tMax, GRE_RayHit hit)
+{
+	if (ray == NULL || point == NULL || normal == NULL || hit == NULL) return 0;
+	float32 denominator = ray->direction.x * normal->x +
+		ray->direction.y * normal->y + ray->direction.z * normal->z;
+	if (YMGRE_Fabs(denominator) < 1e-7f) return 0;
+	float32 t = ((point->x - ray->origin.x) * normal->x +
+		(point->y - ray->origin.y) * normal->y +
+		(point->z - ray->origin.z) * normal->z) / denominator;
+	if (t < tMin || t > tMax) return 0;
+	hit->distance = t; hit->u = hit->v = 0.0f;
+	hit->position = (gre_fvector4d){
+		ray->origin.x + ray->direction.x * t,
+		ray->origin.y + ray->direction.y * t,
+		ray->origin.z + ray->direction.z * t, 1.0f };
+	hit->normal = *normal; hit->normal.w = 0.0f;
+	if (YMGRE_Fvector4d_Len2(&hit->normal) > 1e-12f)
+		YMGRE_Fvector4d_Normalize(&hit->normal);
+	return 1;
+}
+
+int YMGRE_Ray_IntersectPlaneRect(const GRE_Ray ray, const gre_fvector4d* center,
+	const gre_fvector4d* normal, const gre_fvector4d* axisU,
+	const gre_fvector4d* axisV, float32 halfU, float32 halfV,
+	float32 tMin, float32 tMax, GRE_RayHit hit)
+{
+	if (axisU == NULL || axisV == NULL || halfU <= 0.0f || halfV <= 0.0f ||
+		!YMGRE_Ray_IntersectPlane(ray, center, normal, tMin, tMax, hit)) return 0;
+	gre_fvector4d u = *axisU, v = *axisV;
+	if (YMGRE_Fvector4d_Len2(&u) < 1e-12f || YMGRE_Fvector4d_Len2(&v) < 1e-12f) return 0;
+	YMGRE_Fvector4d_Normalize(&u); YMGRE_Fvector4d_Normalize(&v);
+	gre_fvector4d delta = {hit->position.x - center->x,
+		hit->position.y - center->y, hit->position.z - center->z, 0.0f};
+	float32 du = YMGRE_Fvector4d_Dot(&delta, &u);
+	float32 dv = YMGRE_Fvector4d_Dot(&delta, &v);
+	if (YMGRE_Fabs(du) > halfU || YMGRE_Fabs(dv) > halfV) return 0;
+	hit->u = du / (2.0f * halfU) + 0.5f;
+	hit->v = dv / (2.0f * halfV) + 0.5f;
+	return 1;
+}
+
+int YMGRE_Ray_IntersectAABB(const GRE_Ray ray, const gre_fvector4d* minPoint,
+	const gre_fvector4d* maxPoint, float32 tMin, float32 tMax, GRE_RayHit hit)
+{
+	if (ray == NULL || minPoint == NULL || maxPoint == NULL || hit == NULL ||
+		minPoint->x > maxPoint->x || minPoint->y > maxPoint->y || minPoint->z > maxPoint->z) return 0;
+	float32 nearT = tMin, farT = tMax;
+	int nearAxis = -1, nearSign = 0, farAxis = -1, farSign = 0;
+	const float32 origin[3] = {ray->origin.x, ray->origin.y, ray->origin.z};
+	const float32 direction[3] = {ray->direction.x, ray->direction.y, ray->direction.z};
+	const float32 boxMin[3] = {minPoint->x, minPoint->y, minPoint->z};
+	const float32 boxMax[3] = {maxPoint->x, maxPoint->y, maxPoint->z};
+	for (int axis = 0; axis < 3; axis++) {
+		if (YMGRE_Fabs(direction[axis]) < 1e-8f) {
+			if (origin[axis] < boxMin[axis] || origin[axis] > boxMax[axis]) return 0;
+			continue;
+		}
+		float32 t0 = (boxMin[axis] - origin[axis]) / direction[axis];
+		float32 t1 = (boxMax[axis] - origin[axis]) / direction[axis];
+		int sign = -1;
+		if (t0 > t1) { float32 tmp = t0; t0 = t1; t1 = tmp; sign = 1; }
+		if (t0 > nearT) { nearT = t0; nearAxis = axis; nearSign = sign; }
+		if (t1 < farT) { farT = t1; farAxis = axis; farSign = -sign; }
+		if (nearT > farT) return 0;
+	}
+	if (nearAxis < 0) {
+		nearT = farT;
+		nearAxis = farAxis; nearSign = farSign;
+		if (nearT < tMin || nearT > tMax) return 0;
+	}
+	hit->distance = nearT; hit->u = hit->v = 0.0f;
+	hit->position.x = ray->origin.x + ray->direction.x * nearT;
+	hit->position.y = ray->origin.y + ray->direction.y * nearT;
+	hit->position.z = ray->origin.z + ray->direction.z * nearT;
+	hit->position.w = 1.0f; hit->normal = (gre_fvector4d){0, 0, 0, 0};
+	if (nearAxis >= 0) {
+		if (nearAxis == 0) hit->normal.x = (float32)nearSign;
+		else if (nearAxis == 1) hit->normal.y = (float32)nearSign;
+		else hit->normal.z = (float32)nearSign;
+	}
+	return 1;
+}
+
+int YMGRE_Ray_IntersectCylinder(const GRE_Ray ray, const gre_fvector4d* center,
+	float32 radius, float32 halfHeight, float32 tMin, float32 tMax, GRE_RayHit hit)
+{
+	if (ray == NULL || center == NULL || hit == NULL || radius <= 0.0f || halfHeight <= 0.0f) return 0;
+	float32 best = tMax; int kind = 0;
+	float32 a = ray->direction.x * ray->direction.x + ray->direction.z * ray->direction.z;
+	float32 b = (ray->origin.x - center->x) * ray->direction.x + (ray->origin.z - center->z) * ray->direction.z;
+	float32 c = (ray->origin.x - center->x) * (ray->origin.x - center->x) +
+		(ray->origin.z - center->z) * (ray->origin.z - center->z) - radius * radius;
+	if (a > 1e-12f) {
+		float32 disc = b*b - a*c;
+		if (disc >= 0.0f) {
+			float32 root = YMGRE_Sqrt(disc);
+			float32 roots[2] = {(-b-root)/a, (-b+root)/a};
+			for (int i=0;i<2;i++) { float32 t=roots[i], y=ray->origin.y+ray->direction.y*t; if(t>=tMin&&t<=best&&y>=center->y-halfHeight&&y<=center->y+halfHeight){best=t;kind=1;} }
+		}
+	}
+	if (YMGRE_Fabs(ray->direction.y) > 1e-8f) {
+		float32 caps[2] = {center->y-halfHeight, center->y+halfHeight};
+		for (int i=0;i<2;i++) { float32 t=(caps[i]-ray->origin.y)/ray->direction.y, dx, dz; if(t>=tMin&&t<=best){dx=ray->origin.x+ray->direction.x*t-center->x;dz=ray->origin.z+ray->direction.z*t-center->z;if(dx*dx+dz*dz<=radius*radius){best=t;kind=i==0?2:3;}} }
+	}
+	if (kind == 0) return 0;
+	hit->distance=best; hit->u=hit->v=0.0f;
+	hit->position=(gre_fvector4d){ray->origin.x+ray->direction.x*best,ray->origin.y+ray->direction.y*best,ray->origin.z+ray->direction.z*best,1};
+	if(kind==1){hit->normal=(gre_fvector4d){hit->position.x-center->x,0,hit->position.z-center->z,0};YMGRE_Fvector4d_Normalize(&hit->normal);}
+	else hit->normal=(gre_fvector4d){0,kind==2?-1.0f:1.0f,0,0};
+	return 1;
+}
+
 int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result)
 {

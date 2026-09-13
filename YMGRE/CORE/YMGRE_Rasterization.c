@@ -110,16 +110,18 @@ void YMGRE_Img_LineDepth(GRE_FrameBuffer data, float32* zbuff, uint16 width, uin
 	int32 dy = (y2 >= y1) ? y2 - y1 : y1 - y2;
 	int32 steps = (dx > dy) ? dx : dy;
 	GRE_FramePixel pixel = GRE_FramePixel_From_RGB24(color);
-	float32 invZ1 = 1.0f / z1;
-	float32 invZ2 = 1.0f / z2;
+	float32 invZ1 = depthTest ? 1.0f / z1 : 0.0f;
+	float32 invZ2 = !depthTest || z1 == z2 ? invZ1 : 1.0f / z2;
 	for (int32 i = 0; i <= steps; i++)
 	{
 		float32 t = (steps > 0) ? (float32)i / steps : 0.0f;
 		int32 x = x1 + (int32)((x2 - x1) * t + ((x2 >= x1) ? 0.5f : -0.5f));
 		int32 y = y1 + (int32)((y2 - y1) * t + ((y2 >= y1) ? 0.5f : -0.5f));
 		if (x < 0 || y < 0 || x >= width || y >= height) continue;
-		float32 z = 1.0f / (invZ1 + (invZ2 - invZ1) * t);
 		uint32 index = (uint32)y * width + x;
+		if (!depthTest) { data[index] = pixel; continue; }
+		float32 q = invZ1 + (invZ2 - invZ1) * t;
+		float32 z = z1 == z2 ? z1 : 1.0f / q;
 		if (!depthTest || z <= zbuff[index] + YMGRE_RASTER_WIRE_DEPTH_EPSILON)
 		{
 			data[index] = pixel;
@@ -266,19 +268,19 @@ static void YMGRE_Img_TriangleLine(GRE_FrameBuffer data, uint16 width, float32* 
 	int32 stepY = (y1 < y2) ? 1 : -1;
 	int32 error = deltaX + deltaY;
 	GRE_FramePixel brushPixel = GRE_FramePixel_From_RGB24(GRE_brush);
-	float32 invZ = 1.0f / plane->z;
-	float32 zStepX = -plane->x * invZ;
-	float32 zStepY = -plane->y * invZ;
-	float32 z = -(plane->x * x1 + plane->y * y1 + plane->w) * invZ;
-	//线段取整最多偏移一个像素，按平面深度斜率补偿对应的深度差
-	float32 depthEpsilon = YMGRE_RASTER_WIRE_DEPTH_EPSILON +
-		YMGRE_Fabs(zStepX) + YMGRE_Fabs(zStepY);
+	float32 qStepX = plane->x;
+	float32 qStepY = plane->y;
+	float32 q = qStepX * x1 + qStepY * y1 + plane->w;
+	// q = 1/z is affine in screen space. Convert its slope to camera-depth units.
+	float32 qSlope = YMGRE_Fabs(qStepX) + YMGRE_Fabs(qStepY);
 
 	//与三角形填充统一在整数像素坐标采样，两个端点均只绘制一次
 	while (1)
 	{
 		uint32 index = y1 * width + x1;
-		if (z <= zbuff[index] + depthEpsilon)
+		float32 z = q > 0.0f ? 1.0f / q : 0.0f;
+		float32 depthEpsilon = YMGRE_RASTER_WIRE_DEPTH_EPSILON + qSlope * z * z;
+		if (q > 0.0f && z <= zbuff[index] + depthEpsilon)
 		{
 			data[index] = brushPixel;
 			if (z < zbuff[index])
@@ -291,13 +293,13 @@ static void YMGRE_Img_TriangleLine(GRE_FrameBuffer data, uint16 width, float32* 
 		{
 			error += deltaY;
 			x1 += stepX;
-			z += stepX * zStepX;
+			q += stepX * qStepX;
 		}
 		if (error2 <= deltaX)
 		{
 			error += deltaX;
 			y1 += stepY;
-			z += stepY * zStepY;
+			q += stepY * qStepY;
 		}
 	}
 }
@@ -890,13 +892,13 @@ void YMGRE_PolygonObject_Primitive_Rasterization(GRE_Object4d myobj, GRE_Camera4
 	thislines.data = linesbuff; //内存
 
 	gre_lineslist clipedlines;
-	gre_line drawlinebuff[10]; //最多10条边 ,条数需 > thislines.lineMax
-	clipedlines.lineNum = 10;
-	int clipoutnumMax = 10;
+	gre_line drawlinebuff[14]; //最多 10 条输入边，加上矩形的 4 条裁剪边
+	clipedlines.lineNum = 14;
+	int clipoutnumMax = 14;
 	clipedlines.data = drawlinebuff;//内存
-	gre_scanedge scanEdges[10];
-	gre_scanedge* activeEdges[10];
-	gre_scanline_workspace scanWorkspace = { scanEdges, activeEdges, 10 };
+	gre_scanedge scanEdges[14];
+	gre_scanedge* activeEdges[14];
+	gre_scanline_workspace scanWorkspace = { scanEdges, activeEdges, 14 };
 
 	gre_log_explain((myobj == NULL) || (mycam == NULL), GRE_LOG_PtrI, "输入的物体或相机不存在");
 	gre_frect myrec; //矩形框
@@ -974,12 +976,12 @@ void YMGRE_PolygonObject_Primitive_RasterizationTo(GRE_Object4d myobj, GRE_Verte
 	thislines.lineMax = 10;
 	thislines.data = linesbuff;
 	gre_lineslist clipedlines;
-	gre_line drawlinebuff[10]; //最多10条边
-	clipedlines.lineNum = 10;
+	gre_line drawlinebuff[14]; //为四个裁剪平面预留空间
+	clipedlines.lineNum = 14;
 	clipedlines.data = drawlinebuff;
-	gre_scanedge scanEdges[10];
-	gre_scanedge* activeEdges[10];
-	gre_scanline_workspace scanWorkspace = { scanEdges, activeEdges, 10 };
+	gre_scanedge scanEdges[14];
+	gre_scanedge* activeEdges[14];
+	gre_scanline_workspace scanWorkspace = { scanEdges, activeEdges, 14 };
 	gre_log_explain((myobj == NULL) || (points == NULL) || (polygonHide == NULL) ||
 		(polygonColor == NULL) || (mycam == NULL), GRE_LOG_PtrIO, "输入的物体、工作区或相机不存在");
 	gre_frect myrec = { 0, 0, mycam->img.width - 1, mycam->img.height - 1 };
@@ -992,7 +994,7 @@ void YMGRE_PolygonObject_Primitive_RasterizationTo(GRE_Object4d myobj, GRE_Verte
 		int linesnum = thispoly->num;
 		gre_log_explain(linesnum >= thislines.lineMax, GRE_LOG_ParamI, "多边形边数必须<10");
 		thislines.lineNum = linesnum;
-		clipedlines.lineNum = 10;
+		clipedlines.lineNum = 14;
 		for (int j = 0; j < linesnum; j++)
 		{
 			int i1 = thispoly->index[j];
@@ -1113,7 +1115,7 @@ void YMGRE_TrangleObject_Primitive_Rasterization(GRE_Object4d myTrangleObj, GRE_
 			continue;
 		gre_log_explain(thispoly->num != 3, GRE_LOG_ParamI, "多边形边数必须为3（三角形）");
 		YMGRE_TriangleRaster_Fill(myTrangleObj->pointList_, thispoly,
-			thispoly->planeColor_, mymaterial, mycam);
+			(mymaterial && mymaterial->unlit)?(GRErgb24){DefaultPolygonClv,DefaultPolygonClv,DefaultPolygonClv}:thispoly->planeColor_, mymaterial, mycam);
 	}
 	//第二遍统一后画线框，同深度线框覆盖填充颜色
 	if (myTrangleObj->wireFrame)
@@ -1164,9 +1166,8 @@ void YMGRE_TrangleObject_Primitive_Rasterization_VertexColor_wN(GRE_Object4d obj
 }
 
 //三角网格线也参与深度测试，避免被遮挡的内部边覆盖前景表面
-static void YMGRE_Raster_TriangleWire(GRE_FrameBuffer data, uint16 width, uint16 height,
-	float32* zbuff, GRE_Vertex4d points, GRE_Polygon4d polygon,
-	int16 x1, int16 y1, int16 x2, int16 y2)
+static uint8 YMGRE_Raster_TriangleWirePlane(GRE_Vertex4d points,
+	GRE_Polygon4d polygon, GRE_Fvector4d result)
 {
 	gre_fvector4d u;
 	gre_fvector4d v;
@@ -1174,13 +1175,20 @@ static void YMGRE_Raster_TriangleWire(GRE_FrameBuffer data, uint16 width, uint16
 	GRE_Vertex4d p0 = &points[polygon->index[0]];
 	GRE_Vertex4d p1 = &points[polygon->index[1]];
 	GRE_Vertex4d p2 = &points[polygon->index[2]];
-	YMGRE_Fvector4d_SubToResult(&p1->pos, &p0->pos, &u);
-	YMGRE_Fvector4d_SubToResult(&p2->pos, &p0->pos, &v);
+	gre_fvector4d q0 = p0->pos, q1 = p1->pos, q2 = p2->pos;
+	if (!(q0.z > 0.0f) || !(q1.z > 0.0f) || !(q2.z > 0.0f)) return 0;
+	q0.z = 1.0f / q0.z;
+	q1.z = 1.0f / q1.z;
+	q2.z = 1.0f / q2.z;
+	YMGRE_Fvector4d_SubToResult(&q1, &q0, &u);
+	YMGRE_Fvector4d_SubToResult(&q2, &q0, &v);
 	YMGRE_Fvector4d_CrossToResult(&u, &v, &plane);
-	plane.w = -(plane.x * p0->pos.x + plane.y * p0->pos.y + plane.z * p0->pos.z);
+	plane.w = -(plane.x * q0.x + plane.y * q0.y + plane.z * q0.z);
 	if ((plane.z <= YMGRE_RASTER_AREA_EPSILON) && (plane.z >= -YMGRE_RASTER_AREA_EPSILON))
-		return;
-	YMGRE_Img_TriangleLine(data, width, zbuff, &plane, x1, y1, x2, y2);
+		return 0;
+	float32 invArea = 1.0f / plane.z;
+	*result = (gre_fvector4d){-plane.x * invArea, -plane.y * invArea, 0, -plane.w * invArea};
+	return 1;
 }
 
 //三角图元线框绘制
@@ -1192,9 +1200,9 @@ void YMGRE_TrangleObject_Wires(GRE_Object4d myTrangleObj, GRE_Camera4d mycam)
 	thislines.data = linesbuff; //内存
 
 	gre_lineslist clipedlines;
-	gre_line drawlinebuff[6]; //最多6条边 ,条数需 > thislines.lineMax
-	clipedlines.lineNum = 6;
-	int clipoutnumMax = 6;
+	gre_line drawlinebuff[7]; //三角形与矩形相交最多产生 3 + 4 = 7 条边
+	clipedlines.lineNum = 7;
+	int clipoutnumMax = 7;
 	clipedlines.data = drawlinebuff;//内存
 
 	gre_log_explain((myTrangleObj == NULL) || (mycam == NULL), GRE_LOG_PtrI, "输入的物体或相机不存在");
@@ -1233,13 +1241,15 @@ void YMGRE_TrangleObject_Wires(GRE_Object4d myTrangleObj, GRE_Camera4d mycam)
 
 		//进行边界裁剪
 		YMGRE_Polygon_clip2D(&thislines, &clipedlines, &myrec);
+		gre_fvector4d depthPlane;
+		if (!clipedlines.lineNum || !YMGRE_Raster_TriangleWirePlane(
+			myTrangleObj->pointList_, thispoly, &depthPlane)) continue;
 
 		//绘制线框
 		for (int j = 0; j < clipedlines.lineNum; j++)
 		{
-			YMGRE_Raster_TriangleWire(mycam->img.data, mycam->img.width,
-				mycam->img.height, mycam->img.zbuff, myTrangleObj->pointList_,
-				thispoly, clipedlines.data[j].x0, clipedlines.data[j].y0,
+			YMGRE_Img_TriangleLine(mycam->img.data, mycam->img.width,
+				mycam->img.zbuff, &depthPlane, clipedlines.data[j].x0, clipedlines.data[j].y0,
 				clipedlines.data[j].x1, clipedlines.data[j].y1);
 		}
 	}
@@ -1254,8 +1264,8 @@ void YMGRE_TrangleObject_WiresTo(GRE_Object4d myTrangleObj, GRE_Vertex4d points,
 	thislines.lineMax = 3;
 	thislines.data = linesbuff;
 	gre_lineslist clipedlines;
-	gre_line drawlinebuff[6];
-	clipedlines.lineNum = 6;
+	gre_line drawlinebuff[7];
+	clipedlines.lineNum = 7;
 	clipedlines.data = drawlinebuff;
 	gre_log_explain((myTrangleObj == NULL) || (points == NULL) || (polygonHide == NULL) || (mycam == NULL), GRE_LOG_PtrIO, "输入的物体、工作区或相机不存在");
 	gre_frect myrec = { 0, 0, mycam->img.width - 1, mycam->img.height - 1 };
@@ -1267,7 +1277,7 @@ void YMGRE_TrangleObject_WiresTo(GRE_Object4d myTrangleObj, GRE_Vertex4d points,
 			continue;
 		gre_log_explain(thispoly->num != 3, GRE_LOG_ParamI, "多边形边数必须为3（三角形）");
 		thislines.lineNum = thispoly->num;
-		clipedlines.lineNum = 6;
+		clipedlines.lineNum = 7;
 		for (int j = 0; j < thispoly->num; j++)
 		{
 			int i1 = thispoly->index[j];
@@ -1278,10 +1288,13 @@ void YMGRE_TrangleObject_WiresTo(GRE_Object4d myTrangleObj, GRE_Vertex4d points,
 			thislines.data[j].y1 = points[i2].pos.y;
 		}
 		YMGRE_Polygon_clip2D(&thislines, &clipedlines, &myrec);
+		gre_fvector4d depthPlane;
+		if (!clipedlines.lineNum || !YMGRE_Raster_TriangleWirePlane(
+			points, thispoly, &depthPlane)) continue;
 		for (int j = 0; j < clipedlines.lineNum; j++)
 		{
-			YMGRE_Raster_TriangleWire(mycam->img.data, mycam->img.width,
-				mycam->img.height, mycam->img.zbuff, points, thispoly,
+			YMGRE_Img_TriangleLine(mycam->img.data, mycam->img.width,
+				mycam->img.zbuff, &depthPlane,
 				clipedlines.data[j].x0, clipedlines.data[j].y0,
 				clipedlines.data[j].x1, clipedlines.data[j].y1);
 		}
@@ -1295,12 +1308,14 @@ void YMGRE_TrangleObject_Wires_wN(GRE_Object4d object, GRE_Vertex4d_wN points,
 	for (int i = 0; i < object->polygonNum; i++)
 	{
 		GRE_Polygon4d polygon=&object->polygonList[i];
-		if (polygonHide[i]) continue;
+		/* Editor object wireframes are inspection geometry: include back-facing edges. */
+		if (polygonHide[i] && !object->wireFrame) continue;
 		for (int j=0;j<polygon->num;j++)
 		{
 			GRE_Vertex4d_wN a=&points[polygon->index[j]], b=&points[polygon->index[(j+1)%polygon->num]];
 			YMGRE_Img_LineDepth(camera->img.data,camera->img.zbuff,camera->img.width,camera->img.height,
-				(int16)a->base.pos.x,(int16)a->base.pos.y,a->base.pos.z,(int16)b->base.pos.x,(int16)b->base.pos.y,b->base.pos.z,GRE_brush,1);
+				(int16)a->base.pos.x,(int16)a->base.pos.y,a->base.pos.z,(int16)b->base.pos.x,(int16)b->base.pos.y,b->base.pos.z,GRE_brush,
+				object->wireFrame ? 0 : 1);
 		}
 	}
 }

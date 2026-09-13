@@ -29,6 +29,16 @@ int YMGRE_Ray_IntersectTriangle(const GRE_Ray ray,
 	float32 tMin, float32 tMax, GRE_RayHit hit);
 int YMGRE_Ray_IntersectSphere(const GRE_Ray ray, const gre_fvector4d* center,
 	float32 radius, float32 tMin, float32 tMax, GRE_RayHit hit);
+int YMGRE_Ray_IntersectPlane(const GRE_Ray ray, const gre_fvector4d* point,
+	const gre_fvector4d* normal, float32 tMin, float32 tMax, GRE_RayHit hit);
+int YMGRE_Ray_IntersectPlaneRect(const GRE_Ray ray, const gre_fvector4d* center,
+	const gre_fvector4d* normal, const gre_fvector4d* axisU,
+	const gre_fvector4d* axisV, float32 halfU, float32 halfV,
+	float32 tMin, float32 tMax, GRE_RayHit hit);
+int YMGRE_Ray_IntersectAABB(const GRE_Ray ray, const gre_fvector4d* minPoint,
+	const gre_fvector4d* maxPoint, float32 tMin, float32 tMax, GRE_RayHit hit);
+int YMGRE_Ray_IntersectCylinder(const GRE_Ray ray, const gre_fvector4d* center,
+	float32 radius, float32 halfHeight, float32 tMin, float32 tMax, GRE_RayHit hit);
 int YMGRE_Ray_IntersectObject(const GRE_Ray ray, GRE_Object4d object,
 	float32 tMin, float32 tMax, gre_ray_scene_hit* result);
 int YMGRE_Ray_IntersectScene(const GRE_Ray ray, const gre_list* objects,

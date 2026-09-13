@@ -901,9 +901,9 @@ GRE_Object4d YMGRE_MeshGener_Torus(float32 majorRadius, float32 tubeRadius,
 }
 
 //沿 Y 轴生成胶囊体，cylinderHeight 只表示两个半球之间的直筒高度
-GRE_Object4d YMGRE_MeshGener_Capsule(float32 radius, float32 cylinderHeight,
+static GRE_Object4d meshGenerateCapsule(float32 radius, float32 cylinderHeight,
 	uint16 hemisphereSegments, uint16 longitude, GRErgb24 color,
-	char* name, char* materiaName)
+	char* name, char* materiaName, int legacy)
 {
 	gre_log_explain((radius <= 0.0f) || (cylinderHeight <= 0.0f) ||
 		(hemisphereSegments == 0) || (longitude < 3), GRE_LOG_ParamI,
@@ -935,7 +935,8 @@ GRE_Object4d YMGRE_MeshGener_Capsule(float32 radius, float32 cylinderHeight,
 	}
 	for (uint16 ring = 0; ring < hemisphereSegments; ring++)
 	{
-		float32 angle = YMGRE_Pai * (ring + 1) / (2.0f * hemisphereSegments);
+		// Include the lower equator; the bottom pole already has its own vertex.
+		float32 angle = YMGRE_Pai * (ring + (legacy ? 1 : 0)) / (2.0f * hemisphereSegments);
 		float32 ringRadius = radius * YMGRE_Cos(angle);
 		float32 y = -halfHeight - radius * YMGRE_Sin(angle);
 		uint16 ringIndex = hemisphereSegments + ring;
@@ -984,6 +985,11 @@ GRE_Object4d YMGRE_MeshGener_Capsule(float32 radius, float32 cylinderHeight,
 	object->BoundingBoxMax = (gre_fvector4d){  radius,  boundRadius,  radius, 1 };
 	return object;
 }
+
+GRE_Object4d YMGRE_MeshGener_Capsule(float32 r,float32 h,uint16 a,uint16 b,GRErgb24 c,char* n,char* m)
+{return meshGenerateCapsule(r,h,a,b,c,n,m,0);}
+GRE_Object4d YMGRE_MeshGener_CapsuleLegacy(float32 r,float32 h,uint16 a,uint16 b,GRErgb24 c,char* n,char* m)
+{return meshGenerateCapsule(r,h,a,b,c,n,m,1);}
 
 //生成顶点位于指定外接球面的正四面体
 GRE_Object4d YMGRE_MeshGener_Tetrahedron(float32 radius, GRErgb24 color,

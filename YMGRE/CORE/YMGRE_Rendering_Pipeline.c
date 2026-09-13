@@ -41,6 +41,69 @@ static uint8 clipCameraLine(GRE_Fvector4d start, GRE_Fvector4d end, GRE_Camera4d
 	return 1;
 }
 
+/* Rasterize camera-space triangles only after clipping. A vertex behind the
+ * camera must not make the visible portion of its face disappear. */
+static void renderCameraTriangles(GRE_Object4d object, GRE_Vertex4d points,
+	const uint8* hidden, const GRErgb24* colors, GRE_Material material, GRE_Camera4d camera)
+{
+	if (camera->wireFrame != GRE_Render_Wireframe)
+	for (int pi = 0; pi < object->polygonNum; pi++)
+	{
+		GRE_Polygon4d source = &object->polygonList[pi];
+		if ((hidden ? hidden[pi] : source->ishide) || source->num != 3) continue;
+		gre_vertex4d input[3], clipped[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+		for (int j = 0; j < 3; j++) input[j] = points[source->index[j]];
+		uint16 count = YMGRE_Polygon_FrustumClip(input, 3, clipped,
+			YMGRE_FRUSTUM_CLIP_VERTEX_MAX, camera);
+		if (count < 3) continue;
+		YMGRE_VertexList_CameraToViewPlane(clipped, count, camera->perspectPlane.Dis);
+		YMGRE_VertexList_ViewPlaneToWindows(clipped, count, camera);
+		/* Roundoff at an exact clipping boundary must not move a coverage edge
+		 * a tiny positive distance inward (ceil would drop the first pixel). */
+		for (uint16 j = 0; j < count; j++) {
+			if (fabsf(clipped[j].pos.x) < .0001f) clipped[j].pos.x = 0;
+			if (fabsf(clipped[j].pos.y) < .0001f) clipped[j].pos.y = 0;
+			if (fabsf(clipped[j].pos.x-camera->img.width) < .0001f) clipped[j].pos.x = camera->img.width;
+			if (fabsf(clipped[j].pos.y-camera->img.height) < .0001f) clipped[j].pos.y = camera->img.height;
+		}
+		GRErgb24 color = colors ? colors[pi] : source->planeColor_;
+		if (material && material->unlit) color = (GRErgb24){DefaultPolygonClv,DefaultPolygonClv,DefaultPolygonClv};
+		for (uint16 j = 1; j + 1 < count; j++)
+		{
+			uint16 indices[3] = {0, j, (uint16)(j+1)};
+			gre_polygon4d triangle = *source;
+			triangle.index = indices;
+			YMGRE_TriangleRaster_Fill(clipped, &triangle, color, material, camera);
+		}
+	}
+	/* Draw only original mesh edges, after all fills. Clipping-generated fan
+	 * diagonals and screen-border segments are not geometry edges. */
+	if (camera->wireFrame == GRE_Render_Wireframe || object->wireFrame)
+	for (int pi = 0; pi < object->polygonNum; pi++)
+	{
+		GRE_Polygon4d polygon = &object->polygonList[pi];
+		if ((hidden ? hidden[pi] : polygon->ishide) || polygon->num != 3) continue;
+		for (int j = 0; j < 3; j++)
+		{
+			gre_fvector4d a = points[polygon->index[j]].pos;
+			gre_fvector4d b = points[polygon->index[(j+1)%3]].pos;
+			if (!clipCameraLine(&a, &b, camera)) continue;
+			float32 za=a.z, zb=b.z;
+			YMGRE_Point_CameraToViewPlane(&a, camera->perspectPlane.Dis);
+			YMGRE_Point_CameraToViewPlane(&b, camera->perspectPlane.Dis);
+			YMGRE_Point_ViewPlaneToWindows(&a, camera);
+			YMGRE_Point_ViewPlaneToWindows(&b, camera);
+			int x0=GREMax(0,GREMin(camera->img.width-1,(int)(a.x+.5f)));
+			int y0=GREMax(0,GREMin(camera->img.height-1,(int)(a.y+.5f)));
+			int x1=GREMax(0,GREMin(camera->img.width-1,(int)(b.x+.5f)));
+			int y1=GREMax(0,GREMin(camera->img.height-1,(int)(b.y+.5f)));
+			extern GRErgb24 GRE_brush;
+			YMGRE_Img_LineDepth(camera->img.data, camera->img.zbuff, camera->img.width,
+				camera->img.height, x0,y0,za,x1,y1,zb,GRE_brush,1);
+		}
+	}
+}
+
 //  世界坐标系
 //     ^ y
 //     |
@@ -216,30 +279,8 @@ void YMGRE_Camera_TanglePipline_Rendering(GRE_Camera4d thiscam, GRE_List LightLi
 				//进行光照渲染，采用平面着色器，
 				YMGRE_ObjectLighting_Color(thisobj, LightList, thiscam);
 
-				//投影变换到视平面
-				YMGRE_Object_CameraToViewPlane(thisobj, thiscam->perspectPlane.Dis);
-
-				//将完全位于视景体外的面剔除
-				YMGRE_ObjectPoly_FrustumCulling(thisobj, thiscam);
-
-				//透视坐标变换到窗口坐标
-				YMGRE_Object_ViewPlaneToWindows(thisobj, thiscam);
-
-				//线框模型
-				if (thiscam->wireFrame == GRE_Render_Wireframe)
-				{
-					YMGRE_TrangleObject_Wires(thisobj, thiscam);
-				}
-				//实体模型
-				else
-				{
-					//找到材质
-					GRE_Material myMater = YMGRE_Material_Find(MaterialList, thisobj->materiaName);
-
-					//三角图元光栅化显示，Zbuff算法消除被遮挡的隐面
-					YMGRE_TrangleObject_Primitive_Rasterization(thisobj, myMater, thiscam);
-
-				}
+				GRE_Material material = YMGRE_Material_Find(MaterialList, thisobj->materiaName);
+				renderCameraTriangles(thisobj, thisobj->pointList_, NULL, NULL, material, thiscam);
 			}
 		} while ((thisobj = thisobj->nextObject) != NULL);
 	}
@@ -308,20 +349,9 @@ void YMGRE_Camera_TanglePipline_RenderingWithWorkspace(GRE_Camera4d thiscam, GRE
 				YMGRE_Backface_RemoveTo(thisobj, &mycam->pos, workspace->polygonHide);
 				YMGRE_ObjectLighting_ColorTo(thisobj, workspace->pointList, LightList,
 					workspace->lightPos, &mycam->move.TMat, workspace->polygonColor);
-				//投影后完成逐面视景体剔除，再变换到窗口坐标进行光栅化
-				YMGRE_VertexList_CameraToViewPlane(workspace->pointList, thisobj->pointNum, mycam->perspectPlane.Dis);
-				YMGRE_ObjectPoly_FrustumCullingTo(thisobj, workspace->pointList, mycam, workspace->polygonHide);
-				YMGRE_VertexList_ViewPlaneToWindows(workspace->pointList, thisobj->pointNum, mycam);
-
-				//相机线框模式只画边；实体模式下由模型 wireFrame 决定是否后画网格线
-				if (mycam->wireFrame == GRE_Render_Wireframe)
-					YMGRE_TrangleObject_WiresTo(thisobj, workspace->pointList, workspace->polygonHide, mycam);
-				else
-				{
-					GRE_Material myMater = YMGRE_Material_Find(MaterialList, thisobj->materiaName);
-					YMGRE_TrangleObject_Primitive_RasterizationTo(thisobj, workspace->pointList, workspace->polygonHide,
-						workspace->polygonColor, myMater, mycam);
-				}
+				GRE_Material material = YMGRE_Material_Find(MaterialList, thisobj->materiaName);
+				renderCameraTriangles(thisobj, workspace->pointList, workspace->polygonHide,
+					workspace->polygonColor, material, mycam);
 			}
 		} while ((thisobj = thisobj->nextObject) != NULL);
 	}
@@ -404,6 +434,7 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 			YMGRE_Object_WorldToCameraTo_wN(object, &cam->move.TMat, workspace->pointList_wN);
 			if (YMGRE_Object_FrustumCullingCal(object, cam)) continue;
 			YMGRE_Backface_RemoveTo(object, &cam->pos, workspace->polygonHide);
+			/* Camera wireframe is exclusive; object wireFrame is an overlay on solid shading. */
 			if (cam->wireFrame == GRE_Render_Wireframe)
 			{
 				YMGRE_VertexList_CameraToViewPlane_wN(workspace->pointList_wN, object->pointNum, cam->perspectPlane.Dis);
@@ -413,12 +444,21 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 			else
 			{
 				GRE_Material material = YMGRE_Material_Find(MaterialList, object->materiaName);
+				GRE_Lightmap lightmap=object->lightmap;
+				if (lightmap && (!lightmap->enabled || !lightmap->pixels || !lightmap->uv1 ||
+					lightmap->triangleCount != (uint32)object->polygonNum)) lightmap=NULL;
 				for (int pi = 0; pi < object->polygonNum; pi++)
 				{
 					GRE_Polygon4d source = &object->polygonList[pi];
 					if (workspace->polygonHide[pi] || source->num != 3) continue;
 					gre_vertex4d_wN input[3], clipped[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
-					for (int vi = 0; vi < 3; vi++) input[vi] = workspace->pointList_wN[source->index[vi]];
+					for (int vi = 0; vi < 3; vi++) {
+						input[vi] = workspace->pointList_wN[source->index[vi]];
+						if (lightmap) {
+							input[vi].lightmapU=lightmap->uv1[pi*6+vi*2];
+							input[vi].lightmapV=lightmap->uv1[pi*6+vi*2+1];
+						}
+					}
 					if (object->renderMode == GRE_RenderMode_Face)
 					{
 						gre_fvector4d faceNormal = source->pN;
@@ -444,13 +484,24 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 						gre_polygon4d triangle = *source;
 						triangle.num = 3;
 						triangle.index = indices;
-						if (object->renderMode == GRE_RenderMode_Vertex)
+						if (lightmap)
+							YMGRE_TriangleRaster_FillLightmap_wN(clipped, &triangle, material, lightmap, cam);
+						else if (object->renderMode == GRE_RenderMode_Vertex && !(material && material->unlit))
 							YMGRE_TriangleRaster_FillVertexLit_wN(clipped, &triangle, material, cam);
 						else
 							YMGRE_TriangleRaster_Fill_wN(clipped, &triangle, material, LightList,
 								workspace->lightPos, &cam->move.TMat, object->mirrorKs, cam);
 					}
 				}
+			}
+			if (object->wireFrame && cam->wireFrame != GRE_Render_Wireframe)
+			{
+				YMGRE_VertexList_CameraToViewPlane_wN(workspace->pointList_wN,
+					object->pointNum, cam->perspectPlane.Dis);
+				YMGRE_VertexList_ViewPlaneToWindows_wN(workspace->pointList_wN,
+					object->pointNum, cam);
+				YMGRE_TrangleObject_Wires_wN(object, workspace->pointList_wN,
+					workspace->polygonHide, cam);
 			}
 		}
 	}

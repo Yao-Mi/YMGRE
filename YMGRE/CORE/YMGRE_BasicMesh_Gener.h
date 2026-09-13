@@ -29,4 +29,7 @@ GRE_Object4d YMGRE_MeshGener_Dodecahedron(float32 radius, GRErgb24 color,
 GRE_Object4d YMGRE_MeshGener_Icosahedron(float32 radius, GRErgb24 color,
 	char* name, char* materiaName);//创建正二十面体
 
+/* Reconstruct old editor scenes without changing their geometry/bake fingerprints. */
+GRE_Object4d YMGRE_MeshGener_CapsuleLegacy(float32 radius,float32 cylinderHeight,uint16 hemisphereSegments,uint16 longitude,GRErgb24 color,char* name,char* materiaName);
+
 #endif // !YMGRE_BASICMESH_GENER_H

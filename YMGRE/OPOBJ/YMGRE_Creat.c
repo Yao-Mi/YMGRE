@@ -190,8 +190,19 @@ GRE_Object4d YMGRE_Creat_Object(int pointNum,int polygonNum,char* name,char* mat
 	myobj->pointNum = pointNum;
 	myobj->pointList = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
 	myobj->pointList_ = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
+	/* Untextured generators (including cube/box) only assign positions.
+	   Give UV0 a defined default before advanced attribute generation/sampling. */
+	for (int i = 0; i < pointNum; i++) {
+		myobj->pointList[i].u = myobj->pointList[i].v = 0;
+		myobj->pointList_[i].u = myobj->pointList_[i].v = 0;
+	}
 	myobj->pointList_wN = NULL;
 	myobj->pointList_wN_ = NULL;
+	myobj->mirrorKs = 0.0f;
+	myobj->lightmap = NULL;
+	myobj->importedUvCount = 0;
+	myobj->importedUvs = NULL;
+	myobj->importedNormals = NULL;
 	myobj->polygonNum = polygonNum;
 	myobj->polygonList = GRE_malloc1(polygonNum * sizeof(gre_polygon4d));
 	myobj->nextObject = NULL;//默认只有一个submesh
@@ -239,6 +250,7 @@ int YMGRE_Object_EnableVertexAttributes(GRE_Object4d object)
 		base[i].normal = (gre_fvector4d){ 0, 0, 1, 0 };
 		base[i].tangent = (gre_fvector4d){ 1, 0, 0, 0 };
 		base[i].tangentW = 1.0f;
+		base[i].lightmapU = base[i].lightmapV = 0;
 		base[i].color = (GRErgb24){ 255, 255, 255 };
 		base[i].vertexLighting = (GRErgb24){ 255, 255, 255 };
 		base[i].vertexSpecular = (GRErgb24){ 0, 0, 0 };
@@ -294,6 +306,7 @@ int YMGRE_Object_GenerateVertexAttributes(GRE_Object4d object)
 	for(int i=0;i<object->pointNum;i++)
 	{
 		GRE_Vertex4d_wN vertex=&object->pointList_wN[i];
+		if (object->importedNormals) vertex->normal=object->importedNormals[i];
 		if(YMGRE_Fvector4d_Len1(&vertex->normal)<1e-8f) vertex->normal=(gre_fvector4d){0,0,1,0};
 		else YMGRE_Fvector4d_Normalize(&vertex->normal);
 		float32 ndt=YMGRE_Fvector4d_Dot(&vertex->normal,&vertex->tangent);
@@ -325,6 +338,7 @@ GRE_Material YMGRE_Creat_Material(char* name)
 	mymaterial->width = 0;
 	mymaterial->height = 0;
 	mymaterial->advanced = NULL;
+	mymaterial->unlit = 0;
 	//默认为白色
 	GRErgb24 comcolor = (GRErgb24){ 255,255,255 };
 	mymaterial->ambient = comcolor;//环境色

@@ -174,11 +174,11 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 	}
 }
 
-void YMGRE_TriangleRaster_Fill_wN(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
+static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 	GRE_Material material, GRE_List lights, gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera,
-	float32 mirrorKs, GRE_Camera4d camera)
+	float32 mirrorKs, GRE_Camera4d camera, GRE_Lightmap lightmap)
 {
-	if(vertexList==NULL||polygon==NULL||lights==NULL||camera==NULL) return;
+	if(vertexList==NULL||polygon==NULL||(lights==NULL && lightmap==NULL)||camera==NULL) return;
 	uint8 specularPower = EMaterial_GetSpecularPower(material);
 	GRE_Vertex4d_wN a = &vertexList[polygon->index[0]], b = &vertexList[polygon->index[1]], c = &vertexList[polygon->index[2]];
 	// Tangent handedness is a discrete, triangle-flat attribute. Never
@@ -232,13 +232,26 @@ void YMGRE_TriangleRaster_Fill_wN(GRE_Vertex4d_wN vertexList, GRE_Polygon4d poly
 		float32 viewW=camera->perspectPlane.pR-camera->perspectPlane.pL, viewH=camera->perspectPlane.pU-camera->perspectPlane.pD;
 		gre_fvector4d fragment={((x-camera->img.width*.5f)*viewW/camera->img.width)*z/camera->perspectPlane.Dis,((y-camera->img.height*.5f)*-viewH/camera->img.height)*z/camera->perspectPlane.Dis,z,1};
 		gre_polygon4d litPolygon=*polygon;
-		litPolygon.planeColor=material?material->diffuse:(GRErgb24){255,255,255};
+		/* Built-in editor meshes have no material entry; preserve their polygon color. */
+		litPolygon.planeColor=material?material->diffuse:polygon->planeColor;
 		GRErgb24 lighting={0,0,0}, specular={0,0,0}; uint32 lightIndex=0;
-		for(GRE_ListNode ln=lights->listhead;ln;ln=ln->next)
+		if (lightmap != NULL) {
+			float32 lu=wa*a->lightmapU+wb*b->lightmapU+wc*c->lightmapU;
+			float32 lv=wa*a->lightmapV+wb*b->lightmapV+wc*c->lightmapV;
+			int lx=GREMin(GREMax((int)(lu*lightmap->width),0),lightmap->width-1);
+			int ly=GREMin(GREMax((int)(lv*lightmap->height),0),lightmap->height-1);
+			GRErgb24 irradiance=lightmap->pixels[ly*lightmap->width+lx];
+			if(lightmap->specularPixels)specular=lightmap->specularPixels[ly*lightmap->width+lx];
+			GRErgb24 albedo=material?material->diffuse:polygon->planeColor;
+			lighting=lightmap->colorsBaked?irradiance:(GRErgb24){irradiance.R*albedo.R/255,
+				irradiance.G*albedo.G/255,irradiance.B*albedo.B/255};
+		}
+		if(material && material->unlit)lighting=material->diffuse;
+		for(GRE_ListNode ln=(lightmap || (material && material->unlit))?NULL:lights->listhead;ln;ln=ln->next)
 		{
 			gre_light4d light=*(GRE_Light4d)ln->data;
 			litPolygon.planeColor=(material && light.type==GRE_GlobalLight)?material->ambient:
-				(material?material->diffuse:(GRErgb24){255,255,255});
+				(material?material->diffuse:polygon->planeColor);
 			light.proper.pos_=lightPos[lightIndex++];
 			if(light.type==GRE_SpotLight){YMGRE_Fvector4d_MatMultTo(worldToCamera,&light.proper.spot.direct,&light.proper.spot.direct);light.proper.spot.direct.w=0;}
 			YMGRE_PolygonLighting_ComponentsAdvanced(&litPolygon, &fragment,
@@ -258,6 +271,19 @@ void YMGRE_TriangleRaster_Fill_wN(GRE_Vertex4d_wN vertexList, GRE_Polygon4d poly
 		camera->img.data[index]=GRE_FramePixel_From_RGB24((GRErgb24){GREMin(cr,255),GREMin(cg,255),GREMin(cb,255)});
 	}
 }
+void YMGRE_TriangleRaster_Fill_wN(GRE_Vertex4d_wN vertices, GRE_Polygon4d polygon,
+	GRE_Material material, GRE_List lights, gre_fvector4d* positions, GRE_FMat4x4 matrix,
+	float32 mirrorKs, GRE_Camera4d camera)
+{
+	FillAdvanced(vertices, polygon, material, lights, positions, matrix, mirrorKs, camera, NULL);
+}
+
+void YMGRE_TriangleRaster_FillLightmap_wN(GRE_Vertex4d_wN vertices,
+	GRE_Polygon4d polygon, GRE_Material material, GRE_Lightmap lightmap, GRE_Camera4d camera)
+{
+	if (!lightmap || !lightmap->pixels || !lightmap->width || !lightmap->height) return;
+	FillAdvanced(vertices, polygon, material, NULL, NULL, NULL, 0, camera, lightmap);
+}
 //////////////////////////////////////////////// 使用材质绘制三角形 /////////////////////////////////////
 
 // 绘制平底为下三角的三角形
@@ -266,6 +292,7 @@ void YMGRE_TriangleRaster_Fill_wN(GRE_Vertex4d_wN vertexList, GRE_Polygon4d poly
 //      /  \
 //  v1 ------ v2
 //只填充平底三角形，热路径不包含线框判断
+// Private scanline inputs: z is reciprocal camera depth; u/v are u/z and v/z.
 static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 u0, float32 v0,
 	float32 x1, float32 y1, float32 z1, float32 u1, float32 v1,
 	float32 x2, float32 y2, float32 z2, float32 u2, float32 v2, GRErgb24 planecolor, GRE_Material mymater, GRE_Camera4d mycam)
@@ -278,7 +305,7 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 	float32 znear_v = mycam->frustum.Znear;
 
 	float32 div10 = 1.0f / (y1 - y0);
-	float32 div20 = 1.0f / (y2 - y0);
+	float32 div20 = div10; // y1 == y2
 	//计算v0到两个顶点的直线增长量
 	float32 dxdl = (x1 - x0) * div10; // dx L--R
 	float32 dxdr = (x2 - x0) * div20;
@@ -325,21 +352,22 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 			GRE_FrameBuffer frame_i = &mycam->img.data[y * width];//帧缓冲区中，该行起点
 
 			float32 zd = (startL == startR) ? 0 : (zr - zl) / (startR - startL);
-			float32 zval = zl + (begX - startL) * zd;
+			float32 invDepth = zl + (begX - startL) * zd;
 			//填充固定颜色
 			for (int x = begX; x <= endX; x++)
 			{
-				//Z-buff比较，若距离变小则更新缓存
-				if (zbuff_i[x] > zval)
+				// One reciprocal per varying-depth fragment, shared by depth and UVs.
+				float32 depth = invDepth > 0.0f ? 1.0f / invDepth : 0.0f;
+				if (zbuff_i[x] > depth)
 				{
 					//且在近景平面内
-					if (zval > znear_v)
+					if (depth > znear_v)
 					{
-						zbuff_i[x] = zval;
+						zbuff_i[x] = depth;
 						frame_i[x] = GRE_FramePixel_From_RGB24(planecolor);
 					}
 				}
-				zval += zd;
+				invDepth += zd;
 			}
 			startL += dxdl; //dx
 			startR += dxdr;
@@ -371,7 +399,7 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 
 		float32 zl = 0;
 		float32 zr = 0;
-		float32 zval = 0;
+		float32 invDepth = 0;
 
 		int begY = GREMax(YMGRE_Raster_Ceil(y0), 0);
 		int endY = GREMin(YMGRE_Raster_Ceil(y2), height);
@@ -394,18 +422,19 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 			begV = startLV; endV = startRV;
 			//计算水平方向插值增量
 			dx = startR - startL;
-			ui = (dx == 0) ? 0 : (endU - begU) / dx;
-			vi = (dx == 0) ? 0 : (endV - begV) / dx;
-			float32 zd = (dx == 0) ? 0 : (zr - zl) / dx;
+			float32 invWidth = (dx == 0) ? 0 : 1.0f / dx;
+			ui = (endU - begU) * invWidth;
+			vi = (endV - begV) * invWidth;
+			float32 zd = (zr - zl) * invWidth;
 			begU += (begX - startL) * ui;
 			begV += (begX - startL) * vi;
-			zval = zl + (begX - startL) * zd;
+			invDepth = zl + (begX - startL) * zd;
 			//修正x的范围
 			if (begX < 0)
 			{
 				begU -= begX * ui;
 				begV -= begX * vi;
-				zval -= begX * zd;
+				invDepth -= begX * zd;
 				begX = 0;
 			}
 			if (endX > width - 1)
@@ -417,14 +446,15 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 				GRE_FrameBuffer frame_i = &mycam->img.data[y * width];//帧缓冲区中，该行起点
 				for (int x = begX; x <= endX; x++)
 				{
-					//Z-buff比较，若距离变小则更新缓存
-					if (zbuff_i[x] > zval)
+					// One reciprocal per varying-depth fragment, shared by depth and UVs.
+					float32 depth = invDepth > 0.0f ? 1.0f / invDepth : 0.0f;
+					if (zbuff_i[x] > depth)
 					{
 						//且在近景平面内
-						if (zval > znear_v)
+						if (depth > znear_v)
 						{
-							zbuff_i[x] = zval;
-							GRErgb24 texel = EMaterial_GetPixel(mymater->pixel, mymater->width, mymater->height, begU, begV);//getPixel(begU, begV)
+							zbuff_i[x] = depth;
+							GRErgb24 texel = EMaterial_GetPixel(mymater->pixel, mymater->width, mymater->height, begU * depth, begV * depth);//getPixel(begU, begV)
 							//添加光照影响，最后一步才量化到帧缓冲格式
 							int cr = texel.R * planecolor.R / DefaultPolygonClv;
 							int cg = texel.G * planecolor.G / DefaultPolygonClv;
@@ -436,7 +466,7 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 						}
 					}
 					begU += ui; begV += vi;
-					zval += zd;
+					invDepth += zd;
 				}
 			}
 			//L,R
@@ -467,10 +497,11 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 	uint16 width = mycam->img.width;
 	float32 znear_v = mycam->frustum.Znear;
 	//通过绘制水平直线来完成
-	float32 dxdl = (x1 - x2) / (y1 - y2);//dx
-	float32 dxdr = (x0 - x2) / (y0 - y2);
-	float32 dzdl = (z1 - z2) / (y1 - y2);//dz
-	float32 dzdr = (z0 - z2) / (y0 - y2);
+	float32 invHeight = 1.0f / (y1 - y2); // y0 == y1
+	float32 dxdl = (x1 - x2) * invHeight;//dx
+	float32 dxdr = (x0 - x2) * invHeight;
+	float32 dzdl = (z1 - z2) * invHeight;//d(1/z)
+	float32 dzdr = (z0 - z2) * invHeight;
 
 	float32 startL = x1;
 	float32 startR = x0;
@@ -511,21 +542,22 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 			GRE_FrameBuffer frame_i = &mycam->img.data[y * width];//帧缓冲区中，该行起点
 
 			float32 zd = (startL == startR) ? 0 : (zr - zl) / (startR - startL);
-			float32 zval = zl + (begX - startL) * zd;
+			float32 invDepth = zl + (begX - startL) * zd;
 			//填充固定颜色
 			for (int x = begX; x <= endX; x++)
 			{
-				//Z-buff比较，若距离变小则更新缓存
-				if (zbuff_i[x] > zval)
+				// One reciprocal per varying-depth fragment, shared by depth and UVs.
+				float32 depth = invDepth > 0.0f ? 1.0f / invDepth : 0.0f;
+				if (zbuff_i[x] > depth)
 				{
 					//且在近景平面内
-					if (zval > znear_v)
+					if (depth > znear_v)
 					{
-						zbuff_i[x] = zval;
+						zbuff_i[x] = depth;
 						frame_i[x] = GRE_FramePixel_From_RGB24(planecolor);
 					}
 				}
-				zval += zd;
+				invDepth += zd;
 			}
 			startL += dxdl; //dx
 			startR += dxdr;
@@ -535,10 +567,10 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 	}
 	else
 	{
-		float32 dudl = (u1 - u2) / (y1 - y2);// du
-		float32 dudr = (u0 - u2) / (y0 - y2);
-		float32 dvdl = (v1 - v2) / (y1 - y2);// dv
-		float32 dvdr = (v0 - v2) / (y0 - y2);
+		float32 dudl = (u1 - u2) * invHeight;// du
+		float32 dudr = (u0 - u2) * invHeight;
+		float32 dvdl = (v1 - v2) * invHeight;// dv
+		float32 dvdr = (v0 - v2) * invHeight;
 
 		float32 startLU = u1;// U  L -- R
 		float32 startRU = u0;
@@ -554,7 +586,7 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 		float32 ui = 0;
 		float32 vi = 0;
 
-		float32 zval = 0;
+		float32 invDepth = 0;
 		int begY = GREMax(YMGRE_Raster_Ceil(y0), 0);
 		int endY = GREMin(YMGRE_Raster_Ceil(y2), height);
 		startL = x1 + (begY - y1) * dxdl;
@@ -576,18 +608,19 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 			begV = startLV; endV = startRV;
 			//计算水平方向插值增量
 			dx = startR - startL;
-			ui = (dx == 0) ? 0 : (endU - begU) / dx;
-			vi = (dx == 0) ? 0 : (endV - begV) / dx;
-			float32 zd = (dx == 0) ? 0 : (zr - zl) / dx;
+			float32 invWidth = (dx == 0) ? 0 : 1.0f / dx;
+			ui = (endU - begU) * invWidth;
+			vi = (endV - begV) * invWidth;
+			float32 zd = (zr - zl) * invWidth;
 			begU += (begX - startL) * ui;
 			begV += (begX - startL) * vi;
-			zval = zl + (begX - startL) * zd;
+			invDepth = zl + (begX - startL) * zd;
 			//修正x的范围
 			if (begX < 0)
 			{
 				begU -= begX * ui;
 				begV -= begX * vi;
-				zval -= begX * zd;
+				invDepth -= begX * zd;
 				begX = 0;
 			}
 			if (endX > width - 1)
@@ -599,14 +632,15 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 				GRE_FrameBuffer frame_i = &mycam->img.data[y * width];//帧缓冲区中，该行起点
 				for (int x = begX; x <= endX; x++)
 				{
-					//Z-buff比较，若距离变小则更新缓存
-					if (zbuff_i[x] > zval)
+					// One reciprocal per varying-depth fragment, shared by depth and UVs.
+					float32 depth = invDepth > 0.0f ? 1.0f / invDepth : 0.0f;
+					if (zbuff_i[x] > depth)
 					{
 						//且在近景平面内
-						if (zval > znear_v)
+						if (depth > znear_v)
 						{
-							zbuff_i[x] = zval;
-							GRErgb24 texel = EMaterial_GetPixel(mymater->pixel, mymater->width, mymater->height, begU, begV);//getPixel(begU, begV)
+							zbuff_i[x] = depth;
+							GRErgb24 texel = EMaterial_GetPixel(mymater->pixel, mymater->width, mymater->height, begU * depth, begV * depth);//getPixel(begU, begV)
 							//添加光照影响，最后一步才量化到帧缓冲格式
 							int cr = texel.R * planecolor.R / DefaultPolygonClv;
 							int cg = texel.G * planecolor.G / DefaultPolygonClv;
@@ -618,7 +652,7 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 						}
 					}
 					begU += ui; begV += vi;
-					zval += zd;
+					invDepth += zd;
 				}
 			}
 			startL += dxdl;
@@ -703,8 +737,23 @@ static uint8 YMGRE_TriangleRaster_Split(GRE_Vertex4d vertexList,
 void YMGRE_TriangleRaster_Fill(GRE_Vertex4d vertexList, GRE_Polygon4d polygon,
 	GRErgb24 planecolor, GRE_Material material, GRE_Camera4d camera)
 {
+	/* Convert before splitting: every screen-space interpolation, including the
+	 * split vertex, must use 1/z. Keep caller vertices and the z buffer in camera z. */
+	gre_vertex4d projected[3];
+	uint16 indices[3] = { 0, 1, 2 };
+	gre_polygon4d localPolygon = *polygon;
+	localPolygon.index = indices;
+	for (int i = 0; i < 3; ++i)
+	{
+		projected[i] = vertexList[polygon->index[i]];
+		float32 z = projected[i].pos.z;
+		if (!(z > 0.0f) || !isfinite(z)) return;
+		projected[i].pos.z = 1.0f / z;
+		projected[i].u *= projected[i].pos.z;
+		projected[i].v *= projected[i].pos.z;
+	}
 	gre_triangle_split split;
-	if (!YMGRE_TriangleRaster_Split(vertexList, polygon, &split))
+	if (!YMGRE_TriangleRaster_Split(projected, &localPolygon, &split))
 		return;
 	if (split.type == 1)
 		Fill_Top_Trangle(split.top->pos.x, split.top->pos.y, split.top->pos.z, split.top->u, split.top->v,

@@ -16,6 +16,7 @@
 - `scene_roaming`：加载地图和障碍物，接受相机输入并持续更新两个观察视角。
 - `scene_editor`：YMGUI 编辑器外壳与 YMGRE 实时视口，验证 RenderTarget、相机交互、辅助线
   几何、动态布局、基础物体放置、层级树和实际网格属性编辑。
+- `scene_baker`：独立 RGB888 烘焙编辑器，支持 UV1 直接光照烘焙、导出、回贴预览和场景重开。
 
 ## 综合验收项目：scene_editor
 

@@ -66,6 +66,7 @@ typedef struct gre_vertex4d_wN_
 	GRErgb24 color;
 	GRErgb24 vertexLighting;// per-vertex ambient/diffuse result
 	GRErgb24 vertexSpecular;// per-vertex mirror result, kept separate from albedo
+	float32 lightmapU, lightmapV;// independent UV1, interpolated through clipping
 }gre_vertex4d_wN;
 typedef gre_vertex4d_wN* GRE_Vertex4d_wN;
 typedef char YMGRE_Vertex4d_wN_BaseMustBeFirst[
@@ -92,6 +93,25 @@ typedef struct gre_polygon4d_
 
 }gre_polygon4d;
 typedef gre_polygon4d* GRE_Polygon4d;
+
+// Owned by an object. UV1 is stored per triangle corner so shared UV0 vertices
+// can cross atlas seams without modifying the source mesh or base texture.
+typedef struct gre_lightmap_ {
+	uint16 width, height;
+	uint32 triangleCount;
+	float32* uv1;// triangleCount * 6 floats, polygon order
+	GRErgb24* pixels;// baked ambient + direct diffuse illumination, white albedo
+	uint8 enabled;
+	uint8 materialOnly;// atlas layout only; retain dynamic lighting in the exported material
+	GRErgb24* specularPixels;// optional additive highlight captured from referenceView
+	gre_fvector4d referenceView;
+	float32 specularKs;
+	uint8 specularPower;
+	GRErgb24 specularColor;
+	uint8 colorsBaked;// lighting evaluated with material colors before RGB8 saturation
+	GRErgb24 capturedAmbient,capturedDiffuse;
+} gre_lightmap;
+typedef gre_lightmap* GRE_Lightmap;
 
 typedef enum
 {
@@ -126,6 +146,10 @@ typedef struct gre_object4d_
 	GRE_Vertex4d_wN pointList_wN;//可选高级属性列表
 	GRE_Vertex4d_wN pointList_wN_;//可选高级属性临时列表
 	GRE_VertexRenderMode renderMode;//渲染路径，默认保持旧的逐面模式
+	GRE_Lightmap lightmap;// optional, exclusively owned; freed with the object
+	uint16 importedUvCount;// optional original float2 UV channels, including UV0
+	float32* importedUvs;// pointNum * importedUvCount * 2 floats
+	gre_fvector4d* importedNormals;// authored normals; transformed with the mesh
 
 	int polygonNum;//多边形数量
 	GRE_Polygon4d polygonList;//多边形列表
@@ -302,6 +326,9 @@ typedef struct gre_material_advanced_
 	uint16 normalWidth, normalHeight;
 	GRErgb24* normalPixel;//切线空间法线贴图（可选）
 	uint8 specularPower;// Blinn-Phong exponent; 0 keeps the default value 30
+	uint8 rayType;// 0 ordinary, 1 mirror, 2 dielectric glass
+	float32 reflectivity, ior, raySpecularStrength;
+	GRErgb24 transmissionColor;
 }gre_material_advanced;
 typedef gre_material_advanced* GRE_MaterialAdvanced;
 
@@ -316,6 +343,7 @@ typedef struct gre_material_
 
 	uint16 width, height;
 	GRErgb24* pixel;
+	uint8 unlit;// Ogre lighting off: texture already contains final illumination
 	GRE_MaterialAdvanced advanced;//高级材质资源，NULL 时保持紧凑基础材质
 }gre_material;
 typedef gre_material* GRE_Material;

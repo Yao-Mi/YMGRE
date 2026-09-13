@@ -80,56 +80,47 @@ void YMGRE_Object_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
 	myobj->isDelete = YMGRE_Object_FrustumCullingCal(myobj, mycam);
 }
 
-//对面进行剔除
-void YMGRE_ObjectPoly_FrustumCulling(GRE_Object4d myobj, GRE_Camera4d mycam)
+/* These entry points receive projected x/y and camera-space z. Reject only
+ * when every vertex is outside the same plane; an offscreen vertex alone says
+ * nothing about the visible area of a polygon. Boundary points are inside. */
+static uint8 YMGRE_ProjectedOutcode(GRE_Fvector4d point, GRE_Camera4d camera)
 {
-	for (int i = 0; i < myobj->polygonNum; i++)
+	uint8 code = 0;
+	if (point->z < camera->frustum.Znear) code |= 1;
+	if (point->z > camera->frustum.Zfar) code |= 2;
+	/* Behind-camera projection reverses x/y. Keep side-plane rejection
+	 * conservative for faces crossing the near plane. */
+	if (point->z <= 0) return code;
+	if (point->x < camera->perspectPlane.pL) code |= 4;
+	if (point->x > camera->perspectPlane.pR) code |= 8;
+	if (point->y < camera->perspectPlane.pD) code |= 16;
+	if (point->y > camera->perspectPlane.pU) code |= 32;
+	return code;
+}
+
+void YMGRE_ObjectPoly_FrustumCulling(GRE_Object4d object, GRE_Camera4d camera)
+{
+	for (int i = 0; i < object->polygonNum; i++)
 	{
-		GRE_Polygon4d thispoly = &myobj->polygonList[i];//取该四边形
-		uint8 outerflg = 1;
-		//注意：输入的是透视变换后的结果
-		for (int j = 0; j < thispoly->num; j++)
-		{
-			int i1 = thispoly->index[j];
-			GRE_Fvector4d point = &myobj->pointList_[i1].pos;
-			
-			//该点位于视景体内
-			if (((point->z < mycam->frustum.Zfar) && (point->z > mycam->frustum.Znear)) &&
-				((point->x < mycam->perspectPlane.pR) && (point->x > mycam->perspectPlane.pL)) &&
-				((point->y < mycam->perspectPlane.pU) && (point->y > mycam->perspectPlane.pD)))
-			{
-				outerflg =0;
-				break;
-			}
-		}
-		//平面完全位于视景体外，将面进行隐藏
-		if (outerflg)
-		{
-			thispoly->ishide = 1;
-		}
+		GRE_Polygon4d polygon = &object->polygonList[i];
+		uint8 outside = 63;
+		for (int j = 0; j < polygon->num && outside; j++)
+			outside &= YMGRE_ProjectedOutcode(&object->pointList_[polygon->index[j]].pos, camera);
+		if (outside) polygon->ishide = 1;
 	}
 }
 
-void YMGRE_ObjectPoly_FrustumCullingTo(GRE_Object4d myobj, GRE_Vertex4d points, GRE_Camera4d mycam, uint8* polygonHide)
+void YMGRE_ObjectPoly_FrustumCullingTo(GRE_Object4d object, GRE_Vertex4d points,
+	GRE_Camera4d camera, uint8* polygonHide)
 {
-	gre_log_explain((myobj == NULL) || (points == NULL) || (polygonHide == NULL), GRE_LOG_PtrIO, "输入的物体、顶点或多边形状态不存在");
-	for (int i = 0; i < myobj->polygonNum; i++)
+	gre_log_explain((object == NULL) || (points == NULL) || (polygonHide == NULL), GRE_LOG_PtrIO, "输入的物体、顶点或多边形状态不存在");
+	for (int i = 0; i < object->polygonNum; i++)
 	{
-		GRE_Polygon4d thispoly = &myobj->polygonList[i];
-		uint8 outerflg = 1;
-		for (int j = 0; j < thispoly->num; j++)
-		{
-			GRE_Fvector4d point = &points[thispoly->index[j]].pos;
-			if (((point->z < mycam->frustum.Zfar) && (point->z > mycam->frustum.Znear)) &&
-				((point->x < mycam->perspectPlane.pR) && (point->x > mycam->perspectPlane.pL)) &&
-				((point->y < mycam->perspectPlane.pU) && (point->y > mycam->perspectPlane.pD)))
-			{
-				outerflg = 0;
-				break;
-			}
-		}
-		if (outerflg)
-			polygonHide[i] = 1;
+		GRE_Polygon4d polygon = &object->polygonList[i];
+		uint8 outside = 63;
+		for (int j = 0; j < polygon->num && outside; j++)
+			outside &= YMGRE_ProjectedOutcode(&points[polygon->index[j]].pos, camera);
+		if (outside) polygonHide[i] = 1;
 	}
 }
 
@@ -140,15 +131,9 @@ void YMGRE_ObjectPoly_FrustumCullingTo_wN(GRE_Object4d object, GRE_Vertex4d_wN p
 	for (int i = 0; i < object->polygonNum; i++)
 	{
 		GRE_Polygon4d polygon = &object->polygonList[i];
-		uint8 outside = 1;
-		for (int j = 0; j < polygon->num; j++)
-		{
-			GRE_Fvector4d point = &points[polygon->index[j]].base.pos;
-			if (point->z < camera->frustum.Zfar && point->z > camera->frustum.Znear &&
-				point->x < camera->perspectPlane.pR && point->x > camera->perspectPlane.pL &&
-				point->y < camera->perspectPlane.pU && point->y > camera->perspectPlane.pD)
-			{ outside = 0; break; }
-		}
+		uint8 outside = 63;
+		for (int j = 0; j < polygon->num && outside; j++)
+			outside &= YMGRE_ProjectedOutcode(&points[polygon->index[j]].base.pos, camera);
 		if (outside) polygonHide[i] = 1;
 	}
 }
@@ -396,7 +381,7 @@ static inline void YMGRE_Clip_u2Sortp(float* point, uint8 num)
 	}
 }
 //SutherlandHodgman 折线裁剪
-static inline void SutherlandHodgmanPolygonClip2(GRE_fLinesList inlines, GRE_fLinesList outlines, GRE_FRECT myroi, uint8 flg)
+static inline int SutherlandHodgmanPolygonClip2(GRE_fLinesList inlines, GRE_fLinesList outlines, GRE_FRECT myroi, uint8 flg)
 {
 	float x0, y0, x1, y1, jx, jy;
 	int num = 0;//线段数量
@@ -418,6 +403,7 @@ static inline void SutherlandHodgmanPolygonClip2(GRE_fLinesList inlines, GRE_fLi
 			if (YMGRE_Clip_isInside(x0, y0, myroi, flg))//S在内侧  内部线段
 			{
 				//保留
+				if (num >= outlines->lineMax) return 0;
 				outlines->data[num].x0 = x0;
 				outlines->data[num].y0 = y0;
 				outlines->data[num].x1 = x1;
@@ -428,12 +414,13 @@ static inline void SutherlandHodgmanPolygonClip2(GRE_fLinesList inlines, GRE_fLi
 			{
 				YMGRE_Clip_Intersect_(x0, y0, x1, y1, myroi, flg, &jx, &jy);//求交点
 				//纪录交点
+				if (jxyi >= 10) return 0;
 				jxy[2 * jxyi] = jx;
 				jxy[2 * jxyi + 1] = jy;
 				jxyi++;
-				gre_log_explain((jxyi >= 10), GRE_LOG_ParamI, "边界交点数>10");
 				//纪录IP段
 
+				if (num >= outlines->lineMax) return 0;
 				outlines->data[num].x0 = jx;
 				outlines->data[num].y0 = jy;
 				outlines->data[num].x1 = x1;
@@ -445,11 +432,12 @@ static inline void SutherlandHodgmanPolygonClip2(GRE_fLinesList inlines, GRE_fLi
 		{
 			YMGRE_Clip_Intersect_(x0, y0, x1, y1, myroi, flg, &jx, &jy);//求交点
 			//纪录交点
+			if (jxyi >= 10) return 0;
 			jxy[2 * jxyi] = jx;
 			jxy[2 * jxyi + 1] = jy;
 			jxyi++;
-			gre_log_explain((jxyi >= 10), GRE_LOG_ParamI, "边界交点数>10");
 			//纪录SI段
+			if (num >= outlines->lineMax) return 0;
 			outlines->data[num].x0 = x0;
 			outlines->data[num].y0 = y0;
 			outlines->data[num].x1 = jx;
@@ -464,14 +452,15 @@ static inline void SutherlandHodgmanPolygonClip2(GRE_fLinesList inlines, GRE_fLi
 	jxyi = jxyi / 2;
 	for (int i = 0; i < jxyi; i++)
 	{
+		if (num >= outlines->lineMax) return 0;
 		outlines->data[num].x0 = jxy[4 * i];
 		outlines->data[num].y0 = jxy[4 * i + 1];
 		outlines->data[num].x1 = jxy[4 * i + 2];
 		outlines->data[num].y1 = jxy[4 * i + 3];
 		num++;
 	}
-	gre_log_explain((num > outlines->lineMax), GRE_LOG_ParamI, "产生的总边数 > 最大输出边数");
 	outlines->lineNum = num; //确定输出数量
+	return 1;
 }
 
 //按多边形进行窗口裁剪
@@ -479,21 +468,26 @@ void YMGRE_Polygon_clip2D(GRE_fLinesList thislines, GRE_LinesList olines, GRE_FR
 {
 	gre_flineslist uline, uline2;
 
-	gre_log_explain((thislines->lineMax > olines->lineNum), GRE_LOG_ParamI, "最大输入边数 > 输出边数");
+	/* lineNum is the caller's capacity on entry, and the result count on return. */
+	if (!olines) return;
+	unsigned capacity = olines->lineNum;
+	olines->lineNum = 0;
+	if (!thislines || !winRect || !thislines->data || !olines->data ||
+		!capacity || thislines->lineNum > thislines->lineMax) return;
 
-	uline.lineMax = olines->lineNum;
-	uline2.lineMax = olines->lineNum;
+	uline.lineMax = capacity;
+	uline2.lineMax = capacity;
 	uline.data = (GRE_FLINE)GRE_malloc0(uline.lineMax * sizeof(gre_fline));
 	uline2.data = (GRE_FLINE)GRE_malloc0(uline2.lineMax * sizeof(gre_fline));
 
 	//L - > u
-	SutherlandHodgmanPolygonClip2(thislines, &uline, winRect, 0);//上
+	if (!SutherlandHodgmanPolygonClip2(thislines, &uline, winRect, 0)) goto cleanup;//上
 	//u - > u2
-	SutherlandHodgmanPolygonClip2(&uline, &uline2, winRect, 1);//下
+	if (!SutherlandHodgmanPolygonClip2(&uline, &uline2, winRect, 1)) goto cleanup;//下
 	//u2 - > u
-	SutherlandHodgmanPolygonClip2(&uline2, &uline, winRect, 2);//左
+	if (!SutherlandHodgmanPolygonClip2(&uline2, &uline, winRect, 2)) goto cleanup;//左
 	//u - > u2
-	SutherlandHodgmanPolygonClip2(&uline, &uline2, winRect, 3);//右
+	if (!SutherlandHodgmanPolygonClip2(&uline, &uline2, winRect, 3)) goto cleanup;//右
 
 	//转short类型
 	olines->lineNum = uline2.lineNum;
@@ -504,6 +498,7 @@ void YMGRE_Polygon_clip2D(GRE_fLinesList thislines, GRE_LinesList olines, GRE_FR
 		olines->data[i].x1 = (int16)(uline2.data[i].x1 + 0.5);
 		olines->data[i].y1 = (int16)(uline2.data[i].y1 + 0.5);
 	}
+cleanup:
 	//内存释放
 	GRE_free0(uline2.data);//释放
 	GRE_free0(uline.data);//释放
@@ -520,6 +515,8 @@ static gre_vertex4d_wN YMGRE_FrustumClipIntersect_wN(GRE_Vertex4d_wN start, GRE_
 	result.base.pos.w += (end->base.pos.w - start->base.pos.w) * t;
 	result.base.u += (end->base.u - start->base.u) * t;
 	result.base.v += (end->base.v - start->base.v) * t;
+	result.lightmapU += (end->lightmapU - start->lightmapU) * t;
+	result.lightmapV += (end->lightmapV - start->lightmapV) * t;
 	result.normal.x += (end->normal.x - start->normal.x) * t;
 	result.normal.y += (end->normal.y - start->normal.y) * t;
 	result.normal.z += (end->normal.z - start->normal.z) * t;
