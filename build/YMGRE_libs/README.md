@@ -87,4 +87,9 @@ YMGRE 和 YMGUI 分开发布。准备独立的 YMGUI SDK 后：
 - 场景编辑器、UV 编辑和烘焙生成器是应用层工具，不包含在这两份核心库中。
 
 维护库时可在原仓库运行 `./sdk/build.sh` 一键重新发布；下载本包进行 Demo 开发不需要它。
-YMGRE 的许可原文见 [licenses/YMGRE-LICENSE](licenses/YMGRE-LICENSE)。
+
+## 授权声明
+
+个人及非商业组织以非营利目的学习、研究或自用 YMGRE，可免费使用；商业用途必须事先说明并取得著作权人的书面授权。对外分发修改版或使用修改版对外提供服务时，须按许可条款公开本库的对应源码及必要构建文件。独立应用不因仅调用或链接本库而必须公开业务代码。第三方资源及外部依赖按各自原许可使用。完整条款见 [LICENSE](LICENSE)，同一份许可也保存在 [licenses/YMGRE-LICENSE](licenses/YMGRE-LICENSE)。
+
+许可标识：`LicenseRef-YMGRE-Noncommercial-1.2`。本声明不撤回使用者依据此前有效许可已经取得的权利。

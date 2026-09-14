@@ -62,4 +62,6 @@ See [project applications](project_Demo/README.md) and [test criteria](tests/REA
 
 ## License
 
-[Apache License 2.0](LICENSE). External dependencies are maintained and licensed by their respective projects.
+YMGRE uses a custom **noncommercial-use license with separate commercial authorization** (`LicenseRef-YMGRE-Noncommercial-1.2`). Individuals and noncommercial organizations may use it free of charge for nonprofit learning, research, or personal/internal use. Commercial use requires prior written authorization from the copyright holder.
+
+Distributing modified versions or using modified versions to provide services to third parties requires publishing the corresponding library source and necessary build files under the license terms. Independent application logic does not have to be disclosed merely because it calls or links this library. Third-party content retains its own licenses, and rights already obtained under earlier valid licenses are not withdrawn. See [LICENSE](LICENSE) for the full Chinese terms.

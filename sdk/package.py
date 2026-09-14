@@ -68,6 +68,7 @@ def main():
     copy(ROOT/'sdk/MANUAL.md',OUT/'手册.md')
     copy(ROOT/'sdk/SDK.gitignore',OUT/'.gitignore')
     copy(ROOT/'sdk/build_demos.sh',OUT/'build_demos.sh')
+    copy(ROOT/'LICENSE',OUT/'LICENSE')
     copy(ROOT/'LICENSE',OUT/'licenses/YMGRE-LICENSE')
     copy(ROOT/'sdk/README.md',OUT/'README.md')
     for name in ('advanced_raytrace_mirror','advanced_raytrace_refraction','advanced_perspective','advanced_normal_map'):
