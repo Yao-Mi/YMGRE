@@ -71,7 +71,9 @@ def main():
     copy(ROOT/'LICENSE',OUT/'LICENSE')
     copy(ROOT/'LICENSE',OUT/'licenses/YMGRE-LICENSE')
     copy(ROOT/'sdk/README.md',OUT/'README.md')
-    for name in ('advanced_raytrace_mirror','advanced_raytrace_refraction','advanced_perspective','advanced_normal_map'):
+    copy(ROOT/'docs/images/banner.svg',OUT/'docs/images/banner.svg')
+    for name in ('advanced_raytrace_mirror','advanced_raytrace_refraction','advanced_perspective','advanced_normal_map',
+                 'advanced_raytrace_shadow','basic_shapes','extended_shapes'):
         copy(ROOT/'docs/images'/f'{name}.png',OUT/'docs/images'/f'{name}.png')
     # Validate from a separate package copy: this must not resolve repository source paths.
     standalone=WORK/'standalone'

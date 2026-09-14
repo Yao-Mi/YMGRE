@@ -1,4 +1,4 @@
-# YMGRE
+![YMGRE · C99 CPU 3D Rendering](docs/images/banner.svg)
 
 **A CPU 3D rendering engine written in C.**
 
@@ -14,7 +14,27 @@ The core writes color and depth buffers and can be integrated with desktop windo
 |:---:|:---:|
 | ![Mirror rendering](docs/images/advanced_raytrace_mirror.png) | ![Glass sphere rendering](docs/images/advanced_raytrace_refraction.png) |
 
-These are actual Demo captures, not generated illustrations. See [capture notes](docs/images/README.md).
+| Perspective-correct textures | Normal mapping |
+|:---:|:---:|
+| ![Perspective texture sampling](docs/images/advanced_perspective.png) | ![Flat and perturbed normals](docs/images/advanced_normal_map.png) |
+
+| Ray-traced shadows | Mesh geometry |
+|:---:|:---:|
+| ![Occlusion between a surface and its light](docs/images/advanced_raytrace_shadow.png) | ![Generated primitive meshes](docs/images/basic_shapes.png) |
+
+## Edit scenes, create textures, bake assets
+
+![Scene hierarchy, viewport, properties and model export](docs/images/scene-baker.png)
+
+The repository's `scene_baker` application provides scene editing, raster/ray rendering selection, UV editing, texture preview and model export.
+
+| UV layout and model preview | Layer-based texture painting |
+|:---:|:---:|
+| ![Imported tank UV and texture preview](docs/images/uv-tank.png) | ![Texture painting with YMGUI](docs/images/texture-paint.png) |
+
+Move, rotate and scale UV selections, inspect checker patterns, or create a texture with the integrated YMGUI canvas. Baking can include lighting; export produces mesh, material and BMP texture files. Baked highlights retain the reference view, and the current baker does not include indirect lighting or occlusion shadows.
+
+These screenshots are actual Demo outputs and saved editor verification captures. The title banner is vector artwork. See [capture notes](docs/images/README.md) and the [full illustrated tour in Chinese](README.md#场景编辑与贴图创作).
 
 ## Use the SDK
 

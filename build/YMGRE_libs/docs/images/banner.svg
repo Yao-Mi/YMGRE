@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280" role="img" aria-labelledby="title desc">
+  <title id="title">YMGRE — C99 CPU 3D Rendering</title>
+  <desc id="desc">Project title artwork with a geometric wireframe cube. Rasterization, ray tracing, and a standalone SDK.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#101a2c"/><stop offset="1" stop-color="#080f1c"/></linearGradient>
+    <linearGradient id="top" x2="1" y2="1"><stop stop-color="#73e2de"/><stop offset="1" stop-color="#4e8acb"/></linearGradient>
+    <linearGradient id="side" x2="0" y2="1"><stop stop-color="#355d99"/><stop offset="1" stop-color="#172d51"/></linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#233751" stroke-width=".7"/></pattern>
+  </defs>
+  <rect width="1200" height="280" rx="18" fill="url(#bg)"/>
+  <path d="M700 0H1182Q1200 0 1200 18V262Q1200 280 1182 280H700Z" fill="url(#grid)" opacity=".55"/>
+  <rect x="48" y="42" width="28" height="3" rx="1.5" fill="#72e2de"/>
+  <text x="89" y="48" font-family="sans-serif" font-size="12" letter-spacing="3" fill="#a6bed5">SOFTWARE RENDERING / DEVELOPER TOOLKIT</text>
+  <text x="44" y="148" font-family="sans-serif" font-size="88" font-weight="800" letter-spacing="5" fill="#f4f8ff">YMGRE</text>
+  <text x="49" y="184" font-family="sans-serif" font-size="21" letter-spacing="1" fill="#a9c1d9">C99. CPU. A world of triangles and rays.</text>
+  <g font-family="monospace" font-size="12" letter-spacing="1" fill="#b7d7ed">
+    <rect x="48" y="214" width="151" height="30" rx="6" fill="#172a40"/><text x="63" y="234">RASTERIZATION</text>
+    <rect x="210" y="214" width="136" height="30" rx="6" fill="#172a40"/><text x="225" y="234">RAY TRACING</text>
+    <rect x="357" y="214" width="128" height="30" rx="6" fill="#172a40"/><text x="372" y="234">16 / 32 BIT</text>
+  </g>
+  <g stroke="#78c8de" stroke-width="1.3" stroke-linejoin="round">
+    <path d="M917 53 1031 109 917 167 803 109Z" fill="url(#top)"/>
+    <path d="M803 109 917 167 917 246 803 188Z" fill="url(#side)"/>
+    <path d="M917 167 1031 109 1031 188 917 246Z" fill="#112039"/>
+    <path d="M803 109 917 246M917 167 1031 188M917 53 917 167" fill="none" opacity=".65"/>
+  </g>
+  <g fill="none" stroke="#73e2de" stroke-width="1.5">
+    <path d="M1126 43 985 86 1080 183"/>
+    <circle cx="985" cy="86" r="5" fill="#ddfcff" stroke="none"/>
+    <circle cx="1126" cy="43" r="3"/>
+  </g>
+  <text x="1054" y="244" font-family="monospace" font-size="11" letter-spacing="2" fill="#5e7b98">YMGRE / C99</text>
+</svg>

@@ -1,4 +1,4 @@
-<h1 align="center">YMGRE SDK</h1>
+![YMGRE SDK · C99 CPU Rendering](docs/images/banner.svg)
 <p align="center"><strong>下载库，链接它，开始绘制三维场景。</strong></p>
 <p align="center">C99 · CPU Rendering · uint16 / uint32 索引 · RGB565</p>
 
@@ -11,6 +11,19 @@
 | 透视校正贴图 | 法线贴图 |
 |:---:|:---:|
 | ![透视棋盘格](docs/images/advanced_perspective.png) | ![法线贴图受光对照](docs/images/advanced_normal_map.png) |
+
+| 光追阴影 | 基础几何与线框 |
+|:---:|:---:|
+| ![光源遮挡形成的立方体投影](docs/images/advanced_raytrace_shadow.png) | ![基本几何的填充与网格线](docs/images/basic_shapes.png) |
+
+<details>
+<summary><strong>查看圆环、胶囊与多面体 Demo</strong></summary>
+
+![扩展基本形状](docs/images/extended_shapes.png)
+
+运行 `demo_extended_shapes` 查看这些几何；需要外部 YMGUI SDK 提供窗口显示。
+
+</details>
 
 *图片为窗口 Demo 的实际渲染输出。显示层使用外部 YMGUI/SDL；本包不捆绑它们的头文件或静态库。*
 
