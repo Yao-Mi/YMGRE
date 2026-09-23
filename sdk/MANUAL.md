@@ -2,17 +2,17 @@
 
 ## 1. 本包提供什么
 
-本包提供 YMGRE 核心静态库的两种索引配置、配套公开头文件、独立示例工程及已编译的无窗口示例。
+本包提供 YMGRE 核心静态库的四种配置（RGB565/RGB888 × 16/32 位索引）、配套公开头文件、独立示例工程及已编译的无窗口示例。
 日常使用只需阅读本手册和头文件，链接 `lib/` 中的静态库，不需要编译或阅读引擎实现。
 
 | 项目 | 本包配置 |
 |---|---|
 | 系统和架构 | Linux x86_64，具体编译器见 `BUILD_INFO.json` |
 | 构建 | Release，位置无关代码，C99 接口 |
-| 颜色输出 | RGB565，`YMGRE_CAMERA_COLOR_DEPTH=16` |
+| 颜色输出 | RGB565（`YMGRE_CAMERA_COLOR_DEPTH=16`）或 RGB888（`=24`） |
 | 顶点索引 | `GRE_Index` 可选 16 位或 32 位，每个进程选择一种配置 |
 | 核心依赖 | C 标准库和数学库 `libm` |
-| 窗口示例依赖 | 外部 YMGUI SDK（RGB565）及其 SDL 平台适配，系统 SDL2 |
+| 窗口示例依赖 | 外部 YMGUI SDK（色深与选中的 YMGRE 库一致）及其 SDL 平台适配，系统 SDL2 |
 | 使用边界 | 本机 CPU 软件渲染；实际 MCU 必须使用目标芯片工具链另行编译 |
 
 核心库包含基础网格、坐标变换、相机、裁剪、深度缓冲、光栅化、材质与光照、光追求交与着色函数、Ogre 网格及材质读取、场景管理。
@@ -24,13 +24,17 @@
 
 ```text
 YMGRE_libs/
-  lib/libymgre_index16.a           # 默认，GRE_Index = uint16
-  lib/libymgre_index32.a           # 大网格，GRE_Index = uint32
+  lib/libymgre_rgb565_index16.a    # RGB565，16 位索引（默认）
+  lib/libymgre_rgb565_index32.a    # RGB565，32 位索引
+  lib/libymgre_rgb888_index16.a    # RGB888，16 位索引
+  lib/libymgre_rgb888_index32.a    # RGB888，32 位索引
   include/YMGRE/                  # 保持原目录层级的公开头文件
   cmake/YMGREConfig.cmake          # 预编译库的 CMake 接入入口
   examples/                       # 示例源码及 host 接入代码；不含引擎实现
-  bin/index16/                    # 16 位索引无窗口示例程序
-  bin/index32/                    # 32 位索引无窗口示例程序
+  bin/rgb565/index16/                    # 16 位索引无窗口示例程序
+  bin/rgb565/index32/                    # RGB565、32 位索引无窗口示例程序
+  bin/rgb888/index16/                    # RGB888、16 位索引无窗口示例程序
+  bin/rgb888/index32/                    # RGB888、32 位索引无窗口示例程序
   verification/                   # 自动验收记录
   BUILD_INFO.json                 # 平台、编译器、配置、源码摘要
   checksums.sha256                # 包内文件完整性校验
@@ -39,9 +43,9 @@ YMGRE_libs/
 16 位索引占 2 字节，单子网格顶点数上限保留为 65535；多个子网格、多个物体可以累计超过此数量。
 32 位索引占 4 字节，可引用超过 65535 编号的顶点，但对象数量字段仍是 `int`，实际规模受内存、算法和文件格式限制。
 三角形每个面有三个索引，索引本体分别占 6 或 12 字节；这不包含多边形结构和分配器管理开销。
-两份库的顶点坐标、法线、贴图和像素格式相同。
+相同色深下，两种索引库的顶点坐标、法线、贴图和像素格式相同；切换色深会改变帧像素类型及相关 ABI。
 
-推荐 MCU 继续使用 16 位索引。PC 大网格可用 32 位；不要同时把两份核心库链接进同一个可执行文件。
+推荐 MCU 继续使用 16 位索引。PC 大网格可用 32 位；同一个可执行文件只链接一种色深和索引组合。
 使用本包时无需修改 typedef，CMake 会根据选中的库传递正确配置。
 
 ## 3. 先运行一个 Demo
@@ -49,8 +53,10 @@ YMGRE_libs/
 从本包目录执行已编译的纯核心示例：
 
 ```sh
-./bin/index16/demo_sdk_minimal
-./bin/index32/demo_sdk_minimal
+./bin/rgb565/index16/demo_sdk_minimal
+./bin/rgb565/index32/demo_sdk_minimal
+./bin/rgb888/index16/demo_sdk_minimal
+./bin/rgb888/index32/demo_sdk_minimal
 ```
 
 它不需要 SDL 或 YMGUI，会输出当前索引大小、像素大小和有效像素数量，并在当前目录生成 `cube.ppm`。
@@ -59,9 +65,9 @@ YMGRE_libs/
 准备独立的 YMGUI SDK 后，按第 5 节构建，再运行：
 
 ```sh
-./examples-build16/bin/demo_basic_shapes
-./examples-build32/bin/demo_extended_shapes
-./examples-build16/bin/demo_advanced_raytrace_mirror
+./examples-build/rgb565/index16/bin/demo_basic_shapes
+./examples-build/rgb565/index32/bin/demo_extended_shapes
+./examples-build/rgb565/index16/bin/demo_advanced_raytrace_mirror
 ```
 
 关闭窗口退出。示例窗口默认放大显示，可以设置 `YMGRE_WINDOW_SCALE=1` 使用原始尺寸。
@@ -95,7 +101,9 @@ cmake -S . -B build32 -DYMGRE_DIR=/absolute/path/YMGRE_libs/cmake -DYMGRE_INDEX_
 cmake --build build32
 ```
 
-`YMGRE::ymgre` 是预编译的导入目标，自动配置头文件路径、索引位宽、RGB565 和 `libm`。
+默认色深是 RGB565；需要 RGB888 时增加 `-DYMGRE_CAMERA_COLOR_DEPTH=24`，并使用独立构建目录（例如 `build-rgb888-index32`）。同一进程的所有编译单元必须使用同一种组合。
+
+`YMGRE::ymgre` 是预编译的导入目标，自动配置头文件路径、索引位宽、选定色深和 `libm`。
 这里没有 `add_subdirectory` 引擎源码，也没有把 `YMGRE/*.c` 加到应用里。
 
 窗口接入属于应用层。示例工程会先 `find_package(YMGRE CONFIG REQUIRED)`，再按需执行 `find_package(YMGUI CONFIG REQUIRED)`，
@@ -109,8 +117,10 @@ cmake --build build32
 下载并解压本包后，在本包目录一键编译和验收 Demo：
 
 ```sh
-./build_demos.sh 16
-./build_demos.sh 32
+./build_demos.sh 16 --depth 16
+./build_demos.sh 32 --depth 16
+./build_demos.sh 16 --depth 24
+./build_demos.sh 32 --depth 24
 ```
 
 默认只构建无窗口示例，不查找 YMGUI/SDL，也不编译引擎。
@@ -118,26 +128,25 @@ cmake --build build32
 
 ```sh
 ./build_demos.sh 16 /absolute/path/YMGUI_libs/cmake
-./build_demos.sh 32 /absolute/path/YMGUI_libs/cmake
+./build_demos.sh 32 /absolute/path/YMGUI_libs/cmake --depth 24
 ```
 
 这会显式启用窗口示例。未提供有效外部包时应报依赖错误，不会退回仓库里的 YMGUI 源码。
 目前约定外部包导出 `YMGUI::ymgui` 和 `YMGUI::sdl` 两个 CMake 目标，
 分别提供 GUI 核心和包含 `SDL_LCD.h` 的 SDL 适配层，以及各自的头文件路径和依赖。
-这是给未来独立 YMGUI 包预留的接口约定，不表示该正式包已经发布。
-外部包的像素配置应是 `YMGUI_COLOR_DEPTH=16`，并与本包架构和 ABI 匹配。
+外部包的 `YMGUI_COLOR_DEPTH` 必须等于 `YMGRE_CAMERA_COLOR_DEPTH`（16 或 24），并与本包架构和 ABI 匹配。脚本会自动传递匹配的色深；显式混用时 CMake 报错。
 如果正式包使用其他目标名，可通过 CMake 的 `YMGRE_YMGUI_TARGET`、`YMGRE_YMGUI_SDL_TARGET` 指定实际目标。
 
 下面是默认无窗口构建的等价 CMake 命令：
 
 ```sh
-cmake -S examples -B examples-build16 -DYMGRE_INDEX_BITS=16
-cmake --build examples-build16 -j4
-ctest --test-dir examples-build16 --output-on-failure
+cmake -S examples -B examples-build/rgb565/index16 -DYMGRE_INDEX_BITS=16
+cmake --build examples-build/rgb565/index16 -j4
+ctest --test-dir examples-build/rgb565/index16 --output-on-failure
 
-cmake -S examples -B examples-build32 -DYMGRE_INDEX_BITS=32
-cmake --build examples-build32 -j4
-ctest --test-dir examples-build32 --output-on-failure
+cmake -S examples -B examples-build/rgb565/index32 -DYMGRE_INDEX_BITS=32
+cmake --build examples-build/rgb565/index32 -j4
+ctest --test-dir examples-build/rgb565/index32 --output-on-failure
 ```
 
 窗口测试会由 CTest 自动设置 `YMGRE_HEADLESS=1` 和 `YMGRE_MAX_FRAMES=1`，用 SDL 的无窗口驱动完成一次运行；纯核心示例不用 SDL。
@@ -209,7 +218,7 @@ YMGRE_Camera_TanglePipline_wN(camera, &lights, &objects, &materials, workspace);
 - `GRE_Index` 的申请使用 `sizeof(GRE_Index)` 或 `sizeof(*index)`，不要硬编码每个三角形 6 字节。
 - 外部帧缓冲使用 `YMGRE_RenderTarget_Init` 绑定，不转移所有权；只对 `Creat` 返回的目标调用相应 `Free`。
 - 深度缓冲是 `float32` 相机空间 `z`。透视光栅化内部插值 `1/z` 后恢复 `z`；不要把射线欧氏距离直接和这个缓冲比较。
-- 本包是 RGB565 输出，但材质纹理数据常使用 `GRErgb24`；读取帧像素请用 `GRE_FramePixel_To_RGB24`。
+- 本包可选 RGB565 或 RGB888 帧输出，材质纹理数据常使用 `GRErgb24`；读取帧像素请用 `GRE_FramePixel_To_RGB24`。
 - 静态场景可以只渲染一次，多相机可复用工作区；需要避免并发修改同一对象、全局画笔或工作区。
 - 使用固定内存时，按 `YMGRE_RenderContext.h` 绑定帧缓冲及工作区容量。动态分配器封装位于库内；MCU 内存池策略属于对应平台库的构建配置。
 
@@ -237,13 +246,13 @@ Ogre 读入支持的格式是现有静态模型加载路径，并非所有 Ogre 
 
 开发项目固定本包版本，同时保留 `BUILD_INFO.json`。更新时整体替换库、头文件、CMake 配置，重新编译应用；
 不混用不同索引位宽、颜色格式或不同版本的头文件与二进制库。
-手工链接时，必须给应用定义匹配的 `YMGRE_INDEX_BITS` 和 `YMGRE_CAMERA_COLOR_DEPTH=16`，并设置各公开头文件目录。
+手工链接时，必须给应用定义匹配的 `YMGRE_INDEX_BITS` 和 `YMGRE_CAMERA_COLOR_DEPTH`（16 或 24），并设置各公开头文件目录。
 优先使用导入的 CMake 目标减少配置遗漏。
 
 在本包目录运行 `sha256sum -c checksums.sha256` 可核对文件完整性。
 出现问题时先记录库配置、调用参数、模型和最小 Demo，以及是否能在两种索引配置下复现，再回到源码修复。
-维护库时，在原仓库运行 `./sdk/build.sh` 即可一键重新发布（也可直接运行 `python3 sdk/package.py`）。
-脚本依次编译两种索引库、复制 YMGRE 头文件和示例、从独立 SDK 副本编译并验收无窗口 Demo，再生成：
+维护库时，在原仓库运行 `./sdk/build.sh` 生成本地开发包（也可直接运行 `python3 sdk/package.py`）。
+脚本依次编译四种色深与索引组合的库、复制 YMGRE 头文件和示例、从独立 SDK 副本编译并验收无窗口 Demo，再生成：
 
 ```text
 build/YMGRE_libs/
@@ -251,13 +260,15 @@ build/YMGRE_libs-linux-x86_64.tar.gz
 build/YMGRE_libs-linux-x86_64.tar.gz.sha256
 ```
 
-过程日志保存在 `build/_ymgre_sdk/`；任一步失败，脚本返回非零状态，不生成新的压缩包。
+使用 `./sdk/build.sh --release` 时，同样更新本地 `build/YMGRE_libs/`，但把压缩包和 SHA256 文件输出到可提交的 `releases/`。普通构建不会修改 `releases/`，发布脚本也不会自动提交或推送。
+
+过程日志保存在 `build/_ymgre_sdk/`。脚本先在临时目录组装并验证 SDK，构建或验收失败返回非零状态，保留已有 SDK 和分发包；压缩完成后才替换旧压缩包。`--jobs 8` 可调整并行度。
 默认发布只需要 C 编译器、CMake、Python 3 和 binutils（ar/nm），不需要 YMGUI 或 SDL2。
 如需同时验证窗口示例，使用 `./sdk/build.sh --ymgui-dir /absolute/path/YMGUI_libs/cmake`。
 该选项需要外部 YMGUI SDK、pkg-config、SDL2；只增加验收，不会把外部包或窗口二进制塞入 YMGRE 发布包。
 脚本不会自动安装依赖。
 正常应用构建只需包内的 `build_demos.sh` 或 CMake 导入目标，不调用源码发布脚本。
-Git 只保留 `build/YMGRE_libs/` 作为 SDK，其他构建目录及旁边的发布压缩包仍被忽略。
+Git 可跟踪 `releases/` 中的分发压缩包及校验文件，也保留已有 `build/YMGRE_libs/` 放行规则；其他构建目录及 `build/` 下的压缩包仍被忽略。提交发布时应包含对应源码、文档、压缩包及校验文件。
 下载使用者在 SDK 内生成的 `examples-build*`、`core-build` 和 `cube.ppm` 也会被忽略。
 原生构建不等于跨芯片二进制兼容。MCU 发布应另外确认 CPU、ABI、浮点选项、工具链和内存实现。
 

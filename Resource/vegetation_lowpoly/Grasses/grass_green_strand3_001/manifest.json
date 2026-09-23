@@ -1,0 +1,100 @@
+{
+  "asset": "grass_green_strand3_001",
+  "category": "Grasses",
+  "source_object": "strand3.001",
+  "source_collections": [
+    "Collection 3",
+    "singlstrand_grass_group_green"
+  ],
+  "mesh": "grass_green_strand3_001.mesh",
+  "material": "grass_green_strand3_001.material",
+  "source_triangles": 440,
+  "triangles": 394,
+  "vertices": 498,
+  "parts": [
+    {
+      "material": "vgc247993a24aa",
+      "vertices": 404,
+      "triangles": 332
+    },
+    {
+      "material": "vgc8b3d26b27cb",
+      "vertices": 94,
+      "triangles": 62
+    }
+  ],
+  "bounds_min": [
+    -0.19070303440093994,
+    0.0001766681671142578,
+    -0.2145448625087738
+  ],
+  "bounds_max": [
+    0.19078843295574188,
+    0.29209446907043457,
+    0.21324267983436584
+  ],
+  "origin_in_blender_world": [
+    2.0613865852355957,
+    -1.1142313778400421,
+    -0.07190711051225662
+  ],
+  "coordinates": "GRE Y-up: (-z,x,-y); source grass particle growth +X rotated upright; scale retained, base at y=0",
+  "skeleton": null,
+  "animation": null,
+  "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+  "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+  "source_archive": "Grass and trees system.zip",
+  "materials": {
+    "vgc247993a24aa": {
+      "source_material": "M_grass_leaves",
+      "color": "M_grass_leaves_color.png",
+      "alpha": null,
+      "source_image": "images.jpg",
+      "resolution": 512,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    },
+    "vgc8b3d26b27cb": {
+      "source_material": "M_grass_strand",
+      "color": "M_grass_strand_color.png",
+      "alpha": null,
+      "source_image": "images — kopia.jpg",
+      "resolution": 512,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    }
+  },
+  "discarded_transparent_source_triangles": 0,
+  "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+  "files_sha256": {
+    "grass_green_strand3_001.material": "8c3326d00aaf35ce6beb1b3e360031bfc8a9d5e1f4d164404ec6e8d6bc82b753",
+    "grass_green_strand3_001.mesh": "9eaeb23be01e32df85766eab4186d61e7085088d22261211c96e926d3c0ecc42",
+    "preview.png": "6328e2ab4245ad914200ad2daaf6af95171ce6179cd1bff3bf1da4ae6f8e02e9",
+    "preview_1.png": "563f86204a60b3b77389b8d397747134b9ceac89917c025babac138dae2f09f6",
+    "preview_2.png": "f1a9ba50ecf0c9aae61d118593d74810faba34498e13cf460696ab5bcd42140d",
+    "vgc247993a24aa.bmp": "c8c615a76d979c185016067019d5138a13fa38a3fc3b48379207208e7c9dec76",
+    "vgc8b3d26b27cb.bmp": "6c1a82da5af01adb0060060bccdd25532e74d1eec31dc1eb4a38fa556d91eacc"
+  },
+  "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+  "original_export_vertices": 1008,
+  "original_export_triangles": 880,
+  "lod": "lowpoly",
+  "reduction": {
+    "method": "Simplify source alpha contours before triangulation; preserve blade silhouettes and remove tiny specks; optional UV-aware collapse; explicit reverse faces.",
+    "triangle_limit_including_backfaces": 500,
+    "contour_tolerance_uv": 0.36514179875277375,
+    "texture_max_dimension": 128,
+    "vertex_limit_including_seams_and_backfaces": 500,
+    "previous_lowpoly_vertices": 1332,
+    "vertex_optimization": "Weld compatible normals, then collapse short geometric edges in paired front/back surfaces with face-flip checks; keep UV/material seams.",
+    "short_edge_collapses": 18
+  },
+  "asset_bytes": 117355,
+  "original_asset_bytes": 1611151
+}

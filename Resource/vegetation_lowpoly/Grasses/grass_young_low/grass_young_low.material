@@ -1,0 +1,15 @@
+material vg3cf6ca8a1272
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vg3cf6ca8a1272.bmp
+   }
+  }
+ }
+}

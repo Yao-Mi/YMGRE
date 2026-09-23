@@ -1,0 +1,99 @@
+{
+  "asset": "grass_green_strand3_004",
+  "category": "Grasses",
+  "source_object": "strand3.004",
+  "source_collections": [
+    "Collection 3",
+    "singlstrand_grass_group_green"
+  ],
+  "mesh": "grass_green_strand3_004.mesh",
+  "material": "grass_green_strand3_004.material",
+  "source_triangles": 240,
+  "triangles": 480,
+  "vertices": 478,
+  "parts": [
+    {
+      "material": "vgc247993a24aa",
+      "vertices": 382,
+      "triangles": 376
+    },
+    {
+      "material": "vgc8b3d26b27cb",
+      "vertices": 96,
+      "triangles": 104
+    }
+  ],
+  "bounds_min": [
+    -0.18695081770420074,
+    0.0,
+    -0.1577368676662445
+  ],
+  "bounds_max": [
+    0.18695081770420074,
+    0.2915632724761963,
+    0.1577368676662445
+  ],
+  "origin_in_blender_world": [
+    2.061917781829834,
+    -0.9514499008655548,
+    -0.07565931603312492
+  ],
+  "coordinates": "GRE Y-up: (-z,x,-y); source grass particle growth +X rotated upright; scale retained, base at y=0",
+  "skeleton": null,
+  "animation": null,
+  "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+  "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+  "source_archive": "Grass and trees system.zip",
+  "materials": {
+    "vgc247993a24aa": {
+      "source_material": "M_grass_leaves",
+      "color": "M_grass_leaves_color.png",
+      "alpha": null,
+      "source_image": "images.jpg",
+      "resolution": 512,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    },
+    "vgc8b3d26b27cb": {
+      "source_material": "M_grass_strand",
+      "color": "M_grass_strand_color.png",
+      "alpha": null,
+      "source_image": "images — kopia.jpg",
+      "resolution": 512,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    }
+  },
+  "discarded_transparent_source_triangles": 0,
+  "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+  "files_sha256": {
+    "grass_green_strand3_004.material": "8c3326d00aaf35ce6beb1b3e360031bfc8a9d5e1f4d164404ec6e8d6bc82b753",
+    "grass_green_strand3_004.mesh": "982c0cd9c844f16379a97db9d2821f3acc9ab0ccb4a14ec129194627b10de9cb",
+    "preview.png": "5e24379844fc717fb7abc8f745c785a940e91a1a0a665c1a7498be5f99dbd104",
+    "preview_1.png": "a5fd5f9369ed078b173aba699074846b889212ca27e9b81ba4a39fb0acab71d8",
+    "preview_2.png": "f5a2cc9e29301bf8e6c9c0d33bc97a2ba70a54ad2414548864d0d0d13f3a72d4",
+    "vgc247993a24aa.bmp": "c8c615a76d979c185016067019d5138a13fa38a3fc3b48379207208e7c9dec76",
+    "vgc8b3d26b27cb.bmp": "6c1a82da5af01adb0060060bccdd25532e74d1eec31dc1eb4a38fa556d91eacc"
+  },
+  "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+  "original_export_vertices": 536,
+  "original_export_triangles": 480,
+  "lod": "lowpoly",
+  "reduction": {
+    "method": "Simplify source alpha contours before triangulation; preserve blade silhouettes and remove tiny specks; optional UV-aware collapse; explicit reverse faces.",
+    "triangle_limit_including_backfaces": 500,
+    "contour_tolerance_uv": 0.36514179875277375,
+    "texture_max_dimension": 128,
+    "vertex_limit_including_seams_and_backfaces": 500,
+    "previous_lowpoly_vertices": 536,
+    "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes."
+  },
+  "asset_bytes": 117231,
+  "original_asset_bytes": 1593647
+}

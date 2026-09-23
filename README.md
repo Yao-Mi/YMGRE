@@ -7,7 +7,7 @@
   <a href="#场景编辑与贴图创作">编辑工具</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="sdk/MANUAL.md">使用手册</a> ·
-  <a href="build/YMGRE_libs/">预编译 SDK</a> ·
+  <a href="releases/">预编译 SDK</a> ·
   <a href="Demo/README.md">Demo 导航</a> ·
   <a href="tests/README.md">测试与验收</a> ·
   <a href="README.en.md">English</a>
@@ -107,7 +107,7 @@ YMGRE 从顶点变换、视锥裁剪、三角形填充和深度缓冲出发，�
 | 光照 | 环境光、点光源、聚光灯；逐面、逐顶点、逐像素三种采样方式 |
 | 光线追踪 | 网格、球体、平面、AABB、圆柱求交；着色、反射、折射和 Fresnel 函数 |
 | 资源与场景 | 静态 Ogre 网格/材质读取、BMP 图像、物体/材质/光源/相机管理 |
-| 输出与内存 | RGB565 / RGB888 源码配置；外部帧缓冲、独立或共享渲染工作区 |
+| 输出与内存 | RGB565 / RGB888 源码及 SDK 配置；外部帧缓冲、独立或共享渲染工作区 |
 | 索引配置 | 公共类型 `GRE_Index`，编译时选择 `uint16` 或 `uint32` |
 
 **MCU 可以保留基础管线和 16 位索引，PC 可以选择高级材质及更大的网格。** 实际性能和可用规模取决于硬件、分辨率、模型和所选算法；本机静态库不能直接用于不同架构的 MCU。
@@ -116,17 +116,19 @@ YMGRE 从顶点变换、视锥裁剪、三角形填充和深度缓冲出发，�
 
 ### 直接使用预编译 SDK
 
-取得整个 [build/YMGRE_libs](build/YMGRE_libs/) 目录，或使用一键发布生成的压缩包。
+从 [releases 分发目录](releases/README.md) 下载压缩包并解压，也可以取得整个 [build/YMGRE_libs](build/YMGRE_libs/) 目录。
 在 SDK 目录运行：
 
 ```sh
-./build_demos.sh 16       # GRE_Index = uint16
-./build_demos.sh 32       # GRE_Index = uint32
+./build_demos.sh 16 --depth 16  # RGB565 / index16
+./build_demos.sh 32 --depth 16  # RGB565 / index32
+./build_demos.sh 16 --depth 24  # RGB888 / index16
+./build_demos.sh 32 --depth 24  # RGB888 / index32
 ```
 
 默认构建无窗口示例，不需要引擎源码、YMGUI 或 SDL。示例会生成 `cube.ppm`，并输出索引大小、像素大小和有效像素数量。
 
-目前发布包为 **Linux x86_64 / Release / RGB565**，提供两种索引位宽；具体编译器和配置记录在 `BUILD_INFO.json`。
+目前发布包为 **Linux x86_64 / Release / RGB565 + RGB888**，每种色深均提供两种索引位宽，共四种组合；具体编译器和配置记录在 `BUILD_INFO.json`。
 
 ### 在自己的工程中链接
 
@@ -143,7 +145,7 @@ target_link_libraries(my_demo PRIVATE YMGRE::ymgre)
 ```sh
 cmake -S . -B build16 \
   -DYMGRE_DIR=/absolute/path/YMGRE_libs/cmake \
-  -DYMGRE_INDEX_BITS=16
+  -DYMGRE_INDEX_BITS=16 -DYMGRE_CAMERA_COLOR_DEPTH=16
 cmake --build build16
 ```
 
@@ -157,11 +159,11 @@ YMGRE 与 YMGUI **分别发布、分别维护**。YMGRE 包不包含 YMGUI 的�
 
 ```sh
 ./build_demos.sh 16 /absolute/path/YMGUI_libs/cmake
-./examples-build16/bin/demo_basic_shapes
-./examples-build16/bin/demo_advanced_raytrace_mirror
+./examples-build/rgb565/index16/bin/demo_basic_shapes
+./examples-build/rgb565/index16/bin/demo_advanced_raytrace_mirror
 ```
 
-外部 YMGUI 包需提供兼容的 CMake 目标和 RGB565 配置；目前预留接口的详细约定见 [手册第 5 节](sdk/MANUAL.md#5-重新编译整套示例)。
+外部 YMGUI 包需提供兼容的 CMake 目标和对应色深配置；接入接口的详细约定见 [手册第 5 节](sdk/MANUAL.md#5-重新编译整套示例)。
 源码仓库中的 Demo 可直接使用仓库内的 YMGUI 子模块构建。
 
 ## 一键编译与发布
@@ -169,16 +171,17 @@ YMGRE 与 YMGUI **分别发布、分别维护**。YMGRE 包不包含 YMGUI 的�
 维护引擎时，在本仓库执行：
 
 ```sh
-./sdk/build.sh
+./sdk/build.sh             # 本地 SDK 与压缩包
+./sdk/build.sh --release   # 验证后更新 releases/ 分发包
 ```
 
-脚本编译两份核心库、复制头文件和示例、验证独立链接，然后生成 SDK、压缩包及 SHA256 校验文件：
+脚本编译四份核心库、复制头文件和示例、验证独立链接，然后生成 SDK、压缩包及 SHA256 校验文件：
 
 ```text
 build/
 ├── YMGRE_libs/
 │   ├── include/YMGRE/        # 公开头文件
-│   ├── lib/                  # index16 / index32 两份核心静态库
+│   ├── lib/                  # RGB565/RGB888 × index16/index32 四份静态库
 │   ├── cmake/                # find_package 接入配置
 │   ├── examples/             # 30 个 Demo 源码与应用侧窗口接入代码
 │   ├── bin/                  # 已编译的无窗口示例
@@ -196,7 +199,9 @@ build/
 ./sdk/build.sh --ymgui-dir /absolute/path/YMGUI_libs/cmake
 ```
 
-`.gitignore` 只对 `build/YMGRE_libs/` 放行，其他构建输出继续忽略。发布过程日志在 `build/_ymgre_sdk/`。
+`--release` 将压缩包和 SHA256 文件写入可提交的 `releases/`；普通构建不会修改该目录。脚本在临时目录组装 SDK，构建或验收失败会保留已有 SDK 和分发包。可用 `--jobs 8` 调整并行度。
+
+`build/YMGRE_libs/` 的现有 Git 放行规则继续保留，其他构建输出仍忽略。发布日志在 `build/_ymgre_sdk/`。详见 [分发说明](releases/README.md)；脚本不会自动提交或推送。
 
 ## 从源码构建
 
@@ -204,22 +209,27 @@ build/
 
 ```sh
 git submodule update --init --recursive
-cmake -S . -B build/dev \
+cmake -S . -B build/rgb888/index16/Demo \
   -DYMGRE_INDEX_BITS=16 \
   -DYMGRE_CAMERA_COLOR_DEPTH=24
-cmake --build build/dev -j4
-ctest --test-dir build/dev --output-on-failure
-./build/dev/demo_basic_shapes
+cmake --build build/rgb888/index16/Demo -j4
+ctest --test-dir build/rgb888/index16/Demo --output-on-failure
+./build/rgb888/index16/Demo/demo_basic_shapes
 ```
+
+一键构建核心、基础 Demo 和所有独立应用：
+
+```sh
+./build_all.sh -t
+./build_all.sh --depth 16 --index-bits 32 -t
+```
+
+默认 RGB888 / 16 位索引，产物按色深和索引宽度隔离；RGB565 会明确跳过目前要求 RGB888 的烘焙器。应用额外依赖及完整命令见 [构建目录说明](docs/BUILD_LAYOUT.md)。
 
 只构建核心和模块测试时，可以关闭桌面显示依赖：
 
 ```sh
-cmake -S . -B build/core \
-  -DYMGRE_BUILD_DEMOS=OFF \
-  -DYMGRE_BUILD_YMGUI_HOST=OFF
-cmake --build build/core -j4
-ctest --test-dir build/core --output-on-failure
+./build_all.sh --core-only -t
 ```
 
 索引位宽和颜色格式属于编译配置。库与应用的所有编译单元必须保持一致，切换后重新编译；不要把不同配置的库混到同一个程序中。

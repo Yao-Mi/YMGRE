@@ -7,9 +7,9 @@
 桌面编辑器需要 SDL2、libpng、libjpeg 开发包和 C++11 编译器；PNG/JPEG 用于导入图片，导出仍使用 BMP。
 
 ```sh
-cmake -S project_Demo/scene_baker -B build888/project_Demo/scene_baker
-cmake --build build888/project_Demo/scene_baker -j4
-./build888/project_Demo/scene_baker/scene_baker
+cmake -S project_Demo/scene_baker -B build/rgb888/index16/project_Demo/scene_baker
+cmake --build build/rgb888/index16/project_Demo/scene_baker -j4
+./build/rgb888/index16/project_Demo/scene_baker/scene_baker
 ```
 
 1. 放置一个立方体，再放置点光源或聚光灯；全局光照可在检查器中调整。
@@ -22,7 +22,7 @@ cmake --build build888/project_Demo/scene_baker -j4
 默认输出到当前目录的 `baked_scene/bake-XXXXXX/`。每次烘焙创建一个新目录，避免覆盖场景文件及撤销历史仍在引用的旧资源。也可指定输出根目录：
 
 ```sh
-YMGRE_BAKE_DIR=/path/to/output ./build888/project_Demo/scene_baker/scene_baker
+YMGRE_BAKE_DIR=/path/to/output ./build/rgb888/index16/project_Demo/scene_baker/scene_baker
 ```
 
 成品以 `baked_model.mesh` 为入口，可通过普通 Ogre 网格加载器直接导入。与编辑场景配套的 `baked.material` 等文件保留预览和重开场景所需的数据。输出包含：
@@ -57,13 +57,13 @@ YMGRE_BAKE_DIR=/path/to/output ./build888/project_Demo/scene_baker/scene_baker
 旧的相机截图原型已替换为同一 UV 烘焙后端的无头示例：
 
 ```sh
-./build888/project_Demo/scene_baker/scene_bake_cli baked_scene
+./build/rgb888/index16/project_Demo/scene_baker/scene_bake_cli baked_scene
 ```
 
 ## 验证
 
 ```sh
-ctest --test-dir build888/project_Demo/scene_baker --output-on-failure
+ctest --test-dir build/rgb888/index16/project_Demo/scene_baker --output-on-failure
 ```
 
 `scene_bake` 验证 UV1 不重叠、UV0 不被修改、受光面与背光面的差异、资源读写、错误输入、空灯光、透视采样及近面裁剪；`scene_baker_editor` 验证编辑器原有功能、真实菜单点击、导出失败保留预览、预览切换、场景重开和失效判断，并在输出中给出临时场景、光照图和编辑器截图路径。

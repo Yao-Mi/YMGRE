@@ -17,6 +17,7 @@
 - `scene_editor`：YMGUI 编辑器外壳与 YMGRE 实时视口，验证 RenderTarget、相机交互、辅助线
   几何、动态布局、基础物体放置、层级树和实际网格属性编辑。
 - `scene_baker`：独立 RGB888 烘焙编辑器，支持 UV1 直接光照烘焙、导出、回贴预览和场景重开。
+- [`nature_preview`](nature_preview/README.md)：高度图草地、全部 32 种草丛和 6 种树、天空与太阳，以及地球和坦克。展示植被分块加载、近处网格与远景缓存图切换、黄土到绿色远景的过渡；支持一键构建和测试 index16、index32，文档包含实际截图与性能记录。
 
 ## 综合验收项目：scene_editor
 

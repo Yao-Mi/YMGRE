@@ -1,6 +1,6 @@
 # GRE / YMSKE 人体演示
 
-直接运行 `../../build-human/demo_human`；需要重建时执行本目录的 `./run_demo.sh`。
+直接运行 `../../build/rgb888/index16/project_Demo/human/demo_human`；需要重建时执行本目录的 `./run_demo.sh`。
 
 演示从 GRE 的 Resource/human 加载 human.mesh/material 和 human.ske/ska，使用六槽完整蒙皮权重。SKE/SKA 默认二进制，传 `--text` 可切换对应文本文件。可用 `--assets /path/to/human` 指定资源目录。默认资源绝对路径在构建时写入，因此可以从文件管理器直接启动。
 
@@ -18,9 +18,9 @@
 ## 构建和验证
 
 ```sh
-cmake -S /home/yaomi/文档/0502_YMGRE/project_Demo/human -B /home/yaomi/文档/0502_YMGRE/build-human -DCMAKE_BUILD_TYPE=Release
-cmake --build /home/yaomi/文档/0502_YMGRE/build-human --target demo_human -j2
-ctest --test-dir /home/yaomi/文档/0502_YMGRE/build-human --output-on-failure
+cmake -S /home/yaomi/文档/0502_YMGRE/project_Demo/human -B /home/yaomi/文档/0502_YMGRE/build/rgb888/index16/project_Demo/human -DCMAKE_BUILD_TYPE=Release
+cmake --build /home/yaomi/文档/0502_YMGRE/build/rgb888/index16/project_Demo/human --target demo_human -j2
+ctest --test-dir /home/yaomi/文档/0502_YMGRE/build/rgb888/index16/project_Demo/human --output-on-failure
 ```
 
 独立 CMake 项目，默认引用相邻 YMSKE 目录（可通过 YMSKE_ROOT 改写），不修改 GRE/YMSKE 的主构建配置。

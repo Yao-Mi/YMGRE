@@ -1,0 +1,97 @@
+{
+  "asset": "grass_different_strand_big",
+  "category": "Grasses",
+  "source_object": "strand_big",
+  "source_collections": [
+    "Collection 3",
+    "singlstrand_grass_group_different"
+  ],
+  "mesh": "grass_different_strand_big.mesh",
+  "material": "grass_different_strand_big.material",
+  "source_triangles": 76,
+  "triangles": 152,
+  "vertices": 160,
+  "parts": [
+    {
+      "material": "vgc247993a24aa",
+      "vertices": 96,
+      "triangles": 72
+    },
+    {
+      "material": "vgb88cea70da37",
+      "vertices": 64,
+      "triangles": 80
+    }
+  ],
+  "bounds_min": [
+    -0.04649518430233002,
+    0.0,
+    -0.04705515503883362
+  ],
+  "bounds_max": [
+    0.04649518430233002,
+    0.28867340087890625,
+    0.04705515503883362
+  ],
+  "origin_in_blender_world": [
+    1.4243284463882446,
+    -0.7634157240390778,
+    -0.07799145579338074
+  ],
+  "coordinates": "GRE Y-up: (-z,x,-y); source grass particle growth +X rotated upright; scale retained, base at y=0",
+  "skeleton": null,
+  "animation": null,
+  "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+  "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+  "source_archive": "Grass and trees system.zip",
+  "materials": {
+    "vgb88cea70da37": {
+      "source_material": "M_grass_strand2",
+      "color": "M_grass_strand2_color.png",
+      "alpha": null,
+      "source_image": "images — kopia.jpg",
+      "resolution": 512,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    },
+    "vgc247993a24aa": {
+      "source_material": "M_grass_leaves",
+      "color": "M_grass_leaves_color.png",
+      "alpha": null,
+      "source_image": "images.jpg",
+      "resolution": 512,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    }
+  },
+  "discarded_transparent_source_triangles": 0,
+  "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+  "files_sha256": {
+    "grass_different_strand_big.material": "53f5a77925b116d79559d2eb19bc3eeae1824fad670969ea5515c37c9e2127ca",
+    "grass_different_strand_big.mesh": "896ff012a8490fdbb81395f2fb195dc37f7944090c25aa3fba31d077a58b2865",
+    "preview.png": "24402168552b5338134c1c5258182d469908f5904b334a01ce01893ae1c32f33",
+    "preview_1.png": "2a004ff4d6ec5f895f4794541fa7c81fd6312a501306ca3413bcb56e4bae7484",
+    "preview_2.png": "932a15d8e34fc517cc35ddcd65857217e8efaf85ee364d7a47600017acf61bd7",
+    "vgb88cea70da37.bmp": "4712ebdee036490caf9406d952472571ae17b63d49fc668d94adfcead997f4a9",
+    "vgc247993a24aa.bmp": "c8c615a76d979c185016067019d5138a13fa38a3fc3b48379207208e7c9dec76"
+  },
+  "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+  "original_export_vertices": 160,
+  "original_export_triangles": 152,
+  "lod": "lowpoly",
+  "reduction": {
+    "method": "Simplify source alpha contours before triangulation; preserve blade silhouettes and remove tiny specks; optional UV-aware collapse; explicit reverse faces.",
+    "triangle_limit_including_backfaces": 500,
+    "contour_tolerance_uv": 0.003,
+    "texture_max_dimension": 128,
+    "vertex_limit_including_seams_and_backfaces": 500
+  },
+  "asset_bytes": 105087,
+  "original_asset_bytes": 1579647
+}

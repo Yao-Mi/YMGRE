@@ -1,0 +1,100 @@
+{
+  "asset": "grass_different_strand3_003",
+  "category": "Grasses",
+  "source_object": "strand3.003",
+  "source_collections": [
+    "Collection 3",
+    "singlstrand_grass_group_different"
+  ],
+  "mesh": "grass_different_strand3_003.mesh",
+  "material": "grass_different_strand3_003.material",
+  "source_triangles": 440,
+  "triangles": 370,
+  "vertices": 498,
+  "parts": [
+    {
+      "material": "vg2de3684a8246",
+      "vertices": 428,
+      "triangles": 332
+    },
+    {
+      "material": "vgc8b3d26b27cb",
+      "vertices": 70,
+      "triangles": 38
+    }
+  ],
+  "bounds_min": [
+    -0.18790695071220398,
+    0.004939523059874773,
+    -0.18072602152824402
+  ],
+  "bounds_max": [
+    0.1695236638188362,
+    0.34546664357185364,
+    0.13784218579530716
+  ],
+  "origin_in_blender_world": [
+    1.4229623079299927,
+    -1.1878345310688019,
+    -0.0836806371808052
+  ],
+  "coordinates": "GRE Y-up: (-z,x,-y); source grass particle growth +X rotated upright; scale retained, base at y=0",
+  "skeleton": null,
+  "animation": null,
+  "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+  "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+  "source_archive": "Grass and trees system.zip",
+  "materials": {
+    "vg2de3684a8246": {
+      "source_material": "M_grass_leaves_old_lo",
+      "color": "M_grass_leaves_old_lo_color.png",
+      "alpha": "M_grass_leaves_old_lo_alpha.png",
+      "source_image": "grass_lo_old.png",
+      "resolution": 1024,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    },
+    "vgc8b3d26b27cb": {
+      "source_material": "M_grass_strand",
+      "color": "M_grass_strand_color.png",
+      "alpha": null,
+      "source_image": "images — kopia.jpg",
+      "resolution": 512,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    }
+  },
+  "discarded_transparent_source_triangles": 54,
+  "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+  "files_sha256": {
+    "grass_different_strand3_003.material": "114ea2e3201cd77addf0f242414e1be3b4754df081df23e298e479f1bbab810e",
+    "grass_different_strand3_003.mesh": "1eb6d7925c60306acad0e2266aa2d57aef060a2c318f4a5f52b6d847788c2fdf",
+    "preview.png": "d3b1f10d436a22880548162a9f276c08c911e3d594608a2a3f4a76153f104e2e",
+    "preview_1.png": "dc5fd354d2a24278197dbe06eed916f3cc1eae2fa22ba7d5292c5d2ba36aa3d9",
+    "preview_2.png": "e9acd62602d4c4a9a7755b6156363244b8b8ad8f4ce116940bd8ea5a28dde5d7",
+    "vg2de3684a8246.bmp": "fb5d588255fc99ef802db2e5ddb86f59fee936a3c92f7f3dace1414e87efa80b",
+    "vgc8b3d26b27cb.bmp": "6c1a82da5af01adb0060060bccdd25532e74d1eec31dc1eb4a38fa556d91eacc"
+  },
+  "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+  "original_export_vertices": 201866,
+  "original_export_triangles": 207468,
+  "lod": "lowpoly",
+  "reduction": {
+    "method": "Simplify source alpha contours before triangulation; preserve blade silhouettes and remove tiny specks; optional UV-aware collapse; explicit reverse faces.",
+    "triangle_limit_including_backfaces": 500,
+    "contour_tolerance_uv": 0.36514179875277375,
+    "texture_max_dimension": 128,
+    "vertex_limit_including_seams_and_backfaces": 500,
+    "previous_lowpoly_vertices": 1338,
+    "vertex_optimization": "Weld compatible normals, then collapse short geometric edges in paired front/back surfaces with face-flip checks; keep UV/material seams.",
+    "short_edge_collapses": 20
+  },
+  "asset_bytes": 117211,
+  "original_asset_bytes": 11637827
+}

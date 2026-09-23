@@ -1,11 +1,40 @@
 {
-  "built_at_utc": "2026-09-13T15:55:34.751789+00:00",
+  "built_at_utc": "2026-09-20T17:08:21.430134+00:00",
   "system": "Linux",
   "machine": "x86_64",
   "compiler": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
   "build_type": "Release",
   "position_independent": true,
-  "framebuffer": "RGB565",
+  "framebuffers": [
+    "RGB565",
+    "RGB888"
+  ],
+  "color_depths": [
+    16,
+    24
+  ],
+  "variants": [
+    {
+      "color_depth": 16,
+      "index_bits": 16,
+      "library": "lib/libymgre_rgb565_index16.a"
+    },
+    {
+      "color_depth": 16,
+      "index_bits": 32,
+      "library": "lib/libymgre_rgb565_index32.a"
+    },
+    {
+      "color_depth": 24,
+      "index_bits": 16,
+      "library": "lib/libymgre_rgb888_index16.a"
+    },
+    {
+      "color_depth": 24,
+      "index_bits": 32,
+      "library": "lib/libymgre_rgb888_index32.a"
+    }
+  ],
   "index_bits": [
     16,
     32
@@ -14,8 +43,8 @@
   "prebuilt_demos_per_variant": 1,
   "external_ymgui_validated": true,
   "bundled_ymgui": false,
-  "source_sha256": "9b172609edb89cc44026cb02409111dffd6641f2523e0ead79fde6fa664e5bfb",
-  "git_head": "f872914e8a0bc2f68a74f975a6b5cc5f2a44b4fb",
+  "source_sha256": "cedaf10057e0610e8efb81a4531b9e66b3da8e02e3a608cf0dea33d2ac1692d2",
+  "git_head": "e932b65120578eb82c90d3eae56279a412ea63b9",
   "source_includes_uncommitted_changes": true,
   "sdk_requires_engine_source": false,
   "rebuild_command": "./sdk/build.sh"

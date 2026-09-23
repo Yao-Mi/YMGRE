@@ -1,0 +1,60 @@
+material vg0a09b7cc2f38
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vg0a09b7cc2f38.bmp
+   }
+  }
+ }
+}
+material vgb88cea70da37
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vgb88cea70da37.bmp
+   }
+  }
+ }
+}
+material vgbee9005d5837
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vgbee9005d5837.bmp
+   }
+  }
+ }
+}
+material vge8a53de79f6d
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vge8a53de79f6d.bmp
+   }
+  }
+ }
+}

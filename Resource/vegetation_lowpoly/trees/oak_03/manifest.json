@@ -1,0 +1,105 @@
+{
+  "asset": "oak_03",
+  "category": "trees",
+  "source_object": "oaktree3",
+  "source_collections": [
+    "Collection 1"
+  ],
+  "mesh": "oak_03.mesh",
+  "material": "oak_03.material",
+  "source_triangles": 59295,
+  "triangles": 2970,
+  "vertices": 4894,
+  "parts": [
+    {
+      "material": "vg99b5a55450b4",
+      "vertices": 1414,
+      "triangles": 650
+    },
+    {
+      "material": "vgdedae398ff90",
+      "vertices": 3480,
+      "triangles": 2320
+    }
+  ],
+  "bounds_min": [
+    -5.496248086293538,
+    0.000629389367531985,
+    -5.492658331990242
+  ],
+  "bounds_max": [
+    4.814875801404317,
+    11.147062331438065,
+    5.477281192938487
+  ],
+  "origin_in_blender_world": [
+    39.0,
+    0.0,
+    0.0003641843795776367
+  ],
+  "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+  "skeleton": null,
+  "animation": null,
+  "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+  "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+  "source_archive": "Grass and trees system.zip",
+  "materials": {
+    "vg99b5a55450b4": {
+      "source_material": "bark_oaktree3",
+      "color": "bark_oaktree3_color.png",
+      "alpha": null,
+      "resolution": 2048,
+      "baked_on_original_mesh": true,
+      "source_object": "oaktree3",
+      "exported_texture_size": [
+        256,
+        256
+      ]
+    },
+    "vgdedae398ff90": {
+      "source_material": "M_treeleaves1",
+      "color": "M_treeleaves1_color.png",
+      "alpha": "M_treeleaves1_alpha.png",
+      "source_image": "Branches_MAPLE.png",
+      "resolution": 1024,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        256,
+        256
+      ]
+    }
+  },
+  "discarded_transparent_source_triangles": 4967,
+  "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+  "files_sha256": {
+    "oak_03.material": "9ba523948b27d4a0d2201813cbe8fcb532987c4e42185f757ea08a0a590e7166",
+    "oak_03.mesh": "a80a12e8a2d35352997028f3fe48e0d372a140bb379ebfde4164de77837f298d",
+    "preview.png": "2becd5d53ec24eb77f15b131b26ae2e20848ea22e8c1144ba4604b7969c147b3",
+    "preview_1.png": "189c20e74e76257b063cfc1691aa6734438f41131f277a1a800d1ca85d0d768a",
+    "preview_2.png": "df56f8d739c729807db43c6861a5a0ba3873ee66009e679fba4e522427092caf",
+    "vg99b5a55450b4.bmp": "fc189a0d724b0ba6305ddcea3956ed596f6ac83d92575a067789dcfade7376ae",
+    "vgdedae398ff90.bmp": "6f37c81bea7cf7d979e60fc221afd422bf27bd792b104ddc2857feeed3a3f3a4"
+  },
+  "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+  "original_export_vertices": 1453182,
+  "original_export_triangles": 1127475,
+  "lod": "lowpoly",
+  "reduction": {
+    "method": "Simplified trunk and branches; fitted coarse foliage cards remove internal source grids, then spatial coverage sampling and color dilation.",
+    "triangle_limit_including_backfaces": 5000,
+    "target_triangles": 4400,
+    "source_foliage_clusters": 4967,
+    "retained_foliage_clusters": 468,
+    "foliage_scale": 1.8,
+    "bark_triangles": 650,
+    "texture_max_dimension": 256,
+    "vertex_limit_including_seams_and_backfaces": 5000,
+    "previous_lowpoly_vertices": 7566,
+    "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes.",
+    "leaf_clusters_before_vertex_limit": 468,
+    "leaf_clusters_after_vertex_limit": 290,
+    "additional_leaf_scale": 1.2709737150434386
+  },
+  "asset_bytes": 568395,
+  "original_asset_bytes": 72145166
+}

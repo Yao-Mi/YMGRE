@@ -5,6 +5,7 @@
 #include "YMGRE_Camera.h"
 #include "YMGRE_Creat.h"
 #include "YMGRE_Free.h"
+#include <stdio.h>
 
 #define DEMO_WIDTH 500
 #define DEMO_HEIGHT 490
@@ -26,7 +27,7 @@ static void drawPanelFrame(GRE_Camera4d camera, int16 x, int16 y)
 }
 
 //根据顶点绕序计算法向，并按开关选择是否执行背面剔除
-static void drawPolygonCase(GRE_Camera4d camera, const float32 point[][2], const uint16 sourceIndex[],
+static void drawPolygonCase(GRE_Camera4d camera, const float32 point[][2], const GRE_Index sourceIndex[],
 	float32 offsetX, float32 offsetY, GRErgb24 color, uint8 enableCulling)
 {
 	gre_vertex4d vertex[POLYGON_POINT_NUM] = { 0 };
@@ -94,6 +95,34 @@ static void drawCullingComparison(GRE_Camera4d camera)
 		drawPanelFrame(camera, panel[i][0], panel[i][1]);
 }
 
+//检查六个面板的实际填色，索引宽度不应改变正反面剔除结果。
+static int checkCullingImage(GRE_Camera4d camera)
+{
+	const GRErgb24 colors[] = { {68, 166, 126}, {220, 86, 74}, {72, 128, 210} };
+	unsigned counts[6] = {0};
+	for (int row = 0; row < 3; row++)
+	{
+		GRErgb24 expected = GRE_FramePixel_To_RGB24(GRE_FramePixel_From_RGB24(colors[row]));
+		for (int column = 0; column < 2; column++)
+		{
+			int left = column == 0 ? 15 : 285;
+			int top = 10 + row * 165;
+			for (int y = top + 1; y < top + PANEL_HEIGHT; y++)
+				for (int x = left + 1; x < left + PANEL_WIDTH; x++)
+				{
+					GRErgb24 pixel = GRE_FramePixel_To_RGB24(camera->img.data[y * camera->img.width + x]);
+					if (pixel.R == expected.R && pixel.G == expected.G && pixel.B == expected.B)
+						counts[row * 2 + column]++;
+				}
+		}
+	}
+	int pass = counts[0] > 1000 && counts[0] == counts[1] &&
+		counts[2] > 1000 && counts[3] == 0 && counts[4] > 1000 && counts[4] == counts[5];
+	printf("backface panels: %u %u %u %u %u %u: %s\n",
+		counts[0], counts[1], counts[2], counts[3], counts[4], counts[5], pass ? "PASS" : "FAIL");
+	return pass;
+}
+
 //将背面剔除结果交给 YMGUI 显示
 static void showCullingImage(GRE_Camera4d camera)
 {
@@ -111,8 +140,9 @@ int main(void)
 	YMGRE_Img_SetBrushColor((GRErgb24){ 225, 229, 235 });
 
 	drawCullingComparison(camera);
+	int pass = checkCullingImage(camera);
 	showCullingImage(camera);
 
 	YMGRE_Free_Camera(camera);
-	return 0;
+	return pass ? 0 : 1;
 }

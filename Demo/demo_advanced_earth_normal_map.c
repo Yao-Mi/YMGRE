@@ -1,4 +1,5 @@
 #include "demo_host.h"
+#include "YMGUI_Invalidate.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Camera.h"
@@ -149,6 +150,7 @@ static void showInteractive(Stage* stages, YMGRE_DemoView* views)
 		if (mouseY == 0 && host.context->point_y != 0) y = host.context->point_y;
 		if (y < 0) y = 0; if (y > H) y = H;
 		renderAll(stages, (0.5f - y / H) * 150.0f);
+		YMGUI_Obj_Invalidate(host.context->root);
 	}
 	YMGRE_DemoHost_Destroy(&host);
 }

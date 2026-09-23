@@ -1,0 +1,30 @@
+material vg2de3684a8246
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vg2de3684a8246.bmp
+   }
+  }
+ }
+}
+material vgc8b3d26b27cb
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vgc8b3d26b27cb.bmp
+   }
+  }
+ }
+}

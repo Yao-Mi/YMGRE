@@ -1,0 +1,11 @@
+{
+  "models": 41,
+  "original_triangles": 3468324,
+  "new_triangles": 24439,
+  "original_asset_bytes": 346655923,
+  "new_asset_bytes": 6939939,
+  "max_tree_vertices": 4899,
+  "max_grass_vertices": 498,
+  "max_tree_triangles": 3128,
+  "max_grass_triangles": 480
+}

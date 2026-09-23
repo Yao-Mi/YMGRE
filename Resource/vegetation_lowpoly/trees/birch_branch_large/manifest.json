@@ -1,0 +1,77 @@
+{
+  "asset": "birch_branch_large",
+  "category": "trees",
+  "source_object": "leaves_birch.002",
+  "source_collections": [
+    "Collection 3"
+  ],
+  "mesh": "birch_branch_large.mesh",
+  "material": "birch_branch_large.material",
+  "source_triangles": 2,
+  "triangles": 180,
+  "vertices": 540,
+  "parts": [
+    {
+      "material": "vgbf1c4babaedc",
+      "vertices": 540,
+      "triangles": 180
+    }
+  ],
+  "bounds_min": [
+    -0.4322790801525116,
+    1.686452222315893e-08,
+    -0.4526216387748718
+  ],
+  "bounds_max": [
+    0.4831353724002838,
+    2.933120129000599e-07,
+    0.34073764085769653
+  ],
+  "origin_in_blender_world": [
+    5.283105850219727,
+    -1.1716859936714172,
+    -1.4740919596079038e-07
+  ],
+  "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+  "skeleton": null,
+  "animation": null,
+  "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+  "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+  "source_archive": "Grass and trees system.zip",
+  "materials": {
+    "vgbf1c4babaedc": {
+      "source_material": "M_treeleaves2_birchtree",
+      "color": "M_treeleaves2_birchtree_color.png",
+      "alpha": "M_treeleaves2_birchtree_alpha.png",
+      "source_image": "Branches1.png",
+      "resolution": 1024,
+      "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+      "exported_texture_size": [
+        128,
+        128
+      ]
+    }
+  },
+  "discarded_transparent_source_triangles": 0,
+  "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+  "files_sha256": {
+    "birch_branch_large.material": "96785a26e2556fa3b7dd7f476fbd52bdd2b96c1eb2980455448f9e6ddcabe7b9",
+    "birch_branch_large.mesh": "a746278f32a0766b9c7c1e3506ab4f4b39c201e5ab4e5488e196440fba339f0b",
+    "preview.png": "f485e07f64a76e6759ec67ed67343fbb551e71b878c03f1c1ce02606e753dc13",
+    "preview_1.png": "9c4bbaf15708c508e24a3061da0b47c69c9ecd6efa88142695656623c675cbf3",
+    "preview_2.png": "eb4fd09958b1eb2b72f99a49078ec15aeb7abf371c3d03df32d1fc2427abfff6",
+    "vgbf1c4babaedc.bmp": "bdfc0a8f8559507de0db9a2b28df2dac0249b76c05ffb909a41c77068ec3787a"
+  },
+  "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+  "original_export_vertices": 764,
+  "original_export_triangles": 516,
+  "lod": "lowpoly",
+  "reduction": {
+    "method": "UV-preserving single-sided collapse, then restore backfaces.",
+    "triangle_limit_including_backfaces": 5000,
+    "texture_max_dimension": 128,
+    "vertex_limit_including_seams_and_backfaces": 5000
+  },
+  "asset_bytes": 67926,
+  "original_asset_bytes": 3173686
+}

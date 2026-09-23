@@ -3,27 +3,27 @@
 模块测试默认随根工程构建：
 
 ```bash
-cmake -S . -B build
-cmake --build build -j
-ctest --test-dir build --output-on-failure
+cmake -S . -B build/rgb888/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=24 -DYMGRE_INDEX_BITS=16
+cmake --build build/rgb888/index16/Demo -j
+ctest --test-dir build/rgb888/index16/Demo --output-on-failure
 ```
 
 PC 高级流程（RGB888）：
 
 ```bash
-cmake -S . -B build -DYMGRE_CAMERA_COLOR_DEPTH=24
+cmake -S . -B build/rgb888/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=24
 ```
 
 MCU/低内存基础流程（RGB565）：
 
 ```bash
-cmake -S . -B build-mcu -DYMGRE_CAMERA_COLOR_DEPTH=16
+cmake -S . -B build/rgb565/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=16 -DYMGRE_INDEX_BITS=16
 ```
 
 关闭测试：
 
 ```bash
-cmake -S . -B build -DYMGRE_BUILD_TESTS=OFF
+cmake -S . -B build/rgb888/index16/Demo -DYMGRE_BUILD_TESTS=OFF
 ```
 
 ## test_render_context
@@ -89,7 +89,7 @@ cmake -S . -B build -DYMGRE_BUILD_TESTS=OFF
 三角形坐标、相机、UV、材质和输出尺寸必须保持不变。第一格失败后不得用后续格判断原因。
 
 ```bash
-./build/demo_advanced_stages
+./build/rgb888/index16/Demo/demo_advanced_stages
 ```
 
 | 格 | 新增变量 | 必须满足 | 判定失败 |
@@ -150,7 +150,7 @@ output = texture * vertexColor * materialDiffuse * lightColor * diffuse
 再下排从左到右。六格使用相同的大三角形、相机和输出尺寸：
 
 ```bash
-./build/demo_advanced_point_light
+./build/rgb888/index16/Demo/demo_advanced_point_light
 ```
 
 | 格 | 唯一新增或改变的条件 | 观察标准 |
@@ -345,3 +345,19 @@ Demo 要求平坦法线至少有 100 个高光像素，扰动法线与平坦法�
 ## 场景烘焙闭环
 
 `project_Demo/scene_baker` 提供独立的 `scene_bake` 与 `scene_baker_editor` CTest。验证 UV1 图集、透视及裁剪采样、资源持久化、失效判断和真实菜单点击。构建运行见该目录 README。
+
+## SDK 发布流程测试
+
+```sh
+python3 tests/test_sdk_package.py
+```
+
+独立于渲染构建，使用临时目录验证：普通打包不改 `releases/`，发布包目录及 SHA256 正确，验收失败保留上一份 SDK/分发包，压缩失败不会截断已有分发包。实际库与 Demo 的编译验收由 `./sdk/build.sh --release` 执行；可追加 `--ymgui-dir` 验证外部 YMGUI 接入。
+
+SDK 的四种配置和错误配置拦截也有独立检查：
+
+```sh
+python3 tests/test_sdk_variants.py build/YMGRE_libs/cmake
+```
+
+验证 RGB565/RGB888 × index16/index32 的归档选择与编译宏，并拒绝无效色深、无效索引宽度、重复接入时切换配置，以及与 YMGUI 混用色深。发布流程自动运行这些检查，记录在 `verification/variant-selection.log`。

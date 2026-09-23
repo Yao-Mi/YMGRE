@@ -71,10 +71,9 @@ file(GLOB YMGRE_SRC CONFIGURE_DEPENDS
 	YMGRE/IOFILE/*.c
 	YMGRE/OPOBJ/*.c
 )
-list(REMOVE_ITEM YMGRE_SRC
-	${YMGRE_REPO_ROOT}/YMGRE/CORE/YMGRE_SceneManager.c
-)
 add_library(ymgre STATIC ${YMGRE_SRC})
+add_library(YMGRE::ymgre ALIAS ymgre)
+target_compile_features(ymgre PUBLIC c_std_99)
 target_include_directories(ymgre PUBLIC
 	YMGRE/CONFIG YMGRE/CORE YMGRE/DEBUG YMGRE/IOFILE YMGRE/OPOBJ
 )
@@ -233,7 +232,7 @@ if(YMGRE_BUILD_TESTS)
 	target_link_libraries(test_triangle_rasterization PRIVATE ymgre)
 	add_test(NAME triangle_rasterization COMMAND test_triangle_rasterization)
 	add_executable(test_index_width tests/test_index_width.c
-		YMGRE/CORE/YMGRE_SceneManager.c project_Demo/scene_baker/scene_model_export.c)
+		project_Demo/scene_baker/scene_model_export.c)
 	target_include_directories(test_index_width PRIVATE project_Demo/scene_baker)
 	target_link_libraries(test_index_width PRIVATE ymgre)
 	add_test(NAME index_width COMMAND test_index_width)
@@ -267,8 +266,7 @@ if(YMGRE_BUILD_TESTS)
 	add_executable(test_degenerate_geometry tests/test_degenerate_geometry.c)
 	target_link_libraries(test_degenerate_geometry PRIVATE ymgre)
 	add_test(NAME degenerate_geometry COMMAND test_degenerate_geometry)
-	add_executable(test_resource_material tests/test_resource_material.c
-		YMGRE/CORE/YMGRE_SceneManager.c)
+	add_executable(test_resource_material tests/test_resource_material.c)
 	target_link_libraries(test_resource_material PRIVATE ymgre)
 	add_test(NAME resource_material COMMAND test_resource_material
 		${YMGRE_REPO_ROOT}/Resource

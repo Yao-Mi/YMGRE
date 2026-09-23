@@ -1,0 +1,15 @@
+material vgbf1c4babaedc
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vgbf1c4babaedc.bmp
+   }
+  }
+ }
+}

@@ -1,0 +1,30 @@
+material vg99b5a55450b4
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vg99b5a55450b4.bmp
+   }
+  }
+ }
+}
+material vgdedae398ff90
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vgdedae398ff90.bmp
+   }
+  }
+ }
+}

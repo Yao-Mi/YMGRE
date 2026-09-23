@@ -6,14 +6,13 @@ add_library(scene_uv_atlas STATIC scene_uv_atlas.cpp ../../extern_lib/xatlas/xat
 target_include_directories(scene_uv_atlas PRIVATE ../../extern_lib/xatlas)
 target_compile_features(scene_uv_atlas PRIVATE cxx_std_11)
 target_compile_definitions(scene_uv_atlas PRIVATE XA_MULTITHREADED=0)
-set(YMGRE_BUILD_DEMOS OFF CACHE BOOL "" FORCE)
-set(YMGRE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(YMGRE_BUILD_YMGUI_HOST ON CACHE BOOL "" FORCE)
-set(YMGRE_CAMERA_COLOR_DEPTH 24 CACHE STRING "" FORCE)
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../.. ${CMAKE_BINARY_DIR}/ymgre)
+set(YMGRE_CAMERA_COLOR_DEPTH 24 CACHE STRING "Framebuffer color depth")
+if(NOT YMGRE_CAMERA_COLOR_DEPTH STREQUAL "24")
+  message(FATAL_ERROR "scene_baker currently requires RGB888 (YMGRE_CAMERA_COLOR_DEPTH=24)")
+endif()
+include(${CMAKE_CURRENT_LIST_DIR}/../ymgre_app.cmake)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../extern_lib/mxml ${CMAKE_BINARY_DIR}/mxml)
 add_executable(scene_baker
-  ../../YMGRE/CORE/YMGRE_SceneManager.c
   scene_bake.c scene_model_export.c scene_ray_renderer.c scene_uv.c scene_uv_data.c scene_uv_edit.c scene_uv_editor.c scene_uv_preview.c scene_editor_texture.c scene_texture_image.c scene_texture_paint.c scene_editor.c scene_editor_place.c scene_editor_color.c scene_editor_font.c
   scene_editor_inspector.c scene_editor_import.c scene_editor_file_dialog.c
   scene_editor_io.c scene_editor_model.c scene_editor_hierarchy.c)

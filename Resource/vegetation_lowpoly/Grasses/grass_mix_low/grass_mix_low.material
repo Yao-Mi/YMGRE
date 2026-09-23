@@ -1,0 +1,15 @@
+material vg8298557458d6
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   texture_unit
+   {
+    texture vg8298557458d6.bmp
+   }
+  }
+ }
+}

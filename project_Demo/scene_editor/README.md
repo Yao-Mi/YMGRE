@@ -11,7 +11,7 @@
 - 增加 24 级撤销/重做、对象克隆和 `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` 快捷键；
 - 增加移动、旋转、缩放模式，支持二次点击取消约束；移动轴和三轴旋转参考环采用动态 Stack 菜单与加宽命中区域；
 - 层级右键菜单改用 `YMGUI_Layout_Stack`，根据对象类型动态排列重命名、删除、切换相机和克隆命令；
-- 正式构建目录和无头自测均通过：`build/project_Demo/scene_editor/scene_editor`。
+- 正式构建目录和无头自测均通过：`build/rgb888/index16/project_Demo/scene_editor/scene_editor`。
 
 ## 开发记录（2026-08-28）
 
@@ -103,22 +103,22 @@ YMGRE Camera
 ## 构建运行
 
 ```bash
-cmake -S project_Demo/scene_editor -B build/project_Demo/scene_editor
-cmake --build build/project_Demo/scene_editor -j
-./build/project_Demo/scene_editor/scene_editor
+cmake -S project_Demo/scene_editor -B build/rgb888/index16/project_Demo/scene_editor
+cmake --build build/rgb888/index16/project_Demo/scene_editor -j
+./build/rgb888/index16/project_Demo/scene_editor/scene_editor
 ```
 
 外部网格导入默认从程序启动时的当前目录开始浏览，也可以指定其他只读浏览根目录：
 
 ```bash
-YMGRE_IMPORT_ROOT=/path/to/assets ./build/project_Demo/scene_editor/scene_editor
+YMGRE_IMPORT_ROOT=/path/to/assets ./build/rgb888/index16/project_Demo/scene_editor/scene_editor
 ```
 
 打开/保存场景使用 YMGUI FileDialog：可在目录树中选择路径，再在底部输入文件名；
 保存时未填写 `.scene` 后缀会自动补齐。默认目标为当前目录的 `scene.scene`，也可指定默认路径：
 
 ```bash
-YMGRE_SCENE_PATH=/path/to/example.scene ./build/project_Demo/scene_editor/scene_editor
+YMGRE_SCENE_PATH=/path/to/example.scene ./build/rgb888/index16/project_Demo/scene_editor/scene_editor
 ```
 
 打开场景对话框底部的“强制忽略资源错误”默认关闭。启用后，缺少网格、材质或贴图的对象会被
@@ -155,7 +155,7 @@ YMGRE_SCENE_PATH=/path/to/example.scene ./build/project_Demo/scene_editor/scene_
 
 ```bash
 SDL_VIDEODRIVER=dummy YMGRE_MAX_FRAMES=3 \
-  ./build/project_Demo/scene_editor/scene_editor
+  ./build/rgb888/index16/project_Demo/scene_editor/scene_editor
 ```
 
 功能自测：
@@ -163,7 +163,7 @@ SDL_VIDEODRIVER=dummy YMGRE_MAX_FRAMES=3 \
 ```bash
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   YMGRE_SCENE_EDITOR_SELFTEST=1 \
-  ./build/project_Demo/scene_editor/scene_editor
+  ./build/rgb888/index16/project_Demo/scene_editor/scene_editor
 ```
 
 ## 本阶段暴露并修复的引擎问题

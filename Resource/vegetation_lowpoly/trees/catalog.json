@@ -1,0 +1,932 @@
+[
+  {
+    "asset": "birch_01",
+    "category": "trees",
+    "source_object": "birchtree1",
+    "source_collections": [
+      "Collection 1"
+    ],
+    "mesh": "birch_01.mesh",
+    "material": "birch_01.material",
+    "source_triangles": 19604,
+    "triangles": 3128,
+    "vertices": 4897,
+    "parts": [
+      {
+        "material": "vg153fae3f2e77",
+        "vertices": 1159,
+        "triangles": 650
+      },
+      {
+        "material": "vg3f116209b679",
+        "vertices": 2058,
+        "triangles": 1470
+      },
+      {
+        "material": "vgbf1c4babaedc",
+        "vertices": 1680,
+        "triangles": 1008
+      }
+    ],
+    "bounds_min": [
+      -2.366741733539242,
+      0.0,
+      -2.768936810671394
+    ],
+    "bounds_max": [
+      2.957797246204876,
+      9.553375737307128,
+      2.5340071549207615
+    ],
+    "origin_in_blender_world": [
+      46.0,
+      0.0,
+      -0.0015624761581420898
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vg153fae3f2e77": {
+        "source_material": "bark_birchtree1",
+        "color": "bark_birchtree1_color.png",
+        "alpha": null,
+        "resolution": 2048,
+        "baked_on_original_mesh": true,
+        "source_object": "birchtree1",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vg3f116209b679": {
+        "source_material": "M_treeleaves2_birchtree_hi",
+        "color": "M_treeleaves2_birchtree_hi_color.png",
+        "alpha": "M_treeleaves2_birchtree_hi_alpha.png",
+        "source_image": "Branches_single.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vgbf1c4babaedc": {
+        "source_material": "M_treeleaves2_birchtree",
+        "color": "M_treeleaves2_birchtree_color.png",
+        "alpha": "M_treeleaves2_birchtree_alpha.png",
+        "source_image": "Branches1.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 0,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "source_vertex_range": [
+      0,
+      19898
+    ],
+    "split_validation": "Original contiguous mesh blocks; verified no edge or triangle crosses block boundaries.",
+    "files_sha256": {
+      "birch_01.material": "9d3bd4007152e7341a0d05c2f42d1abf59711ca63c7a699b91461344e72ff5bf",
+      "birch_01.mesh": "6db4dcb8d5d9ff18c94e53ecd788eae670daeb81ece8cfc3e886a95ac769a470",
+      "preview.png": "1c146c872ef72a29a42ad45d6d5041575e28e0e9a28310fc5e27ccaa860bb984",
+      "preview_1.png": "e7068d1de9466924489244d58d449eef24d3ffe269b2643fef3cc25c645f5d73",
+      "preview_2.png": "feeb70d34bfa39047b5e836e4b6f7aa491cd24a9083b68ac79feb60587f192e7",
+      "vg153fae3f2e77.bmp": "3d69b223ef74962603b33cdd1c97ae053b08107862e5f1d4045a6011a4683b83",
+      "vg3f116209b679.bmp": "fcf50d2796bea742aa36d78db81ba3924a84e30466e48895a7d310f38f4b4af4",
+      "vgbf1c4babaedc.bmp": "00003d93b9c332c511820752e7a7d02c2aef700e1fa6cb394312edfbca2274ee"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 469869,
+    "original_export_triangles": 347454,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "Simplified trunk and branches; fitted coarse foliage cards remove internal source grids, then spatial coverage sampling and color dilation.",
+      "triangle_limit_including_backfaces": 5000,
+      "target_triangles": 4400,
+      "source_foliage_clusters": 2368,
+      "retained_foliage_clusters": 460,
+      "foliage_scale": 1.1172173343541436,
+      "bark_triangles": 650,
+      "texture_max_dimension": 256,
+      "vertex_limit_including_seams_and_backfaces": 5000,
+      "previous_lowpoly_vertices": 7538,
+      "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes.",
+      "leaf_clusters_before_vertex_limit": 460,
+      "leaf_clusters_after_vertex_limit": 315,
+      "additional_leaf_scale": 1.1307934762210263
+    },
+    "asset_bytes": 766384,
+    "original_asset_bytes": 39142845
+  },
+  {
+    "asset": "birch_02",
+    "category": "trees",
+    "source_object": "birchtree1",
+    "source_collections": [
+      "Collection 1"
+    ],
+    "mesh": "birch_02.mesh",
+    "material": "birch_02.material",
+    "source_triangles": 22332,
+    "triangles": 2630,
+    "vertices": 4899,
+    "parts": [
+      {
+        "material": "vg153fae3f2e77",
+        "vertices": 1159,
+        "triangles": 650
+      },
+      {
+        "material": "vg3f116209b679",
+        "vertices": 3080,
+        "triangles": 1540
+      },
+      {
+        "material": "vgbf1c4babaedc",
+        "vertices": 660,
+        "triangles": 440
+      }
+    ],
+    "bounds_min": [
+      -2.135696033493274,
+      -8.283895880367709e-08,
+      -2.4038034248709597
+    ],
+    "bounds_max": [
+      1.8713193221678046,
+      8.077336153416356,
+      2.3503077987827505
+    ],
+    "origin_in_blender_world": [
+      51.0,
+      0.0,
+      -0.002134472131729126
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vg153fae3f2e77": {
+        "source_material": "bark_birchtree1",
+        "color": "bark_birchtree1_color.png",
+        "alpha": null,
+        "resolution": 2048,
+        "baked_on_original_mesh": true,
+        "source_object": "birchtree1",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vg3f116209b679": {
+        "source_material": "M_treeleaves2_birchtree_hi",
+        "color": "M_treeleaves2_birchtree_hi_color.png",
+        "alpha": "M_treeleaves2_birchtree_hi_alpha.png",
+        "source_image": "Branches_single.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vgbf1c4babaedc": {
+        "source_material": "M_treeleaves2_birchtree",
+        "color": "M_treeleaves2_birchtree_color.png",
+        "alpha": "M_treeleaves2_birchtree_alpha.png",
+        "source_image": "Branches1.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 0,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "source_vertex_range": [
+      45869,
+      72485
+    ],
+    "split_validation": "Original contiguous mesh blocks; verified no edge or triangle crosses block boundaries.",
+    "files_sha256": {
+      "birch_02.material": "9d3bd4007152e7341a0d05c2f42d1abf59711ca63c7a699b91461344e72ff5bf",
+      "birch_02.mesh": "d6eb72dd0fa5b3be9cb371aade2b615e460d48fda4fc0c616b0e2e6a588ca7d5",
+      "preview.png": "94d7c08a1db1d1cbcfe3a53e1e644e4b4e142f05a8b8233d450aee4b5ce7f999",
+      "preview_1.png": "26d54435729a5fd36cba22e96cf273dba62a02a435b62b24c26d5f59d2d3df74",
+      "preview_2.png": "334a368650f7b4d6f04ae474eab38317e945e54549c077cee2d92e575c57e15b",
+      "vg153fae3f2e77.bmp": "3d69b223ef74962603b33cdd1c97ae053b08107862e5f1d4045a6011a4683b83",
+      "vg3f116209b679.bmp": "fcf50d2796bea742aa36d78db81ba3924a84e30466e48895a7d310f38f4b4af4",
+      "vgbf1c4babaedc.bmp": "00003d93b9c332c511820752e7a7d02c2aef700e1fa6cb394312edfbca2274ee"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 325811,
+    "original_export_triangles": 269642,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "Simplified trunk and branches; fitted coarse foliage cards remove internal source grids, then spatial coverage sampling and color dilation.",
+      "triangle_limit_including_backfaces": 5000,
+      "target_triangles": 4400,
+      "source_foliage_clusters": 4292,
+      "retained_foliage_clusters": 864,
+      "foliage_scale": 1.2901627779255065,
+      "bark_triangles": 650,
+      "texture_max_dimension": 256,
+      "vertex_limit_including_seams_and_backfaces": 5000,
+      "previous_lowpoly_vertices": 9154,
+      "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes.",
+      "leaf_clusters_before_vertex_limit": 864,
+      "leaf_clusters_after_vertex_limit": 440,
+      "additional_leaf_scale": 1.1822341356251829
+    },
+    "asset_bytes": 763460,
+    "original_asset_bytes": 34065721
+  },
+  {
+    "asset": "birch_03",
+    "category": "trees",
+    "source_object": "birchtree1",
+    "source_collections": [
+      "Collection 1"
+    ],
+    "mesh": "birch_03.mesh",
+    "material": "birch_03.material",
+    "source_triangles": 21620,
+    "triangles": 2661,
+    "vertices": 4895,
+    "parts": [
+      {
+        "material": "vg153fae3f2e77",
+        "vertices": 1111,
+        "triangles": 649
+      },
+      {
+        "material": "vg3f116209b679",
+        "vertices": 3064,
+        "triangles": 1532
+      },
+      {
+        "material": "vgedaebabee2ac",
+        "vertices": 720,
+        "triangles": 480
+      }
+    ],
+    "bounds_min": [
+      -2.1506449926512814,
+      0.0,
+      -2.430100923623686
+    ],
+    "bounds_max": [
+      2.027262008190155,
+      7.4768827460537315,
+      1.7858466058969498
+    ],
+    "origin_in_blender_world": [
+      55.0,
+      0.0,
+      -0.009848356246948242
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vg153fae3f2e77": {
+        "source_material": "bark_birchtree1",
+        "color": "bark_birchtree1_color.png",
+        "alpha": null,
+        "resolution": 2048,
+        "baked_on_original_mesh": true,
+        "source_object": "birchtree1",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vg3f116209b679": {
+        "source_material": "M_treeleaves2_birchtree_hi",
+        "color": "M_treeleaves2_birchtree_hi_color.png",
+        "alpha": "M_treeleaves2_birchtree_hi_alpha.png",
+        "source_image": "Branches_single.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vgedaebabee2ac": {
+        "source_material": "M_treeleaves2_birchtree.001",
+        "color": "M_treeleaves2_birchtree.001_color.png",
+        "alpha": "M_treeleaves2_birchtree.001_alpha.png",
+        "source_image": "Branches1.png.001",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 0,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "source_vertex_range": [
+      19898,
+      45869
+    ],
+    "split_validation": "Original contiguous mesh blocks; verified no edge or triangle crosses block boundaries.",
+    "files_sha256": {
+      "birch_03.material": "61f7f4eb78d93ab5031547515a86905a4fe3979c1f2f4e123cdc26eef3d32efa",
+      "birch_03.mesh": "20ba32c2932db57f1d9a5f8e831770b2fea556304c794d5f92cbe68d3957cbb2",
+      "preview.png": "f718edb0d6f25db7f98fcc71022b3ef8071f2e2015f894e13def40dba82c9cb3",
+      "preview_1.png": "76c88b369fc04a8cbecd3341c9eaf4fea235191ebef398fe397c43c0ed54646b",
+      "preview_2.png": "b18d96946e880a5471335686550115aefe22376ee74cbf438105dd3cd7d81e68",
+      "vg153fae3f2e77.bmp": "3d69b223ef74962603b33cdd1c97ae053b08107862e5f1d4045a6011a4683b83",
+      "vg3f116209b679.bmp": "fcf50d2796bea742aa36d78db81ba3924a84e30466e48895a7d310f38f4b4af4",
+      "vgedaebabee2ac.bmp": "00003d93b9c332c511820752e7a7d02c2aef700e1fa6cb394312edfbca2274ee"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 279262,
+    "original_export_triangles": 223784,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "Simplified trunk and branches; fitted coarse foliage cards remove internal source grids, then spatial coverage sampling and color dilation.",
+      "triangle_limit_including_backfaces": 5000,
+      "target_triangles": 4400,
+      "source_foliage_clusters": 4243,
+      "retained_foliage_clusters": 870,
+      "foliage_scale": 1.1017409574777455,
+      "bark_triangles": 649,
+      "texture_max_dimension": 256,
+      "vertex_limit_including_seams_and_backfaces": 5000,
+      "previous_lowpoly_vertices": 9175,
+      "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes.",
+      "leaf_clusters_before_vertex_limit": 870,
+      "leaf_clusters_after_vertex_limit": 443,
+      "additional_leaf_scale": 1.1031492758461194
+    },
+    "asset_bytes": 763518,
+    "original_asset_bytes": 32301005
+  },
+  {
+    "asset": "birch_branch_cluster",
+    "category": "trees",
+    "source_object": "leaves_birch",
+    "source_collections": [
+      "Collection 3"
+    ],
+    "mesh": "birch_branch_cluster.mesh",
+    "material": "birch_branch_cluster.material",
+    "source_triangles": 2,
+    "triangles": 180,
+    "vertices": 540,
+    "parts": [
+      {
+        "material": "vgabcf394bfaef",
+        "vertices": 540,
+        "triangles": 180
+      }
+    ],
+    "bounds_min": [
+      -0.4322790801525116,
+      1.686452222315893e-08,
+      -0.4526215195655823
+    ],
+    "bounds_max": [
+      0.4831353724002838,
+      2.933120129000599e-07,
+      0.34073755145072937
+    ],
+    "origin_in_blender_world": [
+      2.247227907180786,
+      -1.9515963196754456,
+      -1.4740919596079038e-07
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vgabcf394bfaef": {
+        "source_material": "M_treeleaves2_birchtree.002",
+        "color": "M_treeleaves2_birchtree.002_color.png",
+        "alpha": "M_treeleaves2_birchtree.002_alpha.png",
+        "source_image": "Branches1.png.002",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          128,
+          128
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 0,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "files_sha256": {
+      "birch_branch_cluster.material": "11197a05bbbf7b896f732de45ad303f69d04097cde680cea3d16f8d50b406e22",
+      "birch_branch_cluster.mesh": "ba34fcd522738f3304255e8e588173f2b8535051bf9748d82066c7da083fba58",
+      "preview.png": "ca0028a5a7a7bc613167fb6788675892e87cb72500117f096c19f986bed6986a",
+      "preview_1.png": "6bb76440d0260a697976486cdef7a24dc062d2cbaa4e5a65cefce8724ce02248",
+      "preview_2.png": "97301aff23b58ac27a16882c9e9adbd4dc52c8f5c4c06f5f53393846dc406af7",
+      "vgabcf394bfaef.bmp": "bdfc0a8f8559507de0db9a2b28df2dac0249b76c05ffb909a41c77068ec3787a"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 764,
+    "original_export_triangles": 516,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "UV-preserving single-sided collapse, then restore backfaces.",
+      "triangle_limit_including_backfaces": 5000,
+      "texture_max_dimension": 128,
+      "vertex_limit_including_seams_and_backfaces": 5000
+    },
+    "asset_bytes": 67926,
+    "original_asset_bytes": 3173686
+  },
+  {
+    "asset": "birch_branch_large",
+    "category": "trees",
+    "source_object": "leaves_birch.002",
+    "source_collections": [
+      "Collection 3"
+    ],
+    "mesh": "birch_branch_large.mesh",
+    "material": "birch_branch_large.material",
+    "source_triangles": 2,
+    "triangles": 180,
+    "vertices": 540,
+    "parts": [
+      {
+        "material": "vgbf1c4babaedc",
+        "vertices": 540,
+        "triangles": 180
+      }
+    ],
+    "bounds_min": [
+      -0.4322790801525116,
+      1.686452222315893e-08,
+      -0.4526216387748718
+    ],
+    "bounds_max": [
+      0.4831353724002838,
+      2.933120129000599e-07,
+      0.34073764085769653
+    ],
+    "origin_in_blender_world": [
+      5.283105850219727,
+      -1.1716859936714172,
+      -1.4740919596079038e-07
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vgbf1c4babaedc": {
+        "source_material": "M_treeleaves2_birchtree",
+        "color": "M_treeleaves2_birchtree_color.png",
+        "alpha": "M_treeleaves2_birchtree_alpha.png",
+        "source_image": "Branches1.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          128,
+          128
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 0,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "files_sha256": {
+      "birch_branch_large.material": "96785a26e2556fa3b7dd7f476fbd52bdd2b96c1eb2980455448f9e6ddcabe7b9",
+      "birch_branch_large.mesh": "a746278f32a0766b9c7c1e3506ab4f4b39c201e5ab4e5488e196440fba339f0b",
+      "preview.png": "f485e07f64a76e6759ec67ed67343fbb551e71b878c03f1c1ce02606e753dc13",
+      "preview_1.png": "9c4bbaf15708c508e24a3061da0b47c69c9ecd6efa88142695656623c675cbf3",
+      "preview_2.png": "eb4fd09958b1eb2b72f99a49078ec15aeb7abf371c3d03df32d1fc2427abfff6",
+      "vgbf1c4babaedc.bmp": "bdfc0a8f8559507de0db9a2b28df2dac0249b76c05ffb909a41c77068ec3787a"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 764,
+    "original_export_triangles": 516,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "UV-preserving single-sided collapse, then restore backfaces.",
+      "triangle_limit_including_backfaces": 5000,
+      "texture_max_dimension": 128,
+      "vertex_limit_including_seams_and_backfaces": 5000
+    },
+    "asset_bytes": 67926,
+    "original_asset_bytes": 3173686
+  },
+  {
+    "asset": "birch_leaf_single",
+    "category": "trees",
+    "source_object": "leaves_birch.003",
+    "source_collections": [
+      "Collection 3"
+    ],
+    "mesh": "birch_leaf_single.mesh",
+    "material": "birch_leaf_single.material",
+    "source_triangles": 2,
+    "triangles": 24,
+    "vertices": 72,
+    "parts": [
+      {
+        "material": "vg3f116209b679",
+        "vertices": 72,
+        "triangles": 24
+      }
+    ],
+    "bounds_min": [
+      -0.467878520488739,
+      6.1137868101468484e-09,
+      -0.4676985740661621
+    ],
+    "bounds_max": [
+      0.47804975509643555,
+      2.917761889875692e-07,
+      0.437364786863327
+    ],
+    "origin_in_blender_world": [
+      6.683496952056885,
+      -1.1492887735366821,
+      -9.130391731559939e-08
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vg3f116209b679": {
+        "source_material": "M_treeleaves2_birchtree_hi",
+        "color": "M_treeleaves2_birchtree_hi_color.png",
+        "alpha": "M_treeleaves2_birchtree_hi_alpha.png",
+        "source_image": "Branches_single.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          128,
+          128
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 0,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "files_sha256": {
+      "birch_leaf_single.material": "f1bb001360f38458fdd3efa711aefdb6399802da51e9f82d6bf28bc0808d570c",
+      "birch_leaf_single.mesh": "7d687a37444a88bfa2ac32f45ded657431196fd841f683dfe617705548828d64",
+      "preview.png": "68bbf6744b61e25cd837bc5b684cb459580c71d680fe1d134f0fdab99ac2b466",
+      "preview_1.png": "56c4ad52275f510c7a8f0698d0a3f5ab5dc841bae287a56fa3b9a777f49a4d07",
+      "preview_2.png": "eda11b9365fc059e336bd422049d8e44f0ac6f08d9a5da3f2572bbffd9608a8c",
+      "vg3f116209b679.bmp": "5c7c93b238b4ff6e4f3ecf5f1a684293cae7c28ca6fc1b59968d4dd130737e0b"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 52,
+    "original_export_triangles": 48,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "UV-preserving single-sided collapse, then restore backfaces.",
+      "triangle_limit_including_backfaces": 5000,
+      "texture_max_dimension": 128,
+      "vertex_limit_including_seams_and_backfaces": 5000
+    },
+    "asset_bytes": 52014,
+    "original_asset_bytes": 3148094
+  },
+  {
+    "asset": "oak_01",
+    "category": "trees",
+    "source_object": "oaktree1",
+    "source_collections": [
+      "Collection 1"
+    ],
+    "mesh": "oak_01.mesh",
+    "material": "oak_01.material",
+    "source_triangles": 20093,
+    "triangles": 2937,
+    "vertices": 4898,
+    "parts": [
+      {
+        "material": "vg82a87f606b1b",
+        "vertices": 1466,
+        "triangles": 649
+      },
+      {
+        "material": "vgdedae398ff90",
+        "vertices": 3432,
+        "triangles": 2288
+      }
+    ],
+    "bounds_min": [
+      -4.3544217348098755,
+      -0.004383501131087542,
+      -5.170324472089609
+    ],
+    "bounds_max": [
+      5.725160712003707,
+      10.147150768587986,
+      5.4267103994886075
+    ],
+    "origin_in_blender_world": [
+      19.0,
+      0.0,
+      -0.03260605409741402
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vg82a87f606b1b": {
+        "source_material": "bark_oaktree1",
+        "color": "bark_oaktree1_color.png",
+        "alpha": null,
+        "resolution": 2048,
+        "baked_on_original_mesh": true,
+        "source_object": "oaktree1",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vgdedae398ff90": {
+        "source_material": "M_treeleaves1",
+        "color": "M_treeleaves1_color.png",
+        "alpha": "M_treeleaves1_alpha.png",
+        "source_image": "Branches_MAPLE.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 0,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "files_sha256": {
+      "oak_01.material": "2644daa1224578f12039b6741ff14a90216bb6032fadef2f2dcbdafd422da547",
+      "oak_01.mesh": "95a93f5ad23a546cadbc7d2f70fbaf9590cf6ae27d1aba1fccd883de864d4faa",
+      "preview.png": "aa65dfa44744dfc741a9d68e7c94857c18ccb67fe5d1d2cc672d11a5a6e84469",
+      "preview_1.png": "d370ea0396071fbc503f014376f406bdddc162de2f8a0e13a6705e5106935e96",
+      "preview_2.png": "e60a8e8e0dc4acacd0cfd10e2a0bc7385138eeb90af418d940115355e34f21ea",
+      "vg82a87f606b1b.bmp": "d2c84190ca78435b737163d9d36025d66162491dfb6739b8094a7f90ee3eeae9",
+      "vgdedae398ff90.bmp": "6f37c81bea7cf7d979e60fc221afd422bf27bd792b104ddc2857feeed3a3f3a4"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 1041995,
+    "original_export_triangles": 777837,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "Simplified trunk and branches; fitted coarse foliage cards remove internal source grids, then spatial coverage sampling and color dilation.",
+      "triangle_limit_including_backfaces": 5000,
+      "target_triangles": 4400,
+      "source_foliage_clusters": 3832,
+      "retained_foliage_clusters": 468,
+      "foliage_scale": 1.8,
+      "bark_triangles": 649,
+      "texture_max_dimension": 256,
+      "vertex_limit_including_seams_and_backfaces": 5000,
+      "previous_lowpoly_vertices": 7563,
+      "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes.",
+      "leaf_clusters_before_vertex_limit": 468,
+      "leaf_clusters_after_vertex_limit": 286,
+      "additional_leaf_scale": 1.2796003670589722
+    },
+    "asset_bytes": 568325,
+    "original_asset_bytes": 56888430
+  },
+  {
+    "asset": "oak_02",
+    "category": "trees",
+    "source_object": "oaktree2",
+    "source_collections": [
+      "Collection 1"
+    ],
+    "mesh": "oak_02.mesh",
+    "material": "oak_02.material",
+    "source_triangles": 22120,
+    "triangles": 3009,
+    "vertices": 4891,
+    "parts": [
+      {
+        "material": "vgd47e0fcffc55",
+        "vertices": 1351,
+        "triangles": 649
+      },
+      {
+        "material": "vgdedae398ff90",
+        "vertices": 3540,
+        "triangles": 2360
+      }
+    ],
+    "bounds_min": [
+      -4.1012933651606245,
+      0.0,
+      -4.826152220368385
+    ],
+    "bounds_max": [
+      3.9480632543563843,
+      10.212007741133371,
+      3.7075328727563224
+    ],
+    "origin_in_blender_world": [
+      29.0,
+      0.0,
+      -0.005270957946777344
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vgd47e0fcffc55": {
+        "source_material": "bark_oaktree2",
+        "color": "bark_oaktree2_color.png",
+        "alpha": null,
+        "resolution": 2048,
+        "baked_on_original_mesh": true,
+        "source_object": "oaktree2",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vgdedae398ff90": {
+        "source_material": "M_treeleaves1",
+        "color": "M_treeleaves1_color.png",
+        "alpha": "M_treeleaves1_alpha.png",
+        "source_image": "Branches_MAPLE.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 1919,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "files_sha256": {
+      "oak_02.material": "91943925157dcfd62443508982c6fac2d4a6296c5091fc88d9bcc1bc031b32af",
+      "oak_02.mesh": "eb6cb79a319f4d786d0a0fadd674dfece3233c392522df43466cc2e6c4d56851",
+      "preview.png": "dcd76b2ec4439e85d911482e91ace9a6e8a7c7cdf91fb2d68227639eb7a575ea",
+      "preview_1.png": "6d2445d997d97e25dece9df5ec744c6d16de535e7b28804761b0ab67ee07e640",
+      "preview_2.png": "454f34e2a11b789c9d2c2c6c7b25d22c9d3844f261c48d166e830c1c3addba93",
+      "vgd47e0fcffc55.bmp": "bf02b97f7e9488cb781b3c96724c1aaaeb2a3b32043a56d02e163ddb07a2e48b",
+      "vgdedae398ff90.bmp": "6f37c81bea7cf7d979e60fc221afd422bf27bd792b104ddc2857feeed3a3f3a4"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 613238,
+    "original_export_triangles": 443620,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "Simplified trunk and branches; fitted coarse foliage cards remove internal source grids, then spatial coverage sampling and color dilation.",
+      "triangle_limit_including_backfaces": 5000,
+      "target_triangles": 4400,
+      "source_foliage_clusters": 1919,
+      "retained_foliage_clusters": 468,
+      "foliage_scale": 1.6199609424821046,
+      "bark_triangles": 649,
+      "texture_max_dimension": 256,
+      "vertex_limit_including_seams_and_backfaces": 5000,
+      "previous_lowpoly_vertices": 7563,
+      "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes.",
+      "leaf_clusters_before_vertex_limit": 468,
+      "leaf_clusters_after_vertex_limit": 295,
+      "additional_leaf_scale": 1.2597911752014523
+    },
+    "asset_bytes": 568533,
+    "original_asset_bytes": 41161980
+  },
+  {
+    "asset": "oak_03",
+    "category": "trees",
+    "source_object": "oaktree3",
+    "source_collections": [
+      "Collection 1"
+    ],
+    "mesh": "oak_03.mesh",
+    "material": "oak_03.material",
+    "source_triangles": 59295,
+    "triangles": 2970,
+    "vertices": 4894,
+    "parts": [
+      {
+        "material": "vg99b5a55450b4",
+        "vertices": 1414,
+        "triangles": 650
+      },
+      {
+        "material": "vgdedae398ff90",
+        "vertices": 3480,
+        "triangles": 2320
+      }
+    ],
+    "bounds_min": [
+      -5.496248086293538,
+      0.000629389367531985,
+      -5.492658331990242
+    ],
+    "bounds_max": [
+      4.814875801404317,
+      11.147062331438065,
+      5.477281192938487
+    ],
+    "origin_in_blender_world": [
+      39.0,
+      0.0,
+      0.0003641843795776367
+    ],
+    "coordinates": "GRE Y-up: (x,z,-y), source scale retained, base at y=0",
+    "skeleton": null,
+    "animation": null,
+    "alpha": "Simplified opaque silhouette geometry with explicit reverse faces; no runtime alpha support required.",
+    "material_baking": "Diffuse only; bark baked on original mesh with named UVs and vertex masks; foliage color evaluated on UV plane. Cycles gloss/translucency and per-object random variation not preserved.",
+    "source_archive": "Grass and trees system.zip",
+    "materials": {
+      "vg99b5a55450b4": {
+        "source_material": "bark_oaktree3",
+        "color": "bark_oaktree3_color.png",
+        "alpha": null,
+        "resolution": 2048,
+        "baked_on_original_mesh": true,
+        "source_object": "oaktree3",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      },
+      "vgdedae398ff90": {
+        "source_material": "M_treeleaves1",
+        "color": "M_treeleaves1_color.png",
+        "alpha": "M_treeleaves1_alpha.png",
+        "source_image": "Branches_MAPLE.png",
+        "resolution": 1024,
+        "approximation": "Diffuse color evaluated on UV plane; object/procedural variation is fixed, Cycles gloss/translucency are not reproduced.",
+        "exported_texture_size": [
+          256,
+          256
+        ]
+      }
+    },
+    "discarded_transparent_source_triangles": 4967,
+    "source_archive_sha256": "79fa4713917a88d2177fdb39d88d5ec33feab7e8d9dc2bb4cd6f570f28025327",
+    "files_sha256": {
+      "oak_03.material": "9ba523948b27d4a0d2201813cbe8fcb532987c4e42185f757ea08a0a590e7166",
+      "oak_03.mesh": "a80a12e8a2d35352997028f3fe48e0d372a140bb379ebfde4164de77837f298d",
+      "preview.png": "2becd5d53ec24eb77f15b131b26ae2e20848ea22e8c1144ba4604b7969c147b3",
+      "preview_1.png": "189c20e74e76257b063cfc1691aa6734438f41131f277a1a800d1ca85d0d768a",
+      "preview_2.png": "df56f8d739c729807db43c6861a5a0ba3873ee66009e679fba4e522427092caf",
+      "vg99b5a55450b4.bmp": "fc189a0d724b0ba6305ddcea3956ed596f6ac83d92575a067789dcfade7376ae",
+      "vgdedae398ff90.bmp": "6f37c81bea7cf7d979e60fc221afd422bf27bd792b104ddc2857feeed3a3f3a4"
+    },
+    "verification": "PASS native GRE load, exact vertex/triangle/submesh counts, finite positions, unit normals, valid UVs/indices/materials, vertex and triangle budgets summed across all submeshes including reverse faces and UV/normal splits, and 3 rendered views.",
+    "original_export_vertices": 1453182,
+    "original_export_triangles": 1127475,
+    "lod": "lowpoly",
+    "reduction": {
+      "method": "Simplified trunk and branches; fitted coarse foliage cards remove internal source grids, then spatial coverage sampling and color dilation.",
+      "triangle_limit_including_backfaces": 5000,
+      "target_triangles": 4400,
+      "source_foliage_clusters": 4967,
+      "retained_foliage_clusters": 468,
+      "foliage_scale": 1.8,
+      "bark_triangles": 650,
+      "texture_max_dimension": 256,
+      "vertex_limit_including_seams_and_backfaces": 5000,
+      "previous_lowpoly_vertices": 7566,
+      "vertex_optimization": "Merge compatible coincident vertices within materials while preserving UV seams and opposing normals; budget the sum over all submeshes.",
+      "leaf_clusters_before_vertex_limit": 468,
+      "leaf_clusters_after_vertex_limit": 290,
+      "additional_leaf_scale": 1.2709737150434386
+    },
+    "asset_bytes": 568395,
+    "original_asset_bytes": 72145166
+  }
+]

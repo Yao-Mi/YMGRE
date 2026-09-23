@@ -10,21 +10,21 @@
 构建与运行：
 
 ```bash
-cmake -S project_Demo/scene_roaming -B build/project_Demo/scene_roaming
-cmake --build build/project_Demo/scene_roaming -j
-./build/project_Demo/scene_roaming/scene_roaming
+cmake -S project_Demo/scene_roaming -B build/rgb888/index16/project_Demo/scene_roaming
+cmake --build build/rgb888/index16/project_Demo/scene_roaming -j
+./build/rgb888/index16/project_Demo/scene_roaming/scene_roaming
 ```
 
 无头运行三帧：
 
 ```bash
-SDL_VIDEODRIVER=dummy YMGRE_MAX_FRAMES=3 ./build/project_Demo/scene_roaming/scene_roaming
+SDL_VIDEODRIVER=dummy YMGRE_MAX_FRAMES=3 ./build/rgb888/index16/project_Demo/scene_roaming/scene_roaming
 ```
 
 可选地把资源根目录作为第一个参数传入：
 
 ```bash
-./build/project_Demo/scene_roaming/scene_roaming /path/to/Resource
+./build/rgb888/index16/project_Demo/scene_roaming/scene_roaming /path/to/Resource
 ```
 
 程序会在场景初始化前检查关键 map 和 mesh。资源根目录无效时会输出错误并以非零状态退出。
