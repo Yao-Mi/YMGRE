@@ -99,6 +99,7 @@ void YMGRE_PBR_FillRows(GRE_Vertex4d_wN vertices,GRE_Polygon4d poly,GRE_Material
     float den=(b->base.pos.y-c->base.pos.y)*(a->base.pos.x-c->base.pos.x)+(c->base.pos.x-b->base.pos.x)*(a->base.pos.y-c->base.pos.y);
     if(fabsf(den)<1e-6f)return;
     unsigned lod=YMGRE_Material_OpacityLOD(material,a,b,c,den);
+    YMGRE_ColorMipView colorMip=YMGRE_Material_ColorMipForTriangle(material,a,b,c);
     GRE_PBRVec pa=pbr_camera_point(cam,a),pb=pbr_camera_point(cam,b),pc=pbr_camera_point(cam,c);
     GRE_PBRVec e1=pbr_sub(pb,pa),e2=pbr_sub(pc,pa);
     float du1=b->base.u-a->base.u,dv1=b->base.v-a->base.v,du2=c->base.u-a->base.u,dv2=c->base.v-a->base.v;
@@ -147,7 +148,7 @@ void YMGRE_PBR_FillRows(GRE_Vertex4d_wN vertices,GRE_Polygon4d poly,GRE_Material
             normal=pbr_norm(pbr_add(pbr_add(pbr_scale(t,nm.x),pbr_scale(bt,nm.y)),pbr_scale(normal,nm.z)));
         }
         GRE_PBRVec pos=pbr_add(pbr_add(pbr_scale(pa,wa),pbr_scale(pb,wb)),pbr_scale(pc,wc));
-        GRE_PBRVec base=material->pixel?pbr_sample(material->pixel,material->width,material->height,u,v,decode):(GRE_PBRVec){1,1,1};
+        GRE_PBRVec base=colorMip.pixels?pbr_sample(colorMip.pixels,colorMip.width,colorMip.height,u,v,decode):(GRE_PBRVec){1,1,1};
         if(tinted){
         base.x*=material->diffuse.R/255.f*(wa*a->color.R+wb*b->color.R+wc*c->color.R)/255.f;
         base.y*=material->diffuse.G/255.f*(wa*a->color.G+wb*b->color.G+wc*c->color.G)/255.f;

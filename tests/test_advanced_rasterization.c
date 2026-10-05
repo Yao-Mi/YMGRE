@@ -1,3 +1,4 @@
+#include "YMGRE_Material.h"
 #include "YMGRE_TriangleRaster.h"
 #include "YMGRE_Camera.h"
 #include "YMGRE_Creat.h"
@@ -56,7 +57,7 @@ static void renderHandedness(GRE_FrameBuffer frame, float32 w0, float32 w1, floa
 	material->width = material->height = 1;
 	material->pixel = GRE_ImageBuff_Malloc(sizeof(GRErgb24));
 	material->pixel[0] = (GRErgb24){ 255, 255, 255 };
-	material->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+	YMGRE_Material_EnsureAdvanced(material);
 	material->advanced->normalWidth = material->advanced->normalHeight = 1;
 	material->advanced->normalPixel = GRE_ImageBuff_Malloc(sizeof(GRErgb24));
 	material->advanced->normalPixel[0] = (GRErgb24){ 128, 230, 200 };

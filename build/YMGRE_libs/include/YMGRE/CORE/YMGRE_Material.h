@@ -23,6 +23,11 @@ static inline GRErgb24 getPixel(GRE_Material mat, float u, float v)
 
 /* Copies input pixels. Replacing maps releases the previous owned map/mips. */
 GRE_MaterialAdvanced YMGRE_Material_EnsureAdvanced(GRE_Material material);
+/* Build optional RGB mip levels from material->pixel after loading it.
+   Level 0 remains caller-owned by the material; rebuilding is transactional.
+   Call ClearColorMips before replacing/mutating the base texture, then rebuild. */
+int YMGRE_Material_BuildColorMips(GRE_Material material);
+void YMGRE_Material_ClearColorMips(GRE_Material material);
 #if YMGRE_ENABLE_TRANSPARENCY
 int YMGRE_Material_SetOpacity(GRE_Material material, const uint8* pixels, uint16 width, uint16 height, int mipmaps);
 int YMGRE_Material_LoadOpacityBMP(GRE_Material material,const char* path,int mipmaps);

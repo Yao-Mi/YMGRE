@@ -22,8 +22,8 @@ int YMGRE_Color_BeginFrame(GRE_Camera4d cam,GRE_RenderWorkspace ws,GRErgb24 back
  size_t count=pixels*3;
  if(count>ws->linearCapacity){
   if(!ws->ownsMemory)return 0;
-  float32* data=GRE_malloc1(count*sizeof(float32));if(!data)return 0;
-  GRE_free1(ws->linearColor);ws->linearColor=data;ws->linearCapacity=count;
+  float32* data=GRE_RenderBuff_Malloc(count*sizeof(float32));if(!data)return 0;
+  GRE_RenderBuff_Free(ws->linearColor);ws->linearColor=data;ws->linearCapacity=count;
  }
  if(!ws->linearColor)return 0;
  cam->linearColor=ws->linearColor;

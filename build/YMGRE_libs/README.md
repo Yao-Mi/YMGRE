@@ -122,8 +122,12 @@ YMGRE 和 YMGUI 分开发布。准备独立的 YMGUI SDK 后：
 
 ## 可裁剪材质功能
 
-全功能 SDK 包含透明、透明 Mip、逐像素 PBR、线性色彩和可选多核调度。源码仓库运行 `./sdk/build.sh --minimal` 可生成五项材质能力和 PNG/JPEG 解码均关闭的 SDK，仍输出到 `build/YMGRE_libs`。源码 CMake 可通过 `YMGRE_ENABLE_TRANSPARENCY`、`YMGRE_ENABLE_OPACITY_MIPMAP`、`YMGRE_ENABLE_PBR`、`YMGRE_ENABLE_LINEAR_COLOR`、`YMGRE_ENABLE_RASTER_DISPATCH` 分别配置。预编译包的具体能力记录在 `BUILD_INFO.json`，CMake 会传播正确的公共宏并拒绝不一致的配置。更新时须一起替换头文件和库、重新编译应用。
+全功能 SDK 包含透明、透明 Mip、逐像素 PBR、线性色彩和可选多核调度。颜色纹理可在加载后调用 `YMGRE_Material_BuildColorMips` 显式生成 Mip；未调用时保持原图采样。源码仓库运行 `./sdk/build.sh --minimal` 可生成五项材质能力和 PNG/JPEG 解码均关闭的 SDK，仍输出到 `build/YMGRE_libs`。源码 CMake 可通过 `YMGRE_ENABLE_TRANSPARENCY`、`YMGRE_ENABLE_OPACITY_MIPMAP`、`YMGRE_ENABLE_PBR`、`YMGRE_ENABLE_LINEAR_COLOR`、`YMGRE_ENABLE_RASTER_DISPATCH` 分别配置。预编译包的具体能力记录在 `BUILD_INFO.json`，CMake 会传播正确的公共宏并拒绝不一致的配置。更新时须一起替换头文件和库、重新编译应用。
 
 材质对比 demo 源码和独立 CMake 工程位于 `examples/girl_viewer`，链接完整 SDK，支持 T 切换单／多线程。大体积人物资源仅随源码仓库保存，使用 `--assets` 指向源码仓库的 `Resource/girl` 目录，详见该目录 README。
 
 完整 SDK 还支持 PNG/JPEG 贴图，需安装 libpng（含 zlib）及 libjpeg 的开发／运行依赖。CMake 自动传递依赖；手动链接需加 png、jpeg、z。`YMGRE_ENABLE_PNG`、`YMGRE_ENABLE_JPEG` 可独立裁剪，源码默认关闭，`--minimal` 同时关闭。详见 [图片加载说明](docs/image-loading.md)。
+
+## 移植优化兼容记录
+
+本包已同步连续清屏、裁剪快速判断、共享顶点光照、可见顶点与投影缓存、RGB565 光栅专用路径、连续索引整理和固定快慢内存分层。渲染缓存优先快内存、不足时回退慢内存；图像和几何数据使用慢内存，无需内存策略开关。预编译 SDK 的自动索引整理关闭；RGB565 默认启用快速光栅，RGB888 保留精确路径。应用必须与库使用匹配头文件和编译配置。适用条件与回归结果见 [移植优化兼容记录](docs/portable-optimizations.md)。

@@ -11,6 +11,8 @@ void YMGRE_Object_WorldToCameraTo(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Ve
 void YMGRE_VertexList_CameraToViewPlane(GRE_Vertex4d points, uint32 pointNum, float32 viewPlaneDis);//外部顶点缓存变换到视平面
 void YMGRE_VertexList_ViewPlaneToWindows(GRE_Vertex4d points, uint32 pointNum, GRE_Camera4d mycam);//外部顶点缓存变换到窗口
 void YMGRE_Object_WorldToCameraTo_wN(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Vertex4d_wN out);
+void YMGRE_Object_WorldToCameraMaskedTo(GRE_Object4d myobj, GRE_FMat4x4 camera,
+	GRE_Vertex4d_wN out, uint8 transformTangent, const uint8* active);
 void YMGRE_VertexList_CameraToViewPlane_wN(GRE_Vertex4d_wN points, uint32 pointNum, float32 viewPlaneDis);
 void YMGRE_VertexList_ViewPlaneToWindows_wN(GRE_Vertex4d_wN points, uint32 pointNum, GRE_Camera4d mycam);
 

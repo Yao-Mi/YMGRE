@@ -1,3 +1,4 @@
+#include "YMGRE_Material.h"
 #include "demo_host.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Camera.h"
@@ -40,7 +41,7 @@ static GRE_Material createPanelMaterial(const char* name, uint8 mapped)
 	material->pixel = GRE_ImageBuff_Malloc(64 * sizeof(GRErgb24));
 	for (int i = 0; i < 64; i++) material->pixel[i] = (GRErgb24){ 170, 185, 195 };
 	if (!mapped) return material;
-	material->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+	YMGRE_Material_EnsureAdvanced(material);
 	material->advanced->normalWidth = material->advanced->normalHeight = 64;
 	material->advanced->normalPixel = GRE_ImageBuff_Malloc(4096 * sizeof(GRErgb24));
 	for (uint16 y = 0; y < 64; y++) for (uint16 x = 0; x < 64; x++)

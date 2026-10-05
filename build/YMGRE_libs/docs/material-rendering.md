@@ -42,6 +42,7 @@ material cloth
   {
    diffuse 1 1 1
    cull_hardware none
+   color_mip on
    pbr_ior 1.45
    normal_strength 0.6
    pbr_parameters cloth_mrs.bmp
@@ -57,6 +58,7 @@ material cloth
 ```
 
 - `cull_hardware none` 为双面；`clockwise` 为原来的单面剔除。双面只改变剔除与背面法线，不复制网格。省略时单面。
+- `color_mip on` 为该材质生成并使用颜色 Mip；省略或写 `off` 时关闭。
 - `opacity_map` 使用原有 UV0。支持无压缩 8 位调色板、24 位 RGB、32 位 RGB BMP；使用红色／灰度通道，32 位输入的 alpha 字节不参与。内存与 Mip 均为每像素 1 字节。0 透明，255 不透明，中间值半透明。
 - `pbr_parameters` 的 R/G/B 分别为金属度、粗糙度、高光 IOR level；都是线性数据。加载该图会启用该材质的 PBR 标志。没有参数图时，可通过 API 启用 PBR，默认参数为 0 / 0.5 / 0.5。
 - `pbr_ior` 范围 1～3，默认 1.45；`normal_strength` 范围 0～4，默认 1。
@@ -64,6 +66,8 @@ material cloth
 - 材质调色、顶点／纹理透明权重、人物专用补发算法均未并入。
 
 程序生成透明图可用 `YMGRE_Material_SetOpacity(material, pixels, width, height, mipmaps)`。函数复制单通道输入，调用者仍持有原输入；材质拥有内部副本和 Mip，替换或 `YMGRE_Free_Material` 时释放。BMP 加载也有可检查返回值的 `YMGRE_Material_LoadOpacityBMP`。需要高级字段时用 `YMGRE_Material_EnsureAdvanced` 初始化。
+
+颜色纹理 Mip 为按材质显式启用：`.material` 内写 `color_mip on`，材质解析器会在颜色图和透明图加载完毕后生成颜色层；未写或写 `color_mip off` 时默认关闭。程序创建的材质仍可在设置或加载 `material->pixel`、`width`、`height` 后调用 `YMGRE_Material_BuildColorMips(material)`，返回 1 表示生成成功。`advanced->colorUseMip` 是使用标志，`advanced->colorMips` 是已生成的数据；手动生成成功会开启标志，清除数据会关闭标志。库在资源准备时逐级做 2×2 平均，渲染时按三角形的 UV 屏幕采样尺度选一层，每个片元仍只读取一个颜色 texel；不做两层插值。第 0 层仍是材质原图，高层由材质持有，在 `YMGRE_Material_ClearColorMips(material)` 或销毁材质时释放。替换或修改原图前须先调用 `YMGRE_Material_ClearColorMips`，加载完新图后重新构建；构建失败时原有有效层保留。指针或尺寸变化时，渲染会退回原图采样，但应用仍应显式清理旧层。若有同尺寸透明度 Mip，应先设置透明图、再构建颜色 Mip；生成颜色层时会按透明度加权，避免透明区底色导致暗边。清除或替换透明图会清除颜色 Mip，此后可重新生成。通用模型／图片 LOD 仍是独立能力。
 
 ## 启用与内存
 

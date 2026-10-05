@@ -28,6 +28,54 @@ static float32 linePlaneDistance(GRE_Fvector4d point, GRE_Camera4d camera, uint8
 	}
 }
 
+static uint8 sphereInsideFrustum(GRE_Object4d object, GRE_Camera4d cam)
+{
+	if (object->boundType != GRE_Bounding_Sphere_R || object->BoundingSphereR < 0) return 0;
+	float32 radius = YMGRE_Fabs(object->scale) * object->BoundingSphereR;
+	gre_fvector4d center;
+	YMGRE_Fvector4d_MatMultTo(&cam->move.TMat, &object->WorldCoordinate, &center);
+	for (uint8 plane = 0; plane < 6; plane++) {
+		float32 nx = 0, ny = 0, nz = 0;
+		switch (plane) {
+		case 0: nz = 1; break; case 1: nz = -1; break;
+		case 2: nx = 1; nz = -cam->perspectPlane.kl; break;
+		case 3: nx = -1; nz = cam->perspectPlane.kr; break;
+		case 4: ny = 1; nz = -cam->perspectPlane.kd; break;
+		default: ny = -1; nz = cam->perspectPlane.ku; break;
+		}
+		float32 x = nx*cam->move.TMat.val[0][0] + ny*cam->move.TMat.val[1][0] + nz*cam->move.TMat.val[2][0];
+		float32 y = nx*cam->move.TMat.val[0][1] + ny*cam->move.TMat.val[1][1] + nz*cam->move.TMat.val[2][1];
+		float32 z = nx*cam->move.TMat.val[0][2] + ny*cam->move.TMat.val[1][2] + nz*cam->move.TMat.val[2][2];
+		if (linePlaneDistance(&center, cam, plane) < radius*YMGRE_Sqrt(x*x+y*y+z*z)+1e-4f) return 0;
+	}
+	return 1;
+}
+
+static void prepareProjectedVertices(GRE_RenderWorkspace workspace, uint32 count,
+	GRE_Camera4d cam, uint8 allInside)
+{
+	float32 sx = cam->img.width/(cam->perspectPlane.pR-cam->perspectPlane.pL);
+	float32 sy = cam->img.height/(cam->perspectPlane.pU-cam->perspectPlane.pD);
+	float32 ox = cam->img.width/2.0f, oy = cam->img.height/2.0f;
+	for (uint32 i = 0; i < count; i++) {
+		if (!workspace->clipCodes[i]) { workspace->clipCodes[i] = 0x80; continue; }
+		gre_fvector4d pos = workspace->pointList_wN[i].base.pos;
+		uint8 code = 0;
+		if (!allInside)
+			for (uint8 plane = 0; plane < 6; plane++)
+				if (linePlaneDistance(&pos, cam, plane) < 0) code |= (uint8)(1u << plane);
+		workspace->clipCodes[i] = code;
+		if (code == 0) {
+			float32 scale = cam->perspectPlane.Dis/pos.z;
+			pos.x *= scale;
+			pos.y *= scale;
+			pos.x = pos.x*sx + ox;
+			pos.y = pos.y*-sy + oy;
+			workspace->projectedPoints[i] = pos;
+		}
+	}
+}
+
 static uint8 clipCameraLine(GRE_Fvector4d start, GRE_Fvector4d end, GRE_Camera4d camera)
 {
 	for (uint8 plane = 0; plane < 6; plane++) {
@@ -543,7 +591,7 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 	gre_camera4d renderCamera = *thiscam;
 	renderCamera.img = *target;
 	renderCamera.target = target;
-	GRE_Camera4d cam = &renderCamera;
+ GRE_Camera4d cam = &renderCamera;
 	workspace->materialStatus=0;
 #if YMGRE_ENABLE_LINEAR_COLOR
  if(cam->wireFrame==GRE_Render_Wireframe)cam->linearColorEnabled=0;
@@ -596,12 +644,16 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 #endif
 			YMGRE_RenderWorkspace_Reserve(workspace, object->pointNum, object->polygonNum, lightNum);
 			if (!YMGRE_RenderWorkspace_EnableVertexAttributes(workspace, object->pointNum)) continue;
-			YMGRE_Object_WorldToCameraTo_wN(object, &cam->move.TMat, workspace->pointList_wN);
 			if (YMGRE_Object_FrustumCullingCal(object, cam)) continue;
-			if (material && material->doubleSided)
-				for (int pi = 0; pi < object->polygonNum; pi++) workspace->polygonHide[pi] = 0;
-			else
-				YMGRE_Backface_RemoveTo(object, &cam->pos, workspace->polygonHide);
+			uint8 projectedReady = YMGRE_RenderWorkspace_EnableProjectionCache(workspace, object->pointNum);
+			uint8* active = projectedReady ? workspace->clipCodes : NULL;
+			if (material && material->doubleSided) {
+				memset(workspace->polygonHide, 0, object->polygonNum);
+				if (active) memset(active, 1, object->pointNum);
+			} else YMGRE_Backface_RemoveAndMarkTo(object, &cam->pos,
+				workspace->polygonHide, active, object->wireFrame || cam->wireFrame == GRE_Render_Wireframe, 0);
+			YMGRE_Object_WorldToCameraMaskedTo(object, &cam->move.TMat,
+				workspace->pointList_wN, 1, active);
 			/* Camera wireframe is exclusive; object wireFrame is an overlay on solid shading. */
 			if (cam->wireFrame == GRE_Render_Wireframe)
 			{
@@ -614,6 +666,23 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 				GRE_Lightmap lightmap=object->lightmap;
 				if (lightmap && (!lightmap->enabled || !lightmap->pixels || !lightmap->uv1 ||
 					lightmap->triangleCount != (uint32)object->polygonNum)) lightmap=NULL;
+				/* Single-sided vertex lighting is independent of the incident triangle.
+				   Double-sided faces can flip normals, and UV1/lightmaps are per face. */
+				uint8 vertexLightingReady = object->renderMode == GRE_RenderMode_Vertex &&
+					material && !material->doubleSided && !material->unlit && !lightmap &&
+					object->pointNum > 0 && object->pointNum <= UINT16_MAX && object->polygonNum > 0;
+				if (vertexLightingReady) {
+					uint32 visible = 0;
+					for (int pi = 0; pi < object->polygonNum; pi++)
+						if (!workspace->polygonHide[pi] && object->polygonList[pi].num == 3) visible++;
+					vertexLightingReady = visible >= ((uint32)object->pointNum + 2) / 3;
+					if (vertexLightingReady)
+						YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN(workspace->pointList_wN,
+							(uint16)object->pointNum, &object->polygonList[0], material,
+							LightList, workspace->lightPos, &cam->move.TMat, object->mirrorKs, active);
+				}
+				if (projectedReady)
+					prepareProjectedVertices(workspace, object->pointNum, cam, sphereInsideFrustum(object, cam));
 				for (int pi = 0; pi < object->polygonNum; pi++)
 				{
 					GRE_Polygon4d source = &object->polygonList[pi];
@@ -647,17 +716,34 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 						YMGRE_Fvector4d_Normalize(&faceNormal);
 						for (int vi = 0; vi < 3; vi++) input[vi].normal = faceNormal;
 					}
-					else if (object->renderMode == GRE_RenderMode_Vertex)
+					else if (object->renderMode == GRE_RenderMode_Vertex && !vertexLightingReady)
 					{
 						YMGRE_TriangleRaster_ComputeVertexLighting_wN(input, 3, source,
 							material, LightList, workspace->lightPos, &cam->move.TMat,
 							object->mirrorKs);
 					}
-					uint16 count = YMGRE_Polygon_FrustumClip_wN(input, 3, clipped,
-						YMGRE_FRUSTUM_CLIP_VERTEX_MAX, cam);
-					if (count < 3) continue;
-					YMGRE_VertexList_CameraToViewPlane_wN(clipped, count, cam->perspectPlane.Dis);
-					YMGRE_VertexList_ViewPlaneToWindows_wN(clipped, count, cam);
+					uint16 count;
+					uint8 codes = 0xff;
+					if (projectedReady) {
+						uint8 a = workspace->clipCodes[source->index[0]];
+						uint8 b = workspace->clipCodes[source->index[1]];
+						uint8 c = workspace->clipCodes[source->index[2]];
+						if (a & b & c) continue;
+						codes = a | b | c;
+					}
+					if (codes == 0) {
+						count = 3;
+						for (int vi = 0; vi < 3; vi++) {
+							clipped[vi] = input[vi];
+							clipped[vi].base.pos = workspace->projectedPoints[source->index[vi]];
+						}
+					} else {
+						count = YMGRE_Polygon_FrustumClip_wN(input, 3, clipped,
+							YMGRE_FRUSTUM_CLIP_VERTEX_MAX, cam);
+						if (count < 3) continue;
+						YMGRE_VertexList_CameraToViewPlane_wN(clipped, count, cam->perspectPlane.Dis);
+						YMGRE_VertexList_ViewPlaneToWindows_wN(clipped, count, cam);
+					}
 					for (uint16 vi = 1; vi + 1 < count; vi++)
 					{
 						GRE_Index indices[3] = { 0, vi, (GRE_Index)(vi + 1) };
@@ -669,10 +755,10 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 							if (transparentCount == transparentCapacity) {
 								size_t capacity = transparentCapacity ? transparentCapacity * 2 : 1024;
 								if(!workspace->ownsMemory || capacity>SIZE_MAX/packetStride){workspace->materialStatus=-1;return;}
-                                void* grown=GRE_malloc1(capacity*packetStride);
+                                void* grown=GRE_RenderBuff_Malloc(capacity*packetStride);
                                 if(!grown){workspace->materialStatus=-1;return;}
                                 if(transparentCount)memcpy(grown,transparent,transparentCount*sizeof(*transparent));
-                                GRE_free1(transparent);
+                                GRE_RenderBuff_Free(transparent);
                                 workspace->transparentTriangles=grown;workspace->transparentCapacity=capacity*packetStride;
 								transparent = grown;
 								transparentCapacity = capacity;
@@ -764,8 +850,8 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
    if(!object->isVisible||!object->wireFrame||!object->pointList_wN)continue;
    YMGRE_RenderWorkspace_Reserve(workspace,object->pointNum,object->polygonNum,0);
    if(!YMGRE_RenderWorkspace_EnableVertexAttributes(workspace,object->pointNum))continue;
-   YMGRE_Object_WorldToCameraTo_wN(object,&cam->move.TMat,workspace->pointList_wN);
    if(YMGRE_Object_FrustumCullingCal(object,cam))continue;
+   YMGRE_Object_WorldToCameraTo_wN(object,&cam->move.TMat,workspace->pointList_wN);
    GRE_Material material=YMGRE_Material_Find(MaterialList,object->materiaName);
    if(material&&material->doubleSided)memset(workspace->polygonHide,0,object->polygonNum);
    else YMGRE_Backface_RemoveTo(object,&cam->pos,workspace->polygonHide);

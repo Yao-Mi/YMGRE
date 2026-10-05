@@ -133,6 +133,45 @@ void YMGRE_Img_LineDepth(GRE_FrameBuffer data, float32* zbuff, uint16 width, uin
 	}
 }
 
+/* Screen samples are integer pixel centers, just as in the triangle raster.
+   Preserve subpixel endpoints and choose a canonical traversal direction so
+   reversing an edge cannot change its coverage. */
+void YMGRE_Img_LineDepthFloat(GRE_FrameBuffer data,float32 *depth,uint16 width,uint16 height,
+ float32 x0,float32 y0,float32 z0,float32 x1,float32 y1,float32 z1,GRErgb24 color,uint8 test)
+{
+ if(!data || !depth || !width || !height || !isfinite(x0) || !isfinite(y0) ||
+    !isfinite(x1) || !isfinite(y1) || !isfinite(z0) || !isfinite(z1) || !(z0>0) || !(z1>0)) return;
+ uint8 vertical=fabsf(y1-y0)>fabsf(x1-x0);
+ float32 a=vertical?y0:x0,b=vertical?y1:x1;
+ /* A projected point can still have different endpoint depths. */
+ if(a>b || (a==b && z0>z1)) {
+  float32 v=x0;x0=x1;x1=v;v=y0;y0=y1;y1=v;v=z0;z0=z1;z1=v;
+  v=a;a=b;b=v;
+ }
+ float32 delta=b-a, inv=delta>0?1.0f/delta:0;
+ int32 limit=(vertical?height:width)-1;
+ if(!isfinite(delta) || b < -0.5f || a >= limit+0.5f)return;
+ int32 first=(int32)ceilf(a<0?0:a),last=(int32)floorf(b>limit?limit:b);
+ if(first>last) first=last=(int32)floorf((a+b)*0.5f+0.5f);
+ if(last<0 || first>limit) return;
+ if(first<0)first=0;
+ if(last>limit)last=limit;
+ GRE_FramePixel pixel=GRE_FramePixel_From_RGB24(color);
+ float32 q0=test?1.0f/z0:0,q1=test?1.0f/z1:0;
+ for(int32 major=first;major<=last;++major) {
+  float32 t=delta>0?(major-a)*inv:0.5f;
+  if(t<0)t=0;
+  if(t>1)t=1;
+  float32 minor=vertical?x0+(x1-x0)*t:y0+(y1-y0)*t;
+  if(minor < -0.5f || minor >= (vertical?width:height)-0.5f)continue;
+  int32 m=(int32)floorf(minor+0.5f),x=vertical?m:major,y=vertical?major:m;
+  uint32 i=(uint32)y*width+x;
+  if(!test){data[i]=pixel;continue;}
+  float32 q=q0+(q1-q0)*t,z=1.0f/q;
+  if(z<=depth[i]+YMGRE_RASTER_WIRE_DEPTH_EPSILON){data[i]=pixel;if(z<depth[i])depth[i]=z;}
+ }
+}
+
 static inline void YMGRE_PolygonDepthPixel(GRE_FrameBuffer data, float32* depths,
 	uint32 index, float32 q, float32 qSlope, GRE_FramePixel pixel)
 {
@@ -1315,8 +1354,8 @@ void YMGRE_TrangleObject_Wires_wN(GRE_Object4d object, GRE_Vertex4d_wN points,
 		for (int j=0;j<polygon->num;j++)
 		{
 			GRE_Vertex4d_wN a=&points[polygon->index[j]], b=&points[polygon->index[(j+1)%polygon->num]];
-			YMGRE_Img_LineDepth(camera->img.data,camera->img.zbuff,camera->img.width,camera->img.height,
-				(int16)a->base.pos.x,(int16)a->base.pos.y,a->base.pos.z,(int16)b->base.pos.x,(int16)b->base.pos.y,b->base.pos.z,GRE_brush,
+			YMGRE_Img_LineDepthFloat(camera->img.data,camera->img.zbuff,camera->img.width,camera->img.height,
+				a->base.pos.x,a->base.pos.y,a->base.pos.z,b->base.pos.x,b->base.pos.y,b->base.pos.z,GRE_brush,
 				object->wireFrame ? 0 : 1);
 		}
 	}

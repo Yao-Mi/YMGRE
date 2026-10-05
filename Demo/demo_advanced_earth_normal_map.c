@@ -1,3 +1,4 @@
+#include "YMGRE_Material.h"
 #include "demo_host.h"
 #include "YMGUI_Invalidate.h"
 #include "YMGRE_Rendering_Pipeline.h"
@@ -100,7 +101,7 @@ static GRE_Material makeMaterial(int stage)
 		m->pixel = GRE_ImageBuff_Malloc(sizeof(GRErgb24));
 		m->pixel[0] = (GRErgb24){ 255, 255, 255 };
 	}
-	m->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+	YMGRE_Material_EnsureAdvanced(m);
 	m->advanced->normalWidth = TEX_W; m->advanced->normalHeight = TEX_H;
 	if (stage >= 2)
 		YMGRE_Bmp_File_LoadTo_Image("Resource/地球法线贴图.bmp", &m->advanced->normalPixel,

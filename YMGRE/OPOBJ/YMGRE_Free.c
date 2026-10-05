@@ -34,8 +34,8 @@ void YMGRE_Free_Camera(void* data)
 	if (pthis == NULL)return;
 	//创建方式决定所有权；后续重新绑定RenderTarget不会改变释放责任
 	if (pthis->ownsImageBuffers) {
-		GRE_ImageBuff_Free(pthis->img.zbuff);//z - buff
-		GRE_ImageBuff_Free(pthis->img.data);//图像
+		GRE_RenderBuff_Free(pthis->img.zbuff);//z - buff
+		GRE_RenderBuff_Free(pthis->img.data);//图像
 	}
 	GRE_free0(pthis);
 }
@@ -60,15 +60,20 @@ void YMGRE_Free_Object(void* data)
 		GRE_free1(pthis->importedUvs);
 		GRE_free1(pthis->importedNormals);
 		//顶点
-	GRE_free1(pthis->pointList);
+	GRE_GeometryBuff_Free(pthis->pointList);
 	GRE_free1(pthis->pointList_);
 	GRE_free1(pthis->pointList_wN);
 	GRE_free1(pthis->pointList_wN_);
 		//多边形
 		for (int i = 0; i < pthis->polygonNum; i++)
 		{
-			GRE_PolyIndex_Free(pthis->polygonList[i].index);//释放索引内存
+			GRE_Index* indices = pthis->polygonList[i].index;
+			uintptr_t first = (uintptr_t)pthis->topologyStorage;
+			uintptr_t last = first + (size_t)pthis->topologyIndexCount * sizeof(GRE_Index);
+			if (!pthis->topologyStorage || (uintptr_t)indices < first || (uintptr_t)indices >= last)
+				GRE_PolyIndex_Free(indices);
 		}
+		GRE_RenderBuff_Free(pthis->topologyStorage);
 		GRE_free1(pthis->polygonList);
 		//名称
 		GRE_free1(pthis->objName);
@@ -84,9 +89,9 @@ void YMGRE_Free_Material(void* data)
 	GRE_Material pthis = data;
 	if (pthis == NULL)return;
 	GRE_free1(pthis->name);//名字
-	GRE_ImageBuff_Free(pthis->pixel);//图像
 	if (pthis->advanced != NULL)
 	{
+		YMGRE_Material_ClearColorMips(pthis);
 		GRE_ImageBuff_Free(pthis->advanced->normalPixel);//法线图（可选）
 #if YMGRE_ENABLE_PBR
         GRE_ImageBuff_Free(pthis->advanced->pbrParameters);
@@ -96,6 +101,7 @@ void YMGRE_Free_Material(void* data)
 #endif
 		GRE_free0(pthis->advanced);
 	}
+	GRE_ImageBuff_Free(pthis->pixel);//图像
 	GRE_free0(pthis);
 }
 

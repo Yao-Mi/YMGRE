@@ -1,5 +1,13 @@
 # YMGRE 模块测试
 
+`test_lod` 覆盖描述文件解析、代码初始化、屏幕投影尺寸和切换滞回；自然场景的 smoke 测试覆盖描述文件绑定、远近切换及镜头重置后的画面一致性。
+
+`test_lod_simplify` 覆盖连续球面的 QEM 折边、独立小薄片以及成对大薄片的受约束边界折边；`project_Demo/lod_mesh_preview` 使用实际草、树资源和球面生成三层全模型 LOD 并渲染对照图。
+
+`test_material_extensions` 新增颜色 Mip 验证：资源准备、奇数尺寸、渲染时单层选择、顶点光照／旧扫描线／PBR 路径、与透明度 Mip 同用、材质释放和贴图替换后回退。
+
+`test_portable_optimizations` 覆盖清屏哨兵、裁剪差分、浮点线框方向、共享顶点光照、可见顶点矩阵变换、投影缓存扩容和对象自有索引合并。RGB565 的快速光栅与近似光照曲线随色深默认启用；可用 `-DYMGRE_RASTER_FAST_INTERPOLATION=OFF -DYMGRE_RASTER_LIGHT_CURVE=OFF` 对照精确路径。渲染缓冲区固定优先快内存并回退慢内存；自动索引整理仍可通过 `YMGRE_COMPACT_OWNED_TOPOLOGY` 构建选项验收。
+
 模块测试默认随根工程构建：
 
 ```bash
@@ -361,3 +369,7 @@ python3 tests/test_sdk_variants.py build/YMGRE_libs/cmake
 ```
 
 验证 RGB565/RGB888 × index16/index32 的归档选择与编译宏，并拒绝无效色深、无效索引宽度、重复接入时切换配置，以及与 YMGUI 混用色深。发布流程自动运行这些检查，记录在 `verification/variant-selection.log`。
+
+## 移植优化回归
+
+`test_portable_optimizations` 覆盖奇数尺寸清屏、完整属性裁剪、输出容量、整数高光幂、浮点线框及共享顶点光照。它随 CTest 运行；具体组合和基线画面对照见 [移植优化兼容记录](../docs/portable-optimizations.md)。

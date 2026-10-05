@@ -7,6 +7,8 @@
 extern GRErgb24 GRE_brush;
 
 #define YMGRE_RASTER_AREA_EPSILON 1e-5f
+#define GRE_RASTER_INLINE static inline
+#define GRE_CLAMP_COLOR8(value) ((uint8)GREMin(GREMax((value),0),255))
 
 static inline uint8 EMaterial_GetSpecularPower(GRE_Material material)
 {
@@ -25,6 +27,24 @@ static inline int YMGRE_Raster_Floor(float32 value)
 {
 	int result = (int)value;
 	return result - (value < result);
+}
+
+/* UV fallback near discontinuous texel/repeat boundaries. */
+static inline uint8 YMGRE_Raster_TextureBoundary(float32 uv, uint16 extent)
+{
+ if (!extent) return 0;
+ float32 coordinate=YMGRE_Fabs(uv-(int)uv)*extent+1e-5f;
+ float32 fraction=coordinate-(int)coordinate;
+ float32 tolerance=1e-5f*extent*(YMGRE_Fabs(uv)+1.0f);
+ return fraction<tolerance || fraction>1.0f-tolerance;
+}
+static inline int GRE_VertexTexelCoordinate(float32 uv,uint16 extent,uint8 *boundary)
+{
+ float32 coordinate=YMGRE_Fabs(uv-(int)uv)*extent+1e-5f;
+ int pixel=(int)coordinate;
+ float32 fraction=coordinate-pixel,tolerance=1e-5f*extent*(YMGRE_Fabs(uv)+1);
+ *boundary |= fraction<tolerance || fraction>1-tolerance;
+ return GREMin(pixel,extent-1);
 }
 
 /////////////////////////////////////////// 平面着色器 --三角形快速光栅化//////////////////////////////////////////////////////////////
@@ -91,35 +111,228 @@ void YMGRE_TriangleRaster_ComputeVertexLighting_wN(GRE_Vertex4d_wN vertices,
 	GRE_List lights, gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera,
 	float32 mirrorKs)
 {
-	if (vertices == NULL || polygon == NULL || lights == NULL || worldToCamera == NULL) return;
+	YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN(vertices, vertexCount, polygon,
+		material, lights, lightPos, worldToCamera, mirrorKs, NULL);
+}
+
+void YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN(GRE_Vertex4d_wN vertices,
+	uint16 vertexCount, GRE_Polygon4d polygon, GRE_Material material,
+	GRE_List lights, gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera,
+	float32 mirrorKs, const uint8* active)
+{
+	if (vertices == NULL || vertexCount == 0 || polygon == NULL || lights == NULL || worldToCamera == NULL) return;
 	uint8 specularPower = EMaterial_GetSpecularPower(material);
-	for (uint16 i = 0; i < vertexCount; i++)
-	{
-		GRErgb24 lighting = { 0, 0, 0 };
-		GRErgb24 specular = { 0, 0, 0 };
-		gre_polygon4d litPolygon = *polygon;
-		uint32 lightIndex = 0;
-		for (GRE_ListNode node = lights->listhead; node != NULL; node = node->next)
-		{
-			gre_light4d light = *(GRE_Light4d)node->data;
-			litPolygon.planeColor = (material && light.type == GRE_GlobalLight) ?
-				material->ambient : (material ? material->diffuse : (GRErgb24){ 255, 255, 255 });
-			light.proper.pos_ = lightPos[lightIndex++];
-			if (light.type == GRE_SpotLight)
-			{
-				YMGRE_Fvector4d_MatMultTo(worldToCamera, &light.proper.spot.direct,
-					&light.proper.spot.direct);
-				light.proper.spot.direct.w = 0;
-			}
-			YMGRE_PolygonLighting_ComponentsAdvanced(&litPolygon,
-				&vertices[i].base.pos, &vertices[i].normal, &light,
-				&lighting, &specular, mirrorKs, specularPower,
-				material ? material->specular : (GRErgb24){ 255, 255, 255 });
+	for (uint16 i = 0; i < vertexCount; i++) {
+		if (active && !active[i]) continue;
+		vertices[i].vertexLighting = (GRErgb24){0, 0, 0};
+		vertices[i].vertexSpecular = (GRErgb24){0, 0, 0};
+	}
+	/* Prepare each light once; each vertex retains the original light order. */
+	gre_polygon4d litPolygon = *polygon;
+	uint32 lightIndex = 0;
+	for (GRE_ListNode node = lights->listhead; node != NULL; node = node->next) {
+		gre_light4d light = *(GRE_Light4d)node->data;
+		litPolygon.planeColor = (material && light.type == GRE_GlobalLight) ?
+			material->ambient : (material ? material->diffuse : (GRErgb24){255, 255, 255});
+		light.proper.pos_ = lightPos[lightIndex++];
+		if (light.type == GRE_SpotLight) {
+			YMGRE_Fvector4d_MatMultTo(worldToCamera, &light.proper.spot.direct,
+				&light.proper.spot.direct);
+			light.proper.spot.direct.w = 0;
 		}
-		vertices[i].vertexLighting = lighting;
-		vertices[i].vertexSpecular = specular;
+		for (uint16 i = 0; i < vertexCount; i++)
+			if (!active || active[i]) YMGRE_PolygonLighting_ComponentsAdvanced(&litPolygon,
+				&vertices[i].base.pos, &vertices[i].normal, &light,
+				&vertices[i].vertexLighting, &vertices[i].vertexSpecular, mirrorKs,
+				specularPower, material ? material->specular : (GRErgb24){255, 255, 255});
 	}
 }
+
+#if YMGRE_RASTER_FAST_INTERPOLATION
+/* Affine attribute/z planes. Values advance by addition across a scanline;
+   division is shared only by the surviving fragment's attributes. */
+typedef struct { float32 base,dx,dy; } GRE_AttributePlane;
+GRE_RASTER_INLINE GRE_AttributePlane GRE_MakeAttributePlane(float32 a,float32 b,float32 c,
+ float32 w0,float32 w1,float32 w0dx,float32 w1dx,float32 w0dy,float32 w1dy)
+{
+ GRE_AttributePlane p;
+ p.base=c+w0*(a-c)+w1*(b-c);
+ p.dx=w0dx*(a-c)+w1dx*(b-c); p.dy=w0dy*(a-c)+w1dy*(b-c);
+ return p;
+}
+/* Reuse wrapped texel coordinates for boundary checking and sampling. */
+static void GRE_RasterTexturedPlanes(GRE_Vertex4d_wN a,GRE_Vertex4d_wN b,
+ GRE_Vertex4d_wN c,GRE_Material material,GRE_Camera4d camera,float32 den)
+{
+ const int width=camera->img.width,height=camera->img.height;
+ const float32 znear=camera->frustum.Znear;
+ float32 *depthBuffer=camera->img.zbuff;GRE_FrameBuffer colorBuffer=camera->img.data;
+ float32 boundEpsilon=1e-5f*(GREMax(YMGRE_Fabs(a->base.pos.x),GREMax(YMGRE_Fabs(b->base.pos.x),YMGRE_Fabs(c->base.pos.x)))+
+  GREMax(YMGRE_Fabs(a->base.pos.y),GREMax(YMGRE_Fabs(b->base.pos.y),YMGRE_Fabs(c->base.pos.y)))+1);
+ int minX=GREMax(YMGRE_Raster_Ceil(GREMin(a->base.pos.x,GREMin(b->base.pos.x,c->base.pos.x))-boundEpsilon),0);
+ int maxX=GREMin(YMGRE_Raster_Floor(GREMax(a->base.pos.x,GREMax(b->base.pos.x,c->base.pos.x))+boundEpsilon),width-1);
+ int minY=GREMax(YMGRE_Raster_Ceil(GREMin(a->base.pos.y,GREMin(b->base.pos.y,c->base.pos.y))-boundEpsilon),0);
+ int maxY=GREMin(YMGRE_Raster_Floor(GREMax(a->base.pos.y,GREMax(b->base.pos.y,c->base.pos.y))+boundEpsilon),height-1);
+ float32 dy0=b->base.pos.y-c->base.pos.y,dx0=c->base.pos.x-b->base.pos.x;
+ float32 dy1=c->base.pos.y-a->base.pos.y,dx1=a->base.pos.x-c->base.pos.x;
+ float32 cx=c->base.pos.x,cy=c->base.pos.y,invDen=1.0f/den;
+ float32 w0start=(dy0*(minX-cx)+dx0*(minY-cy))*invDen;
+ float32 w1start=(dy1*(minX-cx)+dx1*(minY-cy))*invDen;
+ float32 q0=1.0f/a->base.pos.z,q1=1.0f/b->base.pos.z,q2=1.0f/c->base.pos.z;
+ float32 w0dx=dy0*invDen,w1dx=dy1*invDen,w0dy=dx0*invDen,w1dy=dx1*invDen;
+ #define GRE_PLANE(a,b,c) GRE_MakeAttributePlane(a,b,c,w0start,w1start,w0dx,w1dx,w0dy,w1dy)
+ GRE_AttributePlane up=GRE_PLANE(a->base.u*q0,b->base.u*q1,c->base.u*q2);
+ GRE_AttributePlane vp=GRE_PLANE(a->base.v*q0,b->base.v*q1,c->base.v*q2);
+ float32 sr=a->color.R/(255.0f*255.0f),sg=a->color.G/(255.0f*255.0f),sb=a->color.B/(255.0f*255.0f);
+ GRE_AttributePlane rp=GRE_PLANE(a->vertexLighting.R*q0*sr,b->vertexLighting.R*q1*sr,c->vertexLighting.R*q2*sr);
+ GRE_AttributePlane gp=GRE_PLANE(a->vertexLighting.G*q0*sg,b->vertexLighting.G*q1*sg,c->vertexLighting.G*q2*sg);
+ GRE_AttributePlane bp=GRE_PLANE(a->vertexLighting.B*q0*sb,b->vertexLighting.B*q1*sb,c->vertexLighting.B*q2*sb);
+ #undef GRE_PLANE
+ YMGRE_ColorMipView colorMip=YMGRE_Material_ColorMipForTriangle(material,a,b,c);
+ GRErgb24 *texture=colorMip.pixels;
+ uint16 tw=colorMip.width,th=colorMip.height;
+ for(int y=minY;y<=maxY;y++) {
+  int rowMin=minX,rowMax=maxX;
+  if((maxX-minX)*(maxY-minY)>128) {
+  float32 wrow[3]={ (dy0*(minX-cx)+dx0*(y-cy))*invDen,
+                   (dy1*(minX-cx)+dx1*(y-cy))*invDen,0 };
+  float32 wx[3]={w0dx,w1dx,-w0dx-w1dx};
+  wrow[2]=1.0f-wrow[0]-wrow[1];
+  for(int edge=0;edge<3;edge++) {
+   if(wx[edge]>1e-9f) rowMin=GREMax(rowMin,YMGRE_Raster_Floor(minX-wrow[edge]/wx[edge])-2);
+   else if(wx[edge]<-1e-9f) rowMax=GREMin(rowMax,YMGRE_Raster_Ceil(minX-wrow[edge]/wx[edge])+2);
+  }
+  }
+  if(rowMin>rowMax) continue;
+  float32 ry=(float32)(y-minY);
+  float32 u=up.base+ry*up.dy,v=vp.base+ry*vp.dy;
+  float32 r=rp.base+ry*rp.dy,g=gp.base+ry*gp.dy,bl=bp.base+ry*bp.dy;
+  float32 skip=(float32)(rowMin-minX);
+  u+=skip*up.dx;v+=skip*vp.dx;r+=skip*rp.dx;g+=skip*gp.dx;bl+=skip*bp.dx;
+  for(int x=rowMin;x<=rowMax;x++,u+=up.dx,v+=vp.dx,r+=rp.dx,g+=gp.dx,bl+=bp.dx) {
+   float32 n0=dy0*(x-cx)+dx0*(y-cy),w0=n0*invDen;
+   if(w0<0) continue;
+   float32 n1=dy1*(x-cx)+dx1*(y-cy),w1=n1*invDen,w2=1.0f-w0-w1;
+   if(w1<0) continue;
+   if(YMGRE_Fabs(w2)<1e-5f) {w0=n0/den;w1=n1/den;w2=1.0f-w0-w1;}
+   if(w2<0) continue;
+   float32 depth=1.0f/(w0*q0+w1*q1+w2*q2);
+   int index=y*width+x;
+   float32 priorDepth=depthBuffer[index];
+   if(YMGRE_Fabs(priorDepth-depth)<2e-6f*depth) {
+    float32 pw0=n0/den,pw1=n1/den,pw2=1-pw0-pw1;
+    depth=1.0f/(pw0/a->base.pos.z+pw1/b->base.pos.z+pw2/c->base.pos.z);
+   }
+   if(priorDepth<=depth || depth<=znear) continue;
+   float32 uv=u*depth,vv=v*depth;
+   GRErgb24 texel=DefaultPolygonColor;
+   if(texture && tw && th) {
+   uint8 boundary=0;
+   int tx=GRE_VertexTexelCoordinate(uv,tw,&boundary),ty=GRE_VertexTexelCoordinate(vv,th,&boundary);
+   if(boundary) {
+    float32 ew0=n0/den,ew1=n1/den,ew2=1.0f-ew0-ew1;
+    float32 eq0=ew0/a->base.pos.z,eq1=ew1/b->base.pos.z,eq2=ew2/c->base.pos.z,eq=eq0+eq1+eq2;
+    float32 wa=eq0/eq,wb=eq1/eq,wc=eq2/eq;
+    uv=wa*a->base.u+wb*b->base.u+wc*c->base.u;vv=wa*a->base.v+wb*b->base.v+wc*c->base.v;
+    tx=(int)(YMGRE_Fabs(uv-(int)uv)*tw+1e-5f);ty=(int)(YMGRE_Fabs(vv-(int)vv)*th+1e-5f);
+    tx=GREMin(tx,tw-1);ty=GREMin(ty,th-1);
+   }
+   texel=texture[ty*tw+tx];
+   }
+   int cr=(int)(texel.R*r*depth),cg=(int)(texel.G*g*depth),cb=(int)(texel.B*bl*depth);
+   depthBuffer[index]=depth;
+   colorBuffer[index]=GRE_FramePixel_From_RGB24((GRErgb24){
+    GRE_CLAMP_COLOR8(cr),GRE_CLAMP_COLOR8(cg),GRE_CLAMP_COLOR8(cb)});
+  }
+ }
+}
+/* Achromatic tint and lighting share one scalar perspective plane. */
+static void GRE_RasterTexturedScalarPlanes(GRE_Vertex4d_wN a,GRE_Vertex4d_wN b,
+ GRE_Vertex4d_wN c,GRE_Material material,GRE_Camera4d camera,float32 den)
+{
+ const int width=camera->img.width,height=camera->img.height;
+ const float32 znear=camera->frustum.Znear;
+ float32 *depthBuffer=camera->img.zbuff;GRE_FrameBuffer colorBuffer=camera->img.data;
+ float32 boundEpsilon=1e-5f*(GREMax(YMGRE_Fabs(a->base.pos.x),GREMax(YMGRE_Fabs(b->base.pos.x),YMGRE_Fabs(c->base.pos.x)))+
+  GREMax(YMGRE_Fabs(a->base.pos.y),GREMax(YMGRE_Fabs(b->base.pos.y),YMGRE_Fabs(c->base.pos.y)))+1);
+ int minX=GREMax(YMGRE_Raster_Ceil(GREMin(a->base.pos.x,GREMin(b->base.pos.x,c->base.pos.x))-boundEpsilon),0);
+ int maxX=GREMin(YMGRE_Raster_Floor(GREMax(a->base.pos.x,GREMax(b->base.pos.x,c->base.pos.x))+boundEpsilon),width-1);
+ int minY=GREMax(YMGRE_Raster_Ceil(GREMin(a->base.pos.y,GREMin(b->base.pos.y,c->base.pos.y))-boundEpsilon),0);
+ int maxY=GREMin(YMGRE_Raster_Floor(GREMax(a->base.pos.y,GREMax(b->base.pos.y,c->base.pos.y))+boundEpsilon),height-1);
+ float32 dy0=b->base.pos.y-c->base.pos.y,dx0=c->base.pos.x-b->base.pos.x;
+ float32 dy1=c->base.pos.y-a->base.pos.y,dx1=a->base.pos.x-c->base.pos.x;
+ float32 cx=c->base.pos.x,cy=c->base.pos.y,invDen=1.0f/den;
+ float32 w0start=(dy0*(minX-cx)+dx0*(minY-cy))*invDen;
+ float32 w1start=(dy1*(minX-cx)+dx1*(minY-cy))*invDen;
+ float32 q0=1.0f/a->base.pos.z,q1=1.0f/b->base.pos.z,q2=1.0f/c->base.pos.z;
+ float32 w0dx=dy0*invDen,w1dx=dy1*invDen,w0dy=dx0*invDen,w1dy=dx1*invDen;
+ #define GRE_PLANE(a,b,c) GRE_MakeAttributePlane(a,b,c,w0start,w1start,w0dx,w1dx,w0dy,w1dy)
+ GRE_AttributePlane up=GRE_PLANE(a->base.u*q0,b->base.u*q1,c->base.u*q2);
+ GRE_AttributePlane vp=GRE_PLANE(a->base.v*q0,b->base.v*q1,c->base.v*q2);
+ float32 sr=a->color.R/(255.0f*255.0f);
+ GRE_AttributePlane rp=GRE_PLANE(a->vertexLighting.R*q0*sr,b->vertexLighting.R*q1*sr,c->vertexLighting.R*q2*sr);
+ #undef GRE_PLANE
+ YMGRE_ColorMipView colorMip=YMGRE_Material_ColorMipForTriangle(material,a,b,c);
+ GRErgb24 *texture=colorMip.pixels;
+ uint16 tw=colorMip.width,th=colorMip.height;
+ for(int y=minY;y<=maxY;y++) {
+  int rowMin=minX,rowMax=maxX;
+  if((maxX-minX)*(maxY-minY)>128) {
+  float32 wrow[3]={ (dy0*(minX-cx)+dx0*(y-cy))*invDen,
+                   (dy1*(minX-cx)+dx1*(y-cy))*invDen,0 };
+  float32 wx[3]={w0dx,w1dx,-w0dx-w1dx};
+  wrow[2]=1.0f-wrow[0]-wrow[1];
+  for(int edge=0;edge<3;edge++) {
+   if(wx[edge]>1e-9f) rowMin=GREMax(rowMin,YMGRE_Raster_Floor(minX-wrow[edge]/wx[edge])-2);
+   else if(wx[edge]<-1e-9f) rowMax=GREMin(rowMax,YMGRE_Raster_Ceil(minX-wrow[edge]/wx[edge])+2);
+  }
+  }
+  if(rowMin>rowMax) continue;
+  float32 ry=(float32)(y-minY);
+  float32 u=up.base+ry*up.dy,v=vp.base+ry*vp.dy;
+  float32 r=rp.base+ry*rp.dy;
+  float32 skip=(float32)(rowMin-minX);
+  u+=skip*up.dx;v+=skip*vp.dx;r+=skip*rp.dx;
+  for(int x=rowMin;x<=rowMax;x++,u+=up.dx,v+=vp.dx,r+=rp.dx) {
+   float32 n0=dy0*(x-cx)+dx0*(y-cy),w0=n0*invDen;
+   if(w0<0) continue;
+   float32 n1=dy1*(x-cx)+dx1*(y-cy),w1=n1*invDen,w2=1.0f-w0-w1;
+   if(w1<0) continue;
+   if(YMGRE_Fabs(w2)<1e-5f) {w0=n0/den;w1=n1/den;w2=1.0f-w0-w1;}
+   if(w2<0) continue;
+   float32 depth=1.0f/(w0*q0+w1*q1+w2*q2);
+   int index=y*width+x;
+   float32 priorDepth=depthBuffer[index];
+   if(YMGRE_Fabs(priorDepth-depth)<2e-6f*depth) {
+    float32 pw0=n0/den,pw1=n1/den,pw2=1-pw0-pw1;
+    depth=1.0f/(pw0/a->base.pos.z+pw1/b->base.pos.z+pw2/c->base.pos.z);
+   }
+   if(priorDepth<=depth || depth<=znear) continue;
+   float32 uv=u*depth,vv=v*depth;
+   GRErgb24 texel=DefaultPolygonColor;
+   if(texture && tw && th) {
+   uint8 boundary=0;
+   int tx=GRE_VertexTexelCoordinate(uv,tw,&boundary),ty=GRE_VertexTexelCoordinate(vv,th,&boundary);
+   if(boundary) {
+    float32 ew0=n0/den,ew1=n1/den,ew2=1.0f-ew0-ew1;
+    float32 eq0=ew0/a->base.pos.z,eq1=ew1/b->base.pos.z,eq2=ew2/c->base.pos.z,eq=eq0+eq1+eq2;
+    float32 wa=eq0/eq,wb=eq1/eq,wc=eq2/eq;
+    uv=wa*a->base.u+wb*b->base.u+wc*c->base.u;vv=wa*a->base.v+wb*b->base.v+wc*c->base.v;
+    tx=(int)(YMGRE_Fabs(uv-(int)uv)*tw+1e-5f);ty=(int)(YMGRE_Fabs(vv-(int)vv)*th+1e-5f);
+    tx=GREMin(tx,tw-1);ty=GREMin(ty,th-1);
+   }
+   texel=texture[ty*tw+tx];
+   }
+   float32 shade=r*depth;
+   int cr=(int)(texel.R*shade),cg=(int)(texel.G*shade),cb=(int)(texel.B*shade);
+   depthBuffer[index]=depth;
+   colorBuffer[index]=GRE_FramePixel_From_RGB24((GRErgb24){
+    GRE_CLAMP_COLOR8(cr),GRE_CLAMP_COLOR8(cg),GRE_CLAMP_COLOR8(cb)});
+  }
+ }
+}
+#endif
+
 
 void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 	GRE_Polygon4d polygon, GRE_Material material, GRE_Camera4d camera)
@@ -131,7 +344,44 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 	float32 den = (b->base.pos.y-c->base.pos.y)*(a->base.pos.x-c->base.pos.x)+
 		(c->base.pos.x-b->base.pos.x)*(a->base.pos.y-c->base.pos.y);
 	if (YMGRE_Fabs(den) < 1e-6f) return;
+#if YMGRE_RASTER_FAST_INTERPOLATION
+	uint8 direct = 1;
+#if YMGRE_ENABLE_LINEAR_COLOR
+	if (camera->linearColorEnabled) direct = 0;
+#endif
+#if YMGRE_ENABLE_TRANSPARENCY
+	if (camera->opacityPass == 2 || (material && material->advanced && material->advanced->opacityPixel)) direct = 0;
+#endif
+	float32 zmin = GREMin(a->base.pos.z,GREMin(b->base.pos.z,c->base.pos.z));
+	float32 zmax = GREMax(a->base.pos.z,GREMax(b->base.pos.z,c->base.pos.z));
+	float32 spanX = GREMax(a->base.pos.x,GREMax(b->base.pos.x,c->base.pos.x))-
+		GREMin(a->base.pos.x,GREMin(b->base.pos.x,c->base.pos.x));
+	float32 spanY = GREMax(a->base.pos.y,GREMax(b->base.pos.y,c->base.pos.y))-
+		GREMin(a->base.pos.y,GREMin(b->base.pos.y,c->base.pos.y));
+	uint8 constantBoundary = material && material->pixel &&
+		((a->base.u==b->base.u && a->base.u==c->base.u &&
+		YMGRE_Raster_TextureBoundary(a->base.u,material->width)) ||
+		(a->base.v==b->base.v && a->base.v==c->base.v &&
+		YMGRE_Raster_TextureBoundary(a->base.v,material->height)));
+	if (direct && spanX<=32 && spanY<=32 && !constantBoundary && YMGRE_Fabs(den)>0.01f &&
+		zmin>1e-6f && zmax<zmin*8 &&
+		a->color.R==b->color.R && a->color.R==c->color.R &&
+		a->color.G==b->color.G && a->color.G==c->color.G &&
+		a->color.B==b->color.B && a->color.B==c->color.B &&
+		!(a->vertexSpecular.R||a->vertexSpecular.G||a->vertexSpecular.B||
+		  b->vertexSpecular.R||b->vertexSpecular.G||b->vertexSpecular.B||
+		  c->vertexSpecular.R||c->vertexSpecular.G||c->vertexSpecular.B)) {
+		if(a->color.R==a->color.G && a->color.R==a->color.B &&
+		   a->vertexLighting.R==a->vertexLighting.G && a->vertexLighting.R==a->vertexLighting.B &&
+		   b->vertexLighting.R==b->vertexLighting.G && b->vertexLighting.R==b->vertexLighting.B &&
+		   c->vertexLighting.R==c->vertexLighting.G && c->vertexLighting.R==c->vertexLighting.B)
+			GRE_RasterTexturedScalarPlanes(a,b,c,material,camera,den);
+		else GRE_RasterTexturedPlanes(a,b,c,material,camera,den);
+		return;
+	}
+#endif
  unsigned lod=YMGRE_Material_OpacityLOD(material,a,b,c,den);
+	YMGRE_ColorMipView colorMip=YMGRE_Material_ColorMipForTriangle(material,a,b,c);
 	int minX = GREMax(YMGRE_Raster_Floor(GREMin(a->base.pos.x,
 		GREMin(b->base.pos.x,c->base.pos.x))), 0);
 	int maxX = GREMin(YMGRE_Raster_Ceil(GREMax(a->base.pos.x,
@@ -140,6 +390,15 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 		GREMin(b->base.pos.y,c->base.pos.y))), 0);
 	int maxY = GREMin(YMGRE_Raster_Ceil(GREMax(a->base.pos.y,
 		GREMax(b->base.pos.y,c->base.pos.y))), camera->img.height-1);
+	/* The reciprocal is invariant across this triangle. Opacity maps retain the
+	 * reference arithmetic to avoid shifting a coverage threshold. */
+	int fast = YMGRE_RASTER_FAST_INTERPOLATION;
+#if YMGRE_ENABLE_TRANSPARENCY
+	if (material && material->advanced && material->advanced->opacityPixel) fast = 0;
+#endif
+	float32 qa = fast ? 1.0f/a->base.pos.z : 0;
+	float32 qb = fast ? 1.0f/b->base.pos.z : 0;
+	float32 qc = fast ? 1.0f/c->base.pos.z : 0;
 	for (int y = minY; y <= maxY; y++) for (int x = minX; x <= maxX; x++)
 	{
 		float32 w0=((b->base.pos.y-c->base.pos.y)*(x-c->base.pos.x)+
@@ -148,18 +407,28 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 			(a->base.pos.x-c->base.pos.x)*(y-c->base.pos.y))/den;
 		float32 w2=1.0f-w0-w1;
 		if (w0 < 0 || w1 < 0 || w2 < 0) continue;
-		float32 iw0=w0/a->base.pos.z, iw1=w1/b->base.pos.z, iw2=w2/c->base.pos.z;
+		float32 iw0=fast?w0*qa:w0/a->base.pos.z;
+		float32 iw1=fast?w1*qb:w1/b->base.pos.z;
+		float32 iw2=fast?w2*qc:w2/c->base.pos.z;
 		float32 invz=iw0+iw1+iw2;
 		if (invz <= 0) continue;
 		float32 wa=iw0/invz, wb=iw1/invz, wc=iw2/invz, z=1.0f/invz;
 		int index=y*camera->img.width+x;
+		if (fast && YMGRE_Fabs(camera->img.zbuff[index]-z) < 2e-6f*z) {
+			/* Preserve ownership at nearly coplanar depth crossings. */
+			iw0=w0/a->base.pos.z;
+			iw1=w1/b->base.pos.z;
+			iw2=w2/c->base.pos.z;
+			invz=iw0+iw1+iw2;
+			z=1.0f/invz;
+			wa=iw0/invz; wb=iw1/invz; wc=iw2/invz;
+		}
 		if (camera->img.zbuff[index] <= z || z <= camera->frustum.Znear) continue;
 		float32 u=wa*a->base.u+wb*b->base.u+wc*c->base.u;
 		float32 v=wa*a->base.v+wb*b->base.v+wc*c->base.v;
 		uint8 alpha=YMGRE_Material_Opacity(material,u,v,lod);
 		if(!YMGRE_Material_AcceptAlpha(camera,alpha))continue;
-		GRErgb24 texel=EMaterial_GetPixel(material ? material->pixel : NULL,
-			material ? material->width : 0, material ? material->height : 0, u, v);
+		GRErgb24 texel=EMaterial_GetPixel(colorMip.pixels,colorMip.width,colorMip.height,u,v);
 		float32 lr=wa*a->vertexLighting.R+wb*b->vertexLighting.R+wc*c->vertexLighting.R;
 		float32 lg=wa*a->vertexLighting.G+wb*b->vertexLighting.G+wc*c->vertexLighting.G;
 		float32 lb=wa*a->vertexLighting.B+wb*b->vertexLighting.B+wc*c->vertexLighting.B;
@@ -178,6 +447,42 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 	}
 }
 
+typedef struct { gre_fvector4d pos;float32 strength,k0,k1,k2;GRErgb24 color,base;uint8 global; } GRE_PixelLight;
+GRE_RASTER_INLINE void GRE_ShadePointPrepared(const GRE_PixelLight *l,const gre_fvector4d *p,
+ const gre_fvector4d *n,float32 invN,float32 mirror,uint8 power,GRErgb24 specColor,
+ GRErgb24 *base,GRErgb24 *spec)
+{
+ float32 lx=l->pos.x-p->x,ly=l->pos.y-p->y,lz=l->pos.z-p->z,lw=l->pos.w-p->w;
+ float32 dot=lx*n->x+ly*n->y+lz*n->z+lw*n->w;
+ if(dot<=0)return;
+ float32 len=YMGRE_Sqrt(lx*lx+ly*ly+lz*lz+lw*lw);if(len<=1e-6f)return;
+ float32 attenuation=l->k0+l->k1*len+l->k2*len*len;
+ attenuation=attenuation>1e-6f?1.0f/attenuation:0;
+ attenuation*=l->strength;
+ float32 lr=l->color.R*attenuation,lg=l->color.G*attenuation,lb=l->color.B*attenuation;
+ float32 cosine=dot*invN/(len*255);
+ base->R=GREMin(base->R+(uint32)(lr*l->base.R*cosine),255);
+ base->G=GREMin(base->G+(uint32)(lg*l->base.G*cosine),255);
+ base->B=GREMin(base->B+(uint32)(lb*l->base.B*cosine),255);
+ if(mirror>0 && (specColor.R || specColor.G || specColor.B)) {
+  float32 il=1.0f/len;
+  float32 iv=1.0f/YMGRE_Sqrt(p->x*p->x+p->y*p->y+p->z*p->z+p->w*p->w);
+  float32 hx=lx*il-p->x*iv,hy=ly*il-p->y*iv,hz=lz*il-p->z*iv,hw=lw*il-p->w*iv;
+  float32 ndh=(hx*n->x+hy*n->y+hz*n->z+hw*n->w)*invN;
+  float32 highlight=0;
+  if(ndh>0) {
+   float32 h2=hx*hx+hy*hy+hz*hz+hw*hw;
+   if(h2>1e-16f) {
+    if(!(power&1))highlight=YMGRE_Light_IntegerPower(ndh*ndh/h2,power>>1);
+    else highlight=YMGRE_Light_IntegerPower(ndh/YMGRE_Sqrt(h2),power);
+   }
+  }
+  spec->R=GREMin(spec->R+(uint32)(lr*specColor.R/255.0f*mirror*highlight),255);
+  spec->G=GREMin(spec->G+(uint32)(lg*specColor.G/255.0f*mirror*highlight),255);
+  spec->B=GREMin(spec->B+(uint32)(lb*specColor.B/255.0f*mirror*highlight),255);
+ }
+}
+#include "YMGRE_PixelShader.inc"
 static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 	GRE_Material material, GRE_List lights, gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera,
 	float32 mirrorKs, GRE_Camera4d camera, GRE_Lightmap lightmap)
@@ -200,6 +505,7 @@ static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 		(c->base.pos.x - b->base.pos.x) * (a->base.pos.y - c->base.pos.y);
 	if (YMGRE_Fabs(den) < 1e-6f) return;
  unsigned lod=YMGRE_Material_OpacityLOD(material,a,b,c,den);
+	YMGRE_ColorMipView colorMip=YMGRE_Material_ColorMipForTriangle(material,a,b,c);
 	int minX = GREMax(YMGRE_Raster_Floor(GREMin(a->base.pos.x,
 		GREMin(b->base.pos.x,c->base.pos.x))),0);
 	int maxX = GREMin(YMGRE_Raster_Ceil(GREMax(a->base.pos.x,
@@ -208,6 +514,54 @@ static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 		GREMin(b->base.pos.y,c->base.pos.y))),0);
 	int maxY = GREMin(YMGRE_Raster_Ceil(GREMax(a->base.pos.y,
 		GREMax(b->base.pos.y,c->base.pos.y))),camera->img.height-1);
+#if YMGRE_RASTER_FAST_INTERPOLATION
+ uint8 directColor = 1;
+#if YMGRE_ENABLE_LINEAR_COLOR
+ if (camera->linearColorEnabled) directColor = 0;
+#endif
+ if (directColor && !lightmap &&
+#if YMGRE_ENABLE_TRANSPARENCY
+     !(material && material->advanced && material->advanced->opacityPixel) &&
+#endif
+     !(material && material->unlit)) {
+	GRE_PixelLight prepared[8];unsigned preparedCount=0;
+	uint8 canPrepare=!lightmap && lights && !(material && material->unlit);
+	if(canPrepare) {
+	 unsigned index=0;
+	 for(GRE_ListNode ln=lights->listhead;ln;ln=ln->next,index++) {
+	  GRE_Light4d l=ln->data;
+	  if(preparedCount==8 || (l->type!=GRE_GlobalLight && l->type!=GRE_PointLight) ||
+	     (l->type!=GRE_GlobalLight && l->proper.shadowK>0) || l->proper.strength<0) {canPrepare=0;break;}
+	  GRE_PixelLight *out=&prepared[preparedCount++];out->pos=lightPos[index];
+	  out->strength=l->proper.strength;out->k0=l->proper.kc0;out->k1=l->proper.kc1;out->k2=l->proper.kc2;
+	  out->color=l->proper.lightcolor;out->global=l->type==GRE_GlobalLight;
+	  out->base=material?(out->global?material->ambient:material->diffuse):polygon->planeColor;
+	 }
+	}
+	uint8 flatBasis=a->normal.x==b->normal.x && a->normal.x==c->normal.x &&
+	 a->normal.y==b->normal.y && a->normal.y==c->normal.y && a->normal.z==b->normal.z && a->normal.z==c->normal.z &&
+	 a->tangent.x==b->tangent.x && a->tangent.x==c->tangent.x && a->tangent.y==b->tangent.y &&
+	 a->tangent.y==c->tangent.y && a->tangent.z==b->tangent.z && a->tangent.z==c->tangent.z;
+	gre_fvector4d flatNormal=a->normal,flatTangent=a->tangent,flatBitangent;
+	flatNormal.w=flatTangent.w=0;
+	if(flatBasis) {
+	 YMGRE_Fvector4d_Normalize(&flatNormal);
+	 float32 dot=YMGRE_Fvector4d_Dot(&flatNormal,&flatTangent);
+	 flatTangent.x-=flatNormal.x*dot;flatTangent.y-=flatNormal.y*dot;flatTangent.z-=flatNormal.z*dot;
+	 YMGRE_Fvector4d_Normalize(&flatTangent);
+	 YMGRE_Fvector4d_CrossToResult(&flatNormal,&flatTangent,&flatBitangent);
+	 if(handedness<0){flatBitangent.x=-flatBitangent.x;flatBitangent.y=-flatBitangent.y;flatBitangent.z=-flatBitangent.z;}
+	}
+#if YMGRE_RASTER_FAST_INTERPOLATION
+	if(canPrepare && flatBasis && a->color.R==b->color.R && a->color.R==c->color.R &&
+	 a->color.G==b->color.G && a->color.G==c->color.G && a->color.B==b->color.B && a->color.B==c->color.B &&
+	 YMGRE_Fvector4d_Len2(&flatNormal)>1e-12f) {
+		 GRE_RasterFlatBasis(a,b,c,material,camera,den,prepared,preparedCount,&flatNormal,&flatTangent,&flatBitangent,mirrorKs,specularPower,colorMip);
+	 return;
+	}
+#endif
+ }
+#endif
 	for (int y = minY; y <= maxY; y++) for (int x = minX; x <= maxX; x++)
 	{
 		float32 w0 = ((b->base.pos.y-c->base.pos.y)*(x-c->base.pos.x)+(c->base.pos.x-b->base.pos.x)*(y-c->base.pos.y))/den;
@@ -269,8 +623,7 @@ static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 				&normal, &light, &lighting, &specular, mirrorKs, specularPower,
 				material ? material->specular : (GRErgb24){ 255, 255, 255 });
 		}
-		GRErgb24 texel=EMaterial_GetPixel(material ? material->pixel : NULL,
-			material ? material->width : 0,material ? material->height : 0,u,v);
+		GRErgb24 texel=EMaterial_GetPixel(colorMip.pixels,colorMip.width,colorMip.height,u,v);
 		// Advanced lighting uses the standard 0..255 color range. The legacy
 		// rasterizer's neutral value of 128 must not be reused here: white light
 		// would otherwise double the color and create intersecting saturation bands.
@@ -306,7 +659,7 @@ void YMGRE_TriangleRaster_FillLightmap_wN(GRE_Vertex4d_wN vertices,
 // Private scanline inputs: z is reciprocal camera depth; u/v are u/z and v/z.
 static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 u0, float32 v0,
 	float32 x1, float32 y1, float32 z1, float32 u1, float32 v1,
-	float32 x2, float32 y2, float32 z2, float32 u2, float32 v2, GRErgb24 planecolor, GRE_Material mymater, GRE_Camera4d mycam)
+	float32 x2, float32 y2, float32 z2, float32 u2, float32 v2, GRErgb24 planecolor, GRE_Material mymater, YMGRE_ColorMipView colorMip, GRE_Camera4d mycam)
 {
 	if (y2 < 0 || y0 > mycam->img.height - 1)// 高度在图像范围之外
 		return;
@@ -465,7 +818,7 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 						if (depth > znear_v)
 						{
 							zbuff_i[x] = depth;
-							GRErgb24 texel = EMaterial_GetPixel(mymater->pixel, mymater->width, mymater->height, begU * depth, begV * depth);//getPixel(begU, begV)
+							GRErgb24 texel = EMaterial_GetPixel(colorMip.pixels,colorMip.width,colorMip.height,begU * depth,begV * depth);
 							//添加光照影响，最后一步才量化到帧缓冲格式
 							int cr = texel.R * planecolor.R / DefaultPolygonClv;
 							int cg = texel.G * planecolor.G / DefaultPolygonClv;
@@ -499,7 +852,7 @@ static inline void Fill_Top_Trangle(float32 x0, float32 y0, float32 z0, float32 
 //只填充平顶三角形，热路径不包含线框判断
 static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float32 u0, float32 v0,
 	float32 x1, float32 y1, float32 z1, float32 u1, float32 v1,
-	float32 x2, float32 y2, float32 z2, float32 u2, float32 v2, GRErgb24 planecolor, GRE_Material mymater, GRE_Camera4d mycam)
+	float32 x2, float32 y2, float32 z2, float32 u2, float32 v2, GRErgb24 planecolor, GRE_Material mymater, YMGRE_ColorMipView colorMip, GRE_Camera4d mycam)
 {
 	if (y2 < 0 || y0 > mycam->img.height - 1)// 高度在图像范围之外
 		return;
@@ -651,7 +1004,7 @@ static inline void Fill_Botton_Trangle(float32 x0, float32 y0, float32 z0, float
 						if (depth > znear_v)
 						{
 							zbuff_i[x] = depth;
-							GRErgb24 texel = EMaterial_GetPixel(mymater->pixel, mymater->width, mymater->height, begU * depth, begV * depth);//getPixel(begU, begV)
+							GRErgb24 texel = EMaterial_GetPixel(colorMip.pixels,colorMip.width,colorMip.height,begU * depth,begV * depth);
 							//添加光照影响，最后一步才量化到帧缓冲格式
 							int cr = texel.R * planecolor.R / DefaultPolygonClv;
 							int cg = texel.G * planecolor.G / DefaultPolygonClv;
@@ -748,6 +1101,9 @@ static uint8 YMGRE_TriangleRaster_Split(GRE_Vertex4d vertexList,
 void YMGRE_TriangleRaster_Fill(GRE_Vertex4d vertexList, GRE_Polygon4d polygon,
 	GRErgb24 planecolor, GRE_Material material, GRE_Camera4d camera)
 {
+	GRE_Vertex4d a=&vertexList[polygon->index[0]],b=&vertexList[polygon->index[1]],c=&vertexList[polygon->index[2]];
+	YMGRE_ColorMipView colorMip=YMGRE_Material_ColorMipForUV(material,
+		a->pos.x,a->pos.y,a->u,a->v,b->pos.x,b->pos.y,b->u,b->v,c->pos.x,c->pos.y,c->u,c->v);
 	/* Convert before splitting: every screen-space interpolation, including the
 	 * split vertex, must use 1/z. Keep caller vertices and the z buffer in camera z. */
 	gre_vertex4d projected[3];
@@ -770,21 +1126,21 @@ void YMGRE_TriangleRaster_Fill(GRE_Vertex4d vertexList, GRE_Polygon4d polygon,
 		Fill_Top_Trangle(split.top->pos.x, split.top->pos.y, split.top->pos.z, split.top->u, split.top->v,
 			split.left->pos.x, split.left->pos.y, split.left->pos.z, split.left->u, split.left->v,
 			split.right->pos.x, split.right->pos.y, split.right->pos.z, split.right->u, split.right->v,
-			planecolor, material, camera);
+			planecolor, material, colorMip, camera);
 	else if (split.type == 2)
 		Fill_Botton_Trangle(split.right->pos.x, split.right->pos.y, split.right->pos.z, split.right->u, split.right->v,
 			split.left->pos.x, split.left->pos.y, split.left->pos.z, split.left->u, split.left->v,
 			split.bottom->pos.x, split.bottom->pos.y, split.bottom->pos.z, split.bottom->u, split.bottom->v,
-			planecolor, material, camera);
+			planecolor, material, colorMip, camera);
 	else
 	{
 		Fill_Top_Trangle(split.top->pos.x, split.top->pos.y, split.top->pos.z, split.top->u, split.top->v,
 			split.left->pos.x, split.left->pos.y, split.left->pos.z, split.left->u, split.left->v,
 			split.right->pos.x, split.right->pos.y, split.right->pos.z, split.right->u, split.right->v,
-			planecolor, material, camera);
+			planecolor, material, colorMip, camera);
 		Fill_Botton_Trangle(split.right->pos.x, split.right->pos.y, split.right->pos.z, split.right->u, split.right->v,
 			split.left->pos.x, split.left->pos.y, split.left->pos.z, split.left->u, split.left->v,
 			split.bottom->pos.x, split.bottom->pos.y, split.bottom->pos.z, split.bottom->u, split.bottom->v,
-			planecolor, material, camera);
+			planecolor, material, colorMip, camera);
 	}
 }

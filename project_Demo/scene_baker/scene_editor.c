@@ -37,6 +37,8 @@
 #include "YMGRE_List.h"
 #include "YMGRE_MathBase.h"
 #include "YMGRE_Rendering_Pipeline.h"
+#include "YMGRE_LOD.h"
+#include "YMGRE_LOD_Simplify.h"
 #include "YMCS_File_IO.h"
 #include "YMGRE_ScenceManager.h"
 #include <float.h>
@@ -44,6 +46,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
 
 // New YMGUI keeps Ctrl+Z as the only built-in edit key; the editor retains
 // its private redo value for application-level shortcut handling.
@@ -114,6 +117,22 @@ static GYOBJ g_bakeExportDialog, g_bakeExportPath;
 static SceneEditorObject* g_bakeExportObject;
 static uint64_t g_bakeExportFingerprint;
 static uint8 g_exportModel;
+static GYOBJ g_lodPanel,g_lodNearInput,g_lodMiddleInput,g_lodHysteresisInput;
+static GYOBJ g_lodMiddleRatioInput,g_lodFarRatioInput,g_lodFarKind,g_lodPreviewButton;
+typedef struct {
+    SceneEditorObject* object;
+    SceneEditorObject* camera;
+    GRE_Object4d source,levels[3],active;
+    grass_impostor *image;
+    YMGRE_LOD_Object descriptor;
+    YMGRE_LOD_Instance selection;
+    gre_fvector4d center,direction;
+    float radius,savedCamera[6];
+    uint8 running,activeLevel;
+    unsigned frame;
+} SceneLodPreview;
+static SceneLodPreview g_lodPreview;
+static void lodStopPreview(void);
 static GYOBJ g_bakeLighting;
 static char g_bakedModelPath[SCENE_EDITOR_PATH_CAPACITY];
 static char g_bakeExportDirectory[SCENE_EDITOR_PATH_CAPACITY];
@@ -588,6 +607,7 @@ static void invalidateStaleBakes(void)
 static void rendererSelected(GYOBJ dropdown, uint16 mode)
 {
 	(void)dropdown;
+	if(mode==1&&g_lodPreview.running)lodStopPreview();
 	g_rendererMode=mode==1;
 	g_rayProgress=0;
 	SceneEditorInspector_SetRayTracing(g_rendererMode);
@@ -669,9 +689,140 @@ static void prepareRayRenderer(void)
     SceneRay_SetPrimitives(g_rayRenderer,primitives,count);
 }
 
+static void lodStopPreview(void)
+{
+    if(g_lodPreview.running&&g_lodPreview.camera&&g_lodPreview.camera->active){
+        SceneEditorObject* camera=g_lodPreview.camera;
+        camera->x=g_lodPreview.savedCamera[0];camera->y=g_lodPreview.savedCamera[1];
+        camera->z=g_lodPreview.savedCamera[2];camera->targetX=g_lodPreview.savedCamera[3];
+        camera->targetY=g_lodPreview.savedCamera[4];camera->targetZ=g_lodPreview.savedCamera[5];
+    }
+    YMGRE_Free_Object(g_lodPreview.active);
+    YMGRE_Free_Object(g_lodPreview.levels[1]);
+    YMGRE_Free_Object(g_lodPreview.levels[2]);
+    free(g_lodPreview.image);
+    memset(&g_lodPreview,0,sizeof(g_lodPreview));
+    if(g_lodPreviewButton)YMGUI_Button_SetText(g_lodPreviewButton,"连续预览");
+}
+
+static int lodReadSettings(float *nearPixels,float *middlePixels,float *hysteresis)
+{
+    char extra;
+    if(!g_lodNearInput||!g_lodMiddleInput||!g_lodHysteresisInput||
+       sscanf(YMGUI_TextInput_GetText(g_lodNearInput),"%f %c",nearPixels,&extra)!=1||
+       sscanf(YMGUI_TextInput_GetText(g_lodMiddleInput),"%f %c",middlePixels,&extra)!=1||
+       sscanf(YMGUI_TextInput_GetText(g_lodHysteresisInput),"%f %c",hysteresis,&extra)!=1||
+       !isfinite(*nearPixels)||!isfinite(*middlePixels)||!isfinite(*hysteresis)||
+       *nearPixels<=*middlePixels||*middlePixels<=0||*hysteresis<0||*hysteresis>=1){
+        setStatus("LOD 阈值无效：近 > 中 > 0，死区范围为 0～1");return 0;
+    }
+    return 1;
+}
+static int lodReadRatios(float *middleRatio,float *farRatio)
+{
+    char extra;
+    int farImage=YMGUI_Dropdown_GetSelected(g_lodFarKind)==1;
+    if(sscanf(YMGUI_TextInput_GetText(g_lodMiddleRatioInput),"%f %c",middleRatio,&extra)!=1||
+       !isfinite(*middleRatio)||*middleRatio<=0||*middleRatio>1||
+       (!farImage&&(sscanf(YMGUI_TextInput_GetText(g_lodFarRatioInput),"%f %c",farRatio,&extra)!=1||
+       !isfinite(*farRatio)||*farRatio<=0||*farRatio>*middleRatio))){
+        setStatus("保留比例无效：0 < 远级比例 ≤ 中级比例 ≤ 1");return 0;
+    }
+    if(farImage)*farRatio=*middleRatio;
+    return 1;
+}
+static int lodPrepareLevels(GRE_Object4d source,GRE_Object4d levels[3],
+    float middleRatio,float farRatio,int farImage)
+{
+    levels[0]=source;
+    for(GRE_Object4d part=source;part;part=part->nextObject)
+        if(part->lightmap){setStatus("带逐面光照贴图的模型暂不能简化，请先导出普通模型");return 0;}
+    levels[1]=YMGRE_LOD_SimplifyMesh(source,
+        (YMGRE_LOD_SimplifyOptions){.target_ratio=middleRatio,.prune_components=1},NULL);
+    levels[2]=farImage?NULL:YMGRE_LOD_SimplifyMesh(source,
+        (YMGRE_LOD_SimplifyOptions){.target_ratio=farRatio,.prune_components=1},NULL);
+    if(!levels[1]||(!farImage&&!levels[2])){
+        YMGRE_Free_Object(levels[1]);YMGRE_Free_Object(levels[2]);
+        levels[1]=levels[2]=NULL;setStatus("LOD 简化失败；检查网格拓扑和贴图");return 0;
+    }
+    return 1;
+}
+static int lodObjectBounds(GRE_Object4d mesh,gre_fvector4d *center,float *radius)
+{
+    gre_fvector4d lo={FLT_MAX,FLT_MAX,FLT_MAX,1},hi={-FLT_MAX,-FLT_MAX,-FLT_MAX,1};
+    for(GRE_Object4d part=mesh;part;part=part->nextObject)
+        for(int i=0;i<part->pointNum;i++){
+            gre_fvector4d p=part->pointList[i].pos;
+            if(p.x<lo.x)lo.x=p.x;if(p.y<lo.y)lo.y=p.y;if(p.z<lo.z)lo.z=p.z;
+            if(p.x>hi.x)hi.x=p.x;if(p.y>hi.y)hi.y=p.y;if(p.z>hi.z)hi.z=p.z;
+        }
+    *center=(gre_fvector4d){(lo.x+hi.x)*.5f,(lo.y+hi.y)*.5f,(lo.z+hi.z)*.5f,1};
+    *radius=.5f*sqrtf((hi.x-lo.x)*(hi.x-lo.x)+(hi.y-lo.y)*(hi.y-lo.y)+(hi.z-lo.z)*(hi.z-lo.z));
+    return isfinite(*radius)&&*radius>0;
+}
+static void lodPositionPreviewCamera(void)
+{
+    SceneLodPreview* preview=&g_lodPreview;
+    GRE_Camera4d camera=preview->camera->camera;
+    float planeHeight=camera->perspectPlane.pU-camera->perspectPlane.pD;
+    if(!(planeHeight>0))return;
+    unsigned phase=preview->frame%64,step=phase<=32?phase:64-phase;
+    float fraction=(float)step/32.0f;
+    float nearPixels=preview->descriptor.levels[0].min_pixels*1.5f;
+    float farPixels=fmaxf(1.0f,preview->descriptor.levels[1].min_pixels*.25f);
+    float pixels=nearPixels*powf(farPixels/nearPixels,fraction);
+    float depth=2*preview->radius*camera->perspectPlane.Dis*camera->img.height/(planeHeight*pixels);
+    preview->camera->x=preview->center.x+preview->direction.x*depth;
+    preview->camera->y=preview->center.y+preview->direction.y*depth;
+    preview->camera->z=preview->center.z+preview->direction.z*depth;
+    preview->camera->targetX=preview->center.x;
+    preview->camera->targetY=preview->center.y;
+    preview->camera->targetZ=preview->center.z;
+}
+static GRE_ListNode lodPreviewNode(void)
+{
+    SceneLodPreview* preview=&g_lodPreview;
+    if(!preview->running)return NULL;
+    if(!preview->object->active||preview->object->mesh!=preview->source||
+       preview->camera!=g_activeCamera){lodStopPreview();return NULL;}
+    const YMGRE_LOD_Level* level=YMGRE_LOD_SelectCamera(&preview->descriptor,
+        &preview->selection,g_activeCamera->camera,preview->center,preview->radius);
+    if(!level)return NULL;
+    if(level->kind==YMGRE_LOD_IMAGE){
+        YMGRE_Free_Object(preview->active);preview->active=NULL;
+        preview->activeLevel=preview->selection.level;
+        for(GRE_ListNode node=g_objectsList.listhead;node;node=node->next)
+            if(node->data==preview->source)return node;
+        lodStopPreview();return NULL;
+    }
+    if(!preview->active||preview->activeLevel!=preview->selection.level){
+        GRE_Object4d replacement=YMGRE_Object_Clone((GRE_Object4d)level->resource);
+        if(!replacement){setStatus("LOD 预览网格克隆失败");lodStopPreview();return NULL;}
+        int prepared=1;
+        for(GRE_Object4d part=replacement;part;part=part->nextObject){
+            part->WorldCoordinate=preview->center;
+            part->boundType=GRE_Bounding_Sphere_R;part->BoundingSphereR=0;
+            for(int i=0;i<part->pointNum;i++){
+                gre_fvector4d p=part->pointList[i].pos;
+                float dx=p.x-preview->center.x,dy=p.y-preview->center.y,dz=p.z-preview->center.z;
+                float distance=sqrtf(dx*dx+dy*dy+dz*dz);
+                if(distance>part->BoundingSphereR)part->BoundingSphereR=distance;
+            }
+            if(!YMGRE_Object_GenerateVertexAttributes(part)){prepared=0;break;}
+        }
+        if(!prepared){YMGRE_Free_Object(replacement);setStatus("LOD 预览顶点准备失败");lodStopPreview();return NULL;}
+        YMGRE_Free_Object(preview->active);preview->active=replacement;
+        preview->activeLevel=preview->selection.level;
+    }
+    for(GRE_ListNode node=g_objectsList.listhead;node;node=node->next)
+        if(node->data==preview->source)return node;
+    lodStopPreview();return NULL;
+}
+
 static void renderScene(void)
 {
 	if (g_activeCamera == NULL) return;
+	if(g_lodPreview.running)lodPositionPreviewCamera();
 	syncCamera(g_activeCamera);
 	for (GRE_ListNode node = g_objectsList.listhead; node != NULL; node = node->next) {
 		GRE_Object4d object = (GRE_Object4d)node->data;
@@ -719,6 +870,8 @@ static void renderScene(void)
 	}
 	syncRayMaterials();
 	invalidateStaleBakes();
+	GRE_ListNode previewNode=lodPreviewNode();
+	if(previewNode)previewNode->data=g_lodPreview.active;
 	if(g_rendererMode==1) {
 		prepareRayRenderer();
 		int progress=SceneRay_Render(g_rayRenderer,g_activeCamera->camera,&g_objectsList,&g_lightsList,&g_importContext.MaterialList);
@@ -734,6 +887,19 @@ static void renderScene(void)
 	}
 	if(g_rendererMode==0)YMGRE_Camera_TanglePipline_wN(g_activeCamera->camera,
 		&g_lightsList, &g_objectsList, &g_importContext.MaterialList, g_workspace);
+	if(previewNode){
+		if(!g_lodPreview.active&&g_lodPreview.image)
+			grass_impostor_draw(g_lodPreview.image,g_activeCamera->camera,0,0,0,1,0);
+		previewNode->data=g_lodPreview.source;
+		if(g_lodPreview.frame%4==0){
+			char status[180];snprintf(status,sizeof(status),"LOD 预览：第 %u 层，%u 面，投影 %.0f 像素",
+				(unsigned)g_lodPreview.selection.level,
+				g_lodPreview.active?(unsigned)g_lodPreview.active->polygonNum:2u,
+				YMGRE_LOD_ProjectedDiameter(g_activeCamera->camera,g_lodPreview.center,g_lodPreview.radius));
+			setStatus(status);
+		}
+		g_lodPreview.frame++;
+	}
 	addSelectionLines();
 	addTransformGizmo();
 	YMGRE_Camera_LineList_Rendering(g_activeCamera->camera, g_lines, g_lineCount, 1);
@@ -1191,6 +1357,7 @@ static void deleteObject(SceneEditorObject* object, void* userData)
 {
 	(void)userData;
 	if (object==NULL || object==g_mainCamera || object==g_globalLight) return;
+	if(g_lodPreview.running&&(object==g_lodPreview.object||object==g_lodPreview.camera))lodStopPreview();
 	if (object==g_activeCamera){g_historyBatch++;switchCamera(g_mainCamera,NULL);g_historyBatch--;}
 	if (object->kind==SCENE_OBJECT_MESH) removeListItem(&g_objectsList,object->mesh,YMGRE_Free_Object);
 	else if (object->kind==SCENE_OBJECT_LIGHT) removeListItem(&g_lightsList,object->light,YMGRE_Free_Light);
@@ -1430,6 +1597,38 @@ static void bakeExportResult(GYOBJ dialog, uint8 accepted, const char* path, voi
 	(void)dialog;(void)userData;
 	SceneEditorObject* object=g_bakeExportObject;g_bakeExportObject=NULL;
 	if(!accepted || !path){setStatus("已取消导出");return;}
+	if(g_exportModel==2){
+		lodStopPreview();
+		if(!object||!object->active||!object->mesh){setStatus("LOD 导出对象已不存在");return;}
+		float nearPixels,middlePixels,hysteresis;
+		if(!lodReadSettings(&nearPixels,&middlePixels,&hysteresis))return;
+		float middleRatio,farRatio;
+		if(!lodReadRatios(&middleRatio,&farRatio))return;
+		int farImage=YMGUI_Dropdown_GetSelected(g_lodFarKind)==1;
+		GRE_Object4d levels[3]={0};
+		if(!lodPrepareLevels(object->mesh,levels,middleRatio,farRatio,farImage))return;
+		grass_impostor *image=farImage?malloc(sizeof(*image)):NULL;
+		if(farImage&&(!image||!SceneLodImage_Bake(image,object->mesh,
+			&g_importContext.MaterialList,&g_lightsList))){
+			free(image);YMGRE_Free_Object(levels[1]);setStatus("八方向图生成失败");return;
+		}
+		gre_fvector4d origin={object->x,object->y,object->z,0};
+		gre_material surface={0};surface.ambient=surface.diffuse=(GRErgb24){
+			(object->color>>16)&255,(object->color>>8)&255,object->color&255};
+		GRE_List materials[3]={&g_importContext.MaterialList,&g_importContext.MaterialList,
+			&g_importContext.MaterialList};
+		char resource[SCENE_EDITOR_PATH_CAPACITY],error[256];
+		int exported=SceneModel_ExportLODWithImageNamed(levels,materials,image,&surface,&origin,path,
+			object->name,
+			nearPixels,middlePixels,hysteresis,resource,sizeof(resource),error,sizeof(error));
+		YMGRE_Free_Object(levels[1]);YMGRE_Free_Object(levels[2]);free(image);
+		if(!exported){setStatus(error);return;}
+		snprintf(g_bakeExportDirectory,sizeof(g_bakeExportDirectory),"%s",path);
+		YMGUI_TextInput_SetText(g_bakeExportPath,resource);
+		setStatus(farImage?"LOD 已导出：近/中网格、八方向图和 object.lod，路径见下方":
+			"LOD 已导出：三级网格、材质、贴图和 object.lod，路径见下方");
+		printf("scene LOD export: %s: PASS\n",resource);return;
+	}
 	if(g_exportModel) {
 		renderScene();
 		if(!object || !object->active || !object->mesh){setStatus("导出对象已不存在");return;}
@@ -1485,14 +1684,83 @@ static void showExportDirectory(uint8 model)
 	if(!YMGUI_FileDialog_Show(g_bakeExportDialog,GY_FILE_DIALOG_SELECT_DIRECTORY,directory,"")) {
 		g_bakeExportObject=NULL;setStatus("无法打开导出目录，请检查目录权限");return;
 	}
-	setStatus(model?"请选择导出目录；模型、材质和贴图将保存到新建的资源文件夹":
-		"请选择导出目录；烘焙模型、材质和彩色贴图将保存到新建的资源文件夹");
+	setStatus(model==2?"请选择 LOD 资源导出目录；将生成模型/八方向图和 object.lod":
+		(model?"请选择导出目录；模型、材质和贴图将保存到新建的资源文件夹":
+		"请选择导出目录；烘焙模型、材质和彩色贴图将保存到新建的资源文件夹"));
 }
 
 static void exportModelClicked(GYOBJ button)
 {
 	(void)button;invalidateStaleBakes();
 	showExportDirectory(!g_selected || !g_selected->mesh || !g_selected->mesh->lightmap);
+}
+
+static void lodPanelClicked(GYOBJ button)
+{
+	(void)button;
+	if((g_lodPanel->state&GY_STATE_Hidden)&&
+	   (!g_selected||g_selected->kind!=SCENE_OBJECT_MESH||!g_selected->mesh)){
+		setStatus("请先选中需要制作 LOD 的网格物体");return;
+	}
+	if(!(g_lodPanel->state&GY_STATE_Hidden)&&g_lodPreview.running)lodStopPreview();
+	YMGUI_Obj_SetHidden(g_lodPanel,!(g_lodPanel->state&GY_STATE_Hidden));
+}
+static void lodPreviewClicked(GYOBJ button)
+{
+	(void)button;
+	if(g_lodPreview.running){lodStopPreview();setStatus("已退出 LOD 连续预览，恢复原模型与机位");return;}
+	if(!g_selected||g_selected->kind!=SCENE_OBJECT_MESH||!g_selected->mesh||!g_activeCamera){
+		setStatus("请先选中需要预览的网格物体");return;
+	}
+	if(g_rendererMode!=0){setStatus("请先把视口渲染器切换为光栅化");return;}
+	float nearPixels,middlePixels,hysteresis;
+	if(!lodReadSettings(&nearPixels,&middlePixels,&hysteresis))return;
+	float middleRatio,farRatio;
+	if(!lodReadRatios(&middleRatio,&farRatio))return;
+	int farImage=YMGUI_Dropdown_GetSelected(g_lodFarKind)==1;
+	SceneLodPreview* preview=&g_lodPreview;
+	if(!lodPrepareLevels(g_selected->mesh,preview->levels,middleRatio,farRatio,farImage))return;
+	if(farImage){
+		preview->image=malloc(sizeof(*preview->image));
+		if(!preview->image||!SceneLodImage_Bake(preview->image,g_selected->mesh,
+			&g_importContext.MaterialList,&g_lightsList)){
+			lodStopPreview();setStatus("八方向图生成失败");return;
+		}
+	}
+	if(!lodObjectBounds(g_selected->mesh,&preview->center,&preview->radius)){
+		lodStopPreview();setStatus("模型边界无效，无法预览 LOD");return;
+	}
+	YMGRE_LOD_Init(&preview->descriptor,hysteresis);
+	for(int i=0;i<3;i++)
+		if(!YMGRE_LOD_Add(&preview->descriptor,i==2&&farImage?YMGRE_LOD_IMAGE:YMGRE_LOD_MESH,
+				i==0?nearPixels:i==1?middlePixels:0,NULL,
+				i==2&&farImage?(void*)preview->image:(void*)preview->levels[i])){
+			lodStopPreview();setStatus("无法建立 LOD 层级");return;
+		}
+	preview->object=g_selected;preview->source=g_selected->mesh;
+	preview->camera=g_activeCamera;preview->activeLevel=255;
+	preview->savedCamera[0]=g_activeCamera->x;preview->savedCamera[1]=g_activeCamera->y;
+	preview->savedCamera[2]=g_activeCamera->z;preview->savedCamera[3]=g_activeCamera->targetX;
+	preview->savedCamera[4]=g_activeCamera->targetY;preview->savedCamera[5]=g_activeCamera->targetZ;
+	preview->direction=(gre_fvector4d){g_activeCamera->x-preview->center.x,
+		g_activeCamera->y-preview->center.y,g_activeCamera->z-preview->center.z,0};
+	float length=sqrtf(preview->direction.x*preview->direction.x+
+		preview->direction.y*preview->direction.y+preview->direction.z*preview->direction.z);
+	if(length<.001f){preview->direction=(gre_fvector4d){0,.14f,-.99f,0};length=1;}
+	preview->direction.x/=length;preview->direction.y/=length;preview->direction.z/=length;
+	preview->running=1;
+	YMGUI_Button_SetText(g_lodPreviewButton,"停止预览");
+	setStatus("LOD 连续预览已启动；相机远近往返，死区内保持当前层级");
+}
+static void lodExportClicked(GYOBJ button)
+{
+	(void)button;
+	if(g_lodPreview.running)lodStopPreview();
+	float nearPixels,middlePixels,hysteresis;
+	if(!lodReadSettings(&nearPixels,&middlePixels,&hysteresis))return;
+	float middleRatio,farRatio;
+	if(!lodReadRatios(&middleRatio,&farRatio))return;
+	showExportDirectory(2);
 }
 
 static void toggleBakePreview(SceneEditorObject* object, void* userData)
@@ -1658,7 +1926,7 @@ static void loadSceneFromPath(const char* path, void* userData)
 		}
 		count=compactCount;
 	}
-	clearSelection("正在打开场景");
+	lodStopPreview();clearSelection("正在打开场景");
 	for(int i=0;i<32;++i)if(g_scene[i].active&&g_scene[i].kind==SCENE_OBJECT_CAMERA&&g_scene[i].camera!=NULL)
 		YMGRE_Free_Camera(g_scene[i].camera);
 	YMGRE_List_Clear(&g_lightsList,YMGRE_Free_Light);YMGRE_List_Clear(&g_objectsList,YMGRE_Free_Object);
@@ -1753,6 +2021,7 @@ static void redoClicked(GYOBJ button){(void)button;if(g_historyIndex+1<g_history
 
 static void createNewScene(void)
 {
+	lodStopPreview();
 	clearSelection("正在新建场景");
 	for(int i=0;i<32;++i)
 		if(g_scene[i].active&&g_scene[i].kind==SCENE_OBJECT_CAMERA&&g_scene[i].camera!=NULL)
@@ -1910,6 +2179,8 @@ static void buildUi(EditorUi* ui)
 	GYOBJ exportButton=YMGUI_Creat_Button_Creat(bar,810,12,118,30);
 	YMGUI_Button_SetText(exportButton,"导出模型");YMGUI_Button_SetClicked(exportButton,exportModelClicked);
 	YMGUI_Button_SetColors(exportButton,GY_ARGB(0xFF,0x2E,0x79,0x96),GY_ARGB(0xFF,0x3C,0x86,0xB8));
+	GYOBJ lodButton=YMGUI_Creat_Button_Creat(bar,932,12,84,30);
+	YMGUI_Button_SetText(lodButton,"制作LOD");YMGUI_Button_SetClicked(lodButton,lodPanelClicked);
 
 	g_editMenu=YMGUI_Creat_Obj_Creat(root,12,48,170,300);YMGUI_Obj_SetBgColor(g_editMenu,GY_ARGB(0xFF,0x25,0x2D,0x3C));YMGUI_Obj_SetHidden(g_editMenu,1);
 	menuButton(g_editMenu,8,"打开场景",openClicked);menuButton(g_editMenu,40,"保存场景",saveClicked);
@@ -1953,6 +2224,38 @@ static void buildUi(EditorUi* ui)
 	g_bakeExportPath=YMGUI_Creat_TextInput_Creat(root,250,752,548,26,SCENE_EDITOR_PATH_CAPACITY-1);
 	/* Keep the status label left of the inspector so it cannot swallow bottom controls. */
 	ui->status=label(root,14,786,780,24,"就绪",muted);
+	g_lodPanel=YMGUI_Creat_Obj_Creat(root,250,90,548,206);
+	YMGUI_Obj_SetBgColor(g_lodPanel,GY_ARGB(0xFF,0x28,0x35,0x45));
+	label(g_lodPanel,16,10,500,24,"LOD 制作：配置层级资源、切换阈值并预览导出",fg);
+	label(g_lodPanel,16,42,62,26,"近像素",fg);
+	g_lodNearInput=YMGUI_Creat_TextInput_Creat(g_lodPanel,80,42,64,26,12);
+	YMGUI_TextInput_SetText(g_lodNearInput,"120");
+	label(g_lodPanel,168,42,62,26,"中像素",fg);
+	g_lodMiddleInput=YMGUI_Creat_TextInput_Creat(g_lodPanel,232,42,64,26,12);
+	YMGUI_TextInput_SetText(g_lodMiddleInput,"40");
+	label(g_lodPanel,320,42,48,26,"死区",fg);
+	g_lodHysteresisInput=YMGUI_Creat_TextInput_Creat(g_lodPanel,372,42,64,26,12);
+	YMGUI_TextInput_SetText(g_lodHysteresisInput,"0.10");
+	label(g_lodPanel,16,82,90,26,"中级保留",fg);
+	g_lodMiddleRatioInput=YMGUI_Creat_TextInput_Creat(g_lodPanel,104,82,62,26,12);
+	YMGUI_TextInput_SetText(g_lodMiddleRatioInput,"0.80");
+	label(g_lodPanel,178,82,90,26,"远级保留",fg);
+	g_lodFarRatioInput=YMGUI_Creat_TextInput_Creat(g_lodPanel,266,82,62,26,12);
+	YMGUI_TextInput_SetText(g_lodFarRatioInput,"0.60");
+	g_lodFarKind=YMGUI_Creat_Dropdown_Creat(g_lodPanel,350,82,170,30);
+	YMGUI_Dropdown_AddOption(g_lodFarKind,"远级：简化模型");
+	YMGUI_Dropdown_AddOption(g_lodFarKind,"远级：八方向图");
+	label(g_lodPanel,16,118,500,24,"预览/导出时生成资源；选八方向图时远级比例不使用",muted);
+	g_lodPreviewButton=YMGUI_Creat_Button_Creat(g_lodPanel,16,158,150,32);
+	YMGUI_Button_SetText(g_lodPreviewButton,"连续预览");
+	YMGUI_Button_SetClicked(g_lodPreviewButton,lodPreviewClicked);
+	GYOBJ lodExportButton=YMGUI_Creat_Button_Creat(g_lodPanel,184,158,150,32);
+	YMGUI_Button_SetText(lodExportButton,"导出LOD");
+	YMGUI_Button_SetClicked(lodExportButton,lodExportClicked);
+	GYOBJ lodCloseButton=YMGUI_Creat_Button_Creat(g_lodPanel,352,158,150,32);
+	YMGUI_Button_SetText(lodCloseButton,"关闭");
+	YMGUI_Button_SetClicked(lodCloseButton,lodPanelClicked);
+	YMGUI_Obj_SetHidden(g_lodPanel,1);
 	clearSelection("就绪");YMGUI_Inject_SetCtx(ctx);YMGUI_SetFocus(ctx,ui->viewport);
 }
 
@@ -2299,6 +2602,140 @@ static int runBakeSelfTest(void)
 #include "test_scene_uv_editor.h"
 #include "test_scene_texture_tools.h"
 
+static int runLodUiSelfTest(void)
+{
+    int failures=0;
+#define LOD_CHECK(x) do{if(!(x)){fprintf(stderr,"LOD UI test failed at line %d: %s\n",__LINE__,#x);failures++;goto done;}}while(0)
+    char root[]="/tmp/ymgre-lod-ui-XXXXXX";LOD_CHECK(mkdtemp(root)!=NULL);
+    createNewScene();
+    SceneEditorPlaceResult sphere={.kind=SCENE_PLACE_SPHERE,.x=0,.y=0,.z=0,.scale=1,
+        .color=GY_ARGB(0xFF,80,170,90),.detailA=12,.detailB=24};
+    snprintf(sphere.name,sizeof(sphere.name),"LOD test sphere");
+    snprintf(sphere.type,sizeof(sphere.type),"球体");
+    sphere.mesh=SceneEditorPlace_CreateMesh(&sphere);
+    LOD_CHECK(sphere.mesh!=NULL);
+    SceneEditorPlace_TransformMesh(sphere.mesh,0,0,0,0,1,0);
+    objectPlaced(&sphere,NULL);LOD_CHECK(g_selected&&g_selected->mesh);
+    GRE_Object4d original=g_selected->mesh;
+    renderScene();
+    YMGUI_Inject_Pointer(974,27,1);YMGUI_Inject_Pointer(974,27,0);
+    LOD_CHECK(!(g_lodPanel->state&GY_STATE_Hidden));
+    YMGUI_Obj_Invalidate(g_ui->host.context->root);YMGUI_Refresh(g_ui->host.context);
+    unsigned screenCount=(unsigned)g_ui->host.display.hor_res*g_ui->host.display.ver_res;
+    GRErgb24 *screen=malloc(screenCount*sizeof(*screen));LOD_CHECK(screen!=NULL);
+    for(unsigned i=0;i<screenCount;i++){
+        GYcolor color=GY_PxToColor(g_ui->host.display.buf1[i]);
+        screen[i]=(GRErgb24){(color>>16)&255,(color>>8)&255,color&255};
+    }
+    char panelPath[4096];snprintf(panelPath,sizeof(panelPath),"%s/lod-panel.bmp",root);
+    YMGRE_Image_LoadTo_Bmp_File(panelPath,screen,g_ui->host.display.hor_res,g_ui->host.display.ver_res);
+    free(screen);
+    YMGUI_TextInput_SetText(g_lodMiddleRatioInput,"0.65");
+    YMGUI_TextInput_SetText(g_lodFarRatioInput,"0.35");
+    lodPreviewClicked(NULL);LOD_CHECK(g_lodPreview.running);
+    uint8 seen[3]={0};
+    for(int i=0;i<=64;i++){
+        renderScene();seen[g_lodPreview.selection.level]=1;
+        LOD_CHECK(g_selected->mesh==original);
+    }
+    LOD_CHECK(seen[0]&&seen[1]&&seen[2]);
+    lodStopPreview();LOD_CHECK(g_selected->mesh==original);
+    YMGUI_Dropdown_SetSelected(g_lodFarKind,1);
+    lodPreviewClicked(NULL);LOD_CHECK(g_lodPreview.running&&g_lodPreview.image);
+    unsigned opaque=0;
+    for(int i=0;i<GRASS_TILE*GRASS_TILE;i++)opaque+=g_lodPreview.image->views[0].mask[i]!=0;
+    LOD_CHECK(opaque>0);
+    for(int i=0;i<=32;i++)renderScene();
+    LOD_CHECK(g_lodPreview.selection.level==2&&g_lodPreview.active==NULL&&g_selected->mesh==original);
+    GRErgb24 *pixels=malloc((size_t)g_target.width*g_target.height*sizeof(*pixels));LOD_CHECK(pixels!=NULL);
+    for(size_t i=0;i<(size_t)g_target.width*g_target.height;i++)pixels[i]=GRE_FramePixel_To_RGB24(g_target.data[i]);
+    char framePath[4096];snprintf(framePath,sizeof(framePath),"%s/far-image.bmp",root);
+    YMGRE_Image_LoadTo_Bmp_File(framePath,pixels,g_target.width,g_target.height);free(pixels);
+    lodStopPreview();
+    g_exportModel=2;g_bakeExportObject=g_selected;
+    bakeExportResult(NULL,1,root,NULL);
+    const char *lodPath=YMGUI_TextInput_GetText(g_bakeExportPath);
+    LOD_CHECK(lodPath&&access(lodPath,R_OK)==0);
+    FILE *description=fopen(lodPath,"rb");LOD_CHECK(description!=NULL);
+    char contents[512]={0};size_t length=fread(contents,1,sizeof(contents)-1,description);
+    fclose(description);
+    LOD_CHECK(length>0&&strstr(contents,"level image 0 views8.bin")!=NULL);
+    YMGRE_LOD_Object parsed;LOD_CHECK(YMGRE_LOD_Parse(&parsed,contents)&&
+        parsed.count==3&&parsed.levels[2].kind==YMGRE_LOD_IMAGE);
+    char assetPath[4096];snprintf(assetPath,sizeof(assetPath),"%s",lodPath);
+    char *slash=strrchr(assetPath,'/');LOD_CHECK(slash!=NULL);
+    strcpy(slash+1,"views8.bin");
+    LOD_CHECK(strstr(lodPath,"LOD_test_sphere_lod/object.lod")!=NULL);
+    char meshAsset[4096];snprintf(meshAsset,sizeof(meshAsset),"%s",lodPath);
+    strcpy(strrchr(meshAsset,'/')+1,"LOD_test_sphere_near.mesh");
+    LOD_CHECK(access(meshAsset,R_OK)==0);
+    strcpy(strrchr(meshAsset,'/')+1,"LOD_test_sphere_middle.mesh");
+    LOD_CHECK(access(meshAsset,R_OK)==0);
+    char packageDir[4096];snprintf(packageDir,sizeof(packageDir),"%s",lodPath);
+    *strrchr(packageDir,'/')=0;
+    LOD_CHECK(access(packageDir,R_OK)==0);
+    DIR *package=opendir(packageDir);LOD_CHECK(package!=NULL);
+    unsigned sharedTextures=0;struct dirent *entry;
+    while((entry=readdir(package))!=NULL)
+        sharedTextures+=strncmp(entry->d_name,"texture_",8)==0;
+    closedir(package);LOD_CHECK(sharedTextures==1);
+    grass_impostor *reloaded=malloc(sizeof(*reloaded));LOD_CHECK(reloaded!=NULL);
+    int loaded=SceneLodImage_Load(reloaded,assetPath);
+    LOD_CHECK(loaded&&reloaded->span>0&&reloaded->views[0].right>=reloaded->views[0].left);
+    strcpy(strrchr(assetPath,'/')+1,"view_7.bmp");LOD_CHECK(access(assetPath,R_OK)==0);
+    strcpy(strrchr(assetPath,'/')+1,"mask_7.bmp");LOD_CHECK(access(assetPath,R_OK)==0);
+    free(reloaded);
+    const char *fixtures[2]={YMGRE_GRASS_LOD_FIXTURE,YMGRE_TREE_LOD_FIXTURE};
+    for(int fixture=0;fixture<2;fixture++){
+        gre_scence context={0};
+        GRE_Object4d vegetation=YMGRE_LoadOgreMeshAndMaterial(&context,fixtures[fixture]);
+        LOD_CHECK(vegetation!=NULL);
+        grass_impostor *views=malloc(sizeof(*views));LOD_CHECK(views!=NULL);
+        int baked=SceneLodImage_Bake(views,vegetation,&context.MaterialList,&g_lightsList);
+        unsigned coverage=0;
+        for(int v=0;v<GRASS_VIEWS;v++)for(int p=0;p<GRASS_TILE*GRASS_TILE;p++)
+            coverage+=views->views[v].mask[p]!=0;
+        free(views);YMGRE_Free_Object(vegetation);
+        YMGRE_List_Clear(&context.MaterialList,YMGRE_Free_Material);
+        LOD_CHECK(baked&&coverage>0);
+    }
+    createNewScene();
+    char importError[256];
+    LOD_CHECK(SceneEditorImport_Validate(YMGRE_BIRCH_LOD_FIXTURE,importError,sizeof(importError)));
+    LOD_CHECK(importMesh(YMGRE_BIRCH_LOD_FIXTURE,0,NULL));
+    int partCount=0;
+    for(GRE_Object4d part=g_selected->mesh;part;part=part->nextObject){
+        partCount++;
+        LOD_CHECK(part->boundType==(partCount==1?GRE_Bounding_Box_AABB:GRE_Bounding_Sphere_R));
+        for(int i=0;i<part->pointNum;i++){
+            gre_fvector4d p=part->pointList[i].pos;
+            LOD_CHECK(p.x>=part->BoundingBoxMin.x-0.001f&&p.x<=part->BoundingBoxMax.x+0.001f&&
+                p.y>=part->BoundingBoxMin.y-0.001f&&p.y<=part->BoundingBoxMax.y+0.001f&&
+                p.z>=part->BoundingBoxMin.z-0.001f&&p.z<=part->BoundingBoxMax.z+0.001f);
+            LOD_CHECK(p.x*p.x+p.y*p.y+p.z*p.z<=
+                part->BoundingSphereR*part->BoundingSphereR+0.01f);
+        }
+    }
+    LOD_CHECK(partCount==3);
+    SceneEditorObject *birch=g_selected;
+    g_activeCamera->x=14;g_activeCamera->y=10;g_activeCamera->z=-20;
+    g_activeCamera->targetX=0;g_activeCamera->targetY=5;g_activeCamera->targetZ=0;
+    uint8 referenceVisible=g_referenceVisible;g_referenceVisible=0;g_selected=NULL;
+    renderScene();
+    g_selected=birch;g_referenceVisible=referenceVisible;
+    unsigned greenPixels=0;
+    for(size_t i=0;i<(size_t)g_target.width*g_target.height;i++){
+        GRErgb24 color=GRE_FramePixel_To_RGB24(g_target.data[i]);
+        greenPixels+=color.G>color.R+8&&color.G>color.B+5;
+    }
+    LOD_CHECK(greenPixels>100);
+    printf("scene LOD UI: mesh and eight-view preview, image package roundtrip: PASS (%s, %s, %s)\n",lodPath,panelPath,framePath);
+done:
+    lodStopPreview();
+#undef LOD_CHECK
+    return failures;
+}
+
 int main(void)
 {
 	EditorUi ui={0};g_ui=&ui;setenv("YMGRE_WINDOW_SCALE","1",1);
@@ -2317,12 +2754,14 @@ int main(void)
 	if(getenv("YMGRE_TANK_ROUNDTRIP")!=NULL){selfTestFailures+=runTankRoundtrip();ui.frameLimit=1;}
 	if(getenv("YMGRE_SCENE_EDITOR_SELFTEST")!=NULL){selfTestFailures=runSelfTest();ui.frameLimit=1;}
 	if(getenv("YMGRE_SCENE_BAKER_SELFTEST")!=NULL){selfTestFailures+=runBakeSelfTest();ui.frameLimit=1;}
+	if(getenv("YMGRE_SCENE_LOD_SELFTEST")!=NULL){selfTestFailures+=runLodUiSelfTest();ui.frameLimit=1;}
 	YMGUI_Obj_SetBgColor(ui.host.context->root,GY_ARGB(0xFF,0x15,0x1A,0x24));
 	while(!g_shouldExit&&SDL_LCD_PumpEvents()){
 		renderEditorFrame();
 		if(ui.frameLimit>0&&++ui.frames>=ui.frameLimit) break;
 		SDL_LCD_Delay(16);
 	}
+	lodStopPreview();
 	for(int i=0;i<32;++i)if(g_scene[i].active&&g_scene[i].kind==SCENE_OBJECT_CAMERA&&g_scene[i].camera!=g_mainCamera->camera)YMGRE_Free_Camera(g_scene[i].camera);
 	SceneRay_Destroy(g_rayRenderer);
 	YMGRE_Free_RenderWorkspace(g_workspace);YMGRE_Free_Camera(g_mainCamera->camera);

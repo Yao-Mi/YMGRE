@@ -1,3 +1,4 @@
+#include "YMGRE_Material.h"
 #include "demo_host.h"
 #include "YMGRE_BasicMesh_Gener.h"
 #include "YMGRE_Rendering_Pipeline.h"
@@ -30,7 +31,7 @@ static GRE_Object4d makeObject(int mode)
 static GRE_Material makeMaterial(int mode)
 {
 	GRE_Material m=YMGRE_Creat_Material("mode_mat");m->ambient=(GRErgb24){90,90,90};m->diffuse=(GRErgb24){215,215,215};m->width=m->height=1;m->pixel=GRE_ImageBuff_Malloc(sizeof(GRErgb24));m->pixel[0]=m->diffuse;
-	if(mode==2){m->advanced=GRE_malloc0(sizeof(gre_material_advanced));m->advanced->normalWidth=m->advanced->normalHeight=16;m->advanced->normalPixel=GRE_ImageBuff_Malloc(256*sizeof(GRErgb24));for(int y=0;y<16;y++)for(int x=0;x<16;x++){float32 nx=(((x/4)&1)?-.38f:.38f),ny=(((y/4)&1)?-.28f:.28f);gre_fvector4d n={nx,ny,.88f,0};YMGRE_Fvector4d_Normalize(&n);m->advanced->normalPixel[y*16+x]=(GRErgb24){(uint8)((n.x*.5f+.5f)*255),(uint8)((n.y*.5f+.5f)*255),(uint8)((n.z*.5f+.5f)*255)};}}
+	if(mode==2){YMGRE_Material_EnsureAdvanced(m);m->advanced->normalWidth=m->advanced->normalHeight=16;m->advanced->normalPixel=GRE_ImageBuff_Malloc(256*sizeof(GRErgb24));for(int y=0;y<16;y++)for(int x=0;x<16;x++){float32 nx=(((x/4)&1)?-.38f:.38f),ny=(((y/4)&1)?-.28f:.28f);gre_fvector4d n={nx,ny,.88f,0};YMGRE_Fvector4d_Normalize(&n);m->advanced->normalPixel[y*16+x]=(GRErgb24){(uint8)((n.x*.5f+.5f)*255),(uint8)((n.y*.5f+.5f)*255),(uint8)((n.z*.5f+.5f)*255)};}}
 	return m;
 }
 

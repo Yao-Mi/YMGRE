@@ -3,6 +3,7 @@
 #include "../OPOBJ/YMGRE_Free.h"
 #include "../CONFIG/YMGRE_Mem.h"
 #include "../DEBUG/YMGRE_Debug.h"
+#include <string.h>
 
 /*----------------------------------------  视景体裁剪 ----------------------------------------------*/
 //对物体进行剔除
@@ -267,14 +268,27 @@ void YMGRE_Backface_Remove(GRE_Object4d myobj, GRE_Fvector4d camPos)
 
 void YMGRE_Backface_RemoveTo(GRE_Object4d myobj, GRE_Fvector4d camPos, uint8* polygonHide)
 {
+	YMGRE_Backface_RemoveAndMarkTo(myobj, camPos, polygonHide, NULL, 0, 0);
+}
+
+void YMGRE_Backface_RemoveAndMarkTo(GRE_Object4d myobj, GRE_Fvector4d camPos,
+	uint8* polygonHide, uint8* active, uint8 includeBackfaces, uint8 includeNonTriangles)
+{
 	gre_log_explain((myobj == NULL) || (camPos == NULL) || (polygonHide == NULL), GRE_LOG_PtrIO, "输入的物体、相机或多边形状态不存在");
+	if (!myobj || !camPos || !polygonHide) return;
+	if (active) memset(active, includeBackfaces ? 1 : 0, myobj->pointNum);
 	for (int i = 0; i < myobj->polygonNum; i++)
 	{
 		GRE_Polygon4d thispoly = &myobj->polygonList[i];
+		if (thispoly->num == 0 || !thispoly->index) { polygonHide[i] = 1; continue; }
 		int i1 = thispoly->index[0];
 		gre_fvector4d viewv;
 		YMGRE_Fvector4d_SubToResult(camPos, &myobj->pointList[i1].pos, &viewv);
 		polygonHide[i] = (YMGRE_Fvector4d_Dot(&thispoly->pN, &viewv) > 0.0f) ? 0 : 1;
+		if (active && !includeBackfaces && !polygonHide[i] &&
+			(thispoly->num == 3 || includeNonTriangles))
+			for (uint16 vi = 0; vi < thispoly->num; vi++)
+				active[thispoly->index[vi]] = 1;
 	}
 }
 
@@ -493,10 +507,10 @@ void YMGRE_Polygon_clip2D(GRE_fLinesList thislines, GRE_LinesList olines, GRE_FR
 	olines->lineNum = uline2.lineNum;
 	for (int i = 0; i < uline2.lineNum; i++)
 	{
-		olines->data[i].x0 = (int16)(uline2.data[i].x0 + 0.5); //四舍五入
-		olines->data[i].y0 = (int16)(uline2.data[i].y0 + 0.5);
-		olines->data[i].x1 = (int16)(uline2.data[i].x1 + 0.5);
-		olines->data[i].y1 = (int16)(uline2.data[i].y1 + 0.5);
+		olines->data[i].x0 = (int16)(uline2.data[i].x0 + 0.5f); //四舍五入
+		olines->data[i].y0 = (int16)(uline2.data[i].y0 + 0.5f);
+		olines->data[i].x1 = (int16)(uline2.data[i].x1 + 0.5f);
+		olines->data[i].y1 = (int16)(uline2.data[i].y1 + 0.5f);
 	}
 cleanup:
 	//内存释放
@@ -548,13 +562,22 @@ uint16 YMGRE_Polygon_FrustumClip_wN(GRE_Vertex4d_wN input, uint16 inputNum, GRE_
 	for (uint16 i = 0; i < sourceNum; i++) source[i] = input[i];
 	for (uint8 plane = 0; plane < 6; plane++)
 	{
+		/* Accept/reject a whole plane before copying any vertex attributes. */
+		float32 distances[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
+		uint16 outside = 0;
+		for (uint16 i = 0; i < sourceNum; i++) {
+			distances[i] = YMGRE_FrustumPlaneDistance(&source[i].base, camera, plane);
+			if (!(distances[i] >= 0)) outside++;
+		}
+		if (outside == 0) continue;
+		if (outside == sourceNum) return 0;
 		uint16 targetNum = 0;
 		GRE_Vertex4d_wN start = &source[sourceNum - 1];
-		float32 sd = YMGRE_FrustumPlaneDistance(&start->base, camera, plane);
+		float32 sd = distances[sourceNum - 1];
 		for (uint16 i = 0; i < sourceNum; i++)
 		{
 			GRE_Vertex4d_wN end = &source[i];
-			float32 ed = YMGRE_FrustumPlaneDistance(&end->base, camera, plane);
+			float32 ed = distances[i];
 			if ((sd >= 0) != (ed >= 0) && targetNum < YMGRE_FRUSTUM_CLIP_VERTEX_MAX)
 				target[targetNum++] = YMGRE_FrustumClipIntersect_wN(start, end, sd, ed);
 			if (ed >= 0 && targetNum < YMGRE_FRUSTUM_CLIP_VERTEX_MAX) target[targetNum++] = *end;

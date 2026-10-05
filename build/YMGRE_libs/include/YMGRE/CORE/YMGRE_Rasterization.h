@@ -8,6 +8,10 @@ void YMGRE_Img_SetBrushColor(GRErgb24 color);
 void YMGRE_Img_Line(GRE_FrameBuffer data, uint16 width, uint16 height, int16 x1, int16 y1, int16 x2, int16 y2);
 void YMGRE_Img_LineDepth(GRE_FrameBuffer data, float32* zbuff, uint16 width, uint16 height,
 	int16 x1, int16 y1, float32 z1, int16 x2, int16 y2, float32 z2, GRErgb24 color, uint8 depthTest);
+// Subpixel mesh edges, integer pixel-center sampling and perspective depth.
+// Endpoints may be offscreen; z must be finite and positive.
+void YMGRE_Img_LineDepthFloat(GRE_FrameBuffer data, float32* zbuff, uint16 width, uint16 height,
+	float32 x0, float32 y0, float32 z0, float32 x1, float32 y1, float32 z1, GRErgb24 color, uint8 depthTest);
 // Projected triangle depth: 1/z = plane.x*x + plane.y*y + plane.w.
 uint8 YMGRE_Triangle_DepthPlane(GRE_Vertex4d points, GRE_Polygon4d polygon, GRE_Fvector4d plane);
 // Mesh edge using its face depth at each raster sample; endpoints must be in bounds.

@@ -3,6 +3,7 @@
 #include "YMGRE_Free.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_OgreMeshInfo.h"
+#include "YMGRE_LOD.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,7 +40,19 @@ static int bitmap(const char* path,GRErgb24* pixels,unsigned w,unsigned h)
 }
 static const char* materialName(GRE_Object4d part)
 {return part->materiaName && part->materiaName[0]?part->materiaName:"Default";}
-static int writeMesh(const char* path,GRE_Object4d mesh,const gre_fvector4d* origin)
+static const char* exportedMaterialName(GRE_Object4d part,const char* suffix,char out[32])
+{
+    const char* original=materialName(part);
+    if(!suffix[0])return original;
+    uint64_t hash=UINT64_C(14695981039346656037);
+    for(const unsigned char* p=(const unsigned char*)original;*p;p++){
+        hash^=*p;hash*=UINT64_C(1099511628211);
+    }
+    snprintf(out,32,"%c%016llx",suffix[1],(unsigned long long)hash);
+    return out;
+}
+static int writeMesh(const char* path,GRE_Object4d mesh,const gre_fvector4d* origin,
+    const char* materialSuffix)
 {
     FILE* f=fopen(path,"wb");if(!f)return 0;
     u16(f,OGRE_HEADER);fputs("[MeshSerializer_v1.40]\n",f);
@@ -48,7 +61,9 @@ static int writeMesh(const char* path,GRE_Object4d mesh,const gre_fvector4d* ori
     unsigned partIndex=0;
     for(GRE_Object4d part=mesh;part;part=part->nextObject,partIndex++) {
         unsigned uvCount=part->importedUvs?part->importedUvCount:1,stride=24+8*uvCount;
-        long sub=begin(f,OGRE_SUBMESH);fprintf(f,"%s\n",materialName(part));fputc(0,f);
+        char material[32];
+        long sub=begin(f,OGRE_SUBMESH);
+        fprintf(f,"%s\n",exportedMaterialName(part,materialSuffix,material));fputc(0,f);
         int wide=part->pointNum>65536;
         u32(f,(uint32)part->polygonNum*3u);fputc(wide,f);
         for(int i=0;i<part->polygonNum;i++)for(int j=0;j<3;j++) {
@@ -82,9 +97,36 @@ static int writeMesh(const char* path,GRE_Object4d mesh,const gre_fvector4d* ori
     for(unsigned i=0;i<partIndex;i++){long item=begin(f,OGRE_SUBMESH_NAME_TABLE_ELEMENT);u16(f,i);fprintf(f,"submesh%u\n",i);end(f,item);}
     end(f,names);end(f,root);int ok=!ferror(f);if(fclose(f))ok=0;return ok;
 }
+static uint64_t textureHash(const GRErgb24* pixels,unsigned width,unsigned height)
+{
+    uint64_t hash=UINT64_C(14695981039346656037);
+    unsigned dimensions[2]={width,height};
+    for(int i=0;i<2;i++)for(int shift=0;shift<32;shift+=8){
+        hash^=(dimensions[i]>>shift)&255u;hash*=UINT64_C(1099511628211);
+    }
+    for(size_t i=0;i<(size_t)width*height;i++){
+        hash^=pixels[i].R;hash*=UINT64_C(1099511628211);
+        hash^=pixels[i].G;hash*=UINT64_C(1099511628211);
+        hash^=pixels[i].B;hash*=UINT64_C(1099511628211);
+    }
+    return hash;
+}
+static int exportTexture(const char* directory,const char* prefix,unsigned index,
+    const GRErgb24* pixels,unsigned width,unsigned height,int shared,
+    char* filename,size_t capacity)
+{
+    int length=shared?snprintf(filename,capacity,"%s_%016llx.bmp",prefix,
+        (unsigned long long)textureHash(pixels,width,height)):
+        snprintf(filename,capacity,"%s_%u.bmp",prefix,index);
+    if(length<0||(size_t)length>=capacity)return 0;
+    char path[4096];
+    if(snprintf(path,sizeof(path),"%s/%s",directory,filename)>=(int)sizeof(path))return 0;
+    return shared&&access(path,F_OK)==0?1:bitmap(path,(GRErgb24*)pixels,width,height);
+}
 static int exportModel(GRE_Object4d mesh,GRE_List materials,GRE_Material fallback,
     const gre_fvector4d* origin,const char* root,const char* stem,
-    char* meshPath,size_t pathCapacity,char* error,size_t errorCapacity,int existingDirectory)
+    char* meshPath,size_t pathCapacity,char* error,size_t errorCapacity,
+    int existingDirectory,const char* materialSuffix,int sharedTextures)
 {
     char directory[3840],path[4096],materialPath[4096];unsigned count=0;
     if(!mesh || !materials || !meshPath || !pathCapacity || !stem || !*stem || strlen(stem)>80 || strchr(stem,'/') || strchr(stem,'\\'))goto invalid;
@@ -100,19 +142,21 @@ static int exportModel(GRE_Object4d mesh,GRE_List materials,GRE_Material fallbac
     if(existingDirectory) {if(snprintf(directory,sizeof(directory),"%s",root)>=(int)sizeof(directory))goto invalid;}
     else if(snprintf(directory,sizeof(directory),"%s/model-XXXXXX",root)>=(int)sizeof(directory)||!mkdtemp(directory))goto invalid;
     snprintf(path,sizeof(path),"%s/%s.mesh",directory,stem);snprintf(materialPath,sizeof(materialPath),"%s/%s.material",directory,stem);
-    int ok=writeMesh(path,mesh,origin);FILE* f=ok?fopen(materialPath,"w"):NULL;ok=ok&&f!=NULL;
+    int ok=writeMesh(path,mesh,origin,materialSuffix);FILE* f=ok?fopen(materialPath,"w"):NULL;ok=ok&&f!=NULL;
     unsigned index=0;
     for(GRE_Object4d part=mesh;ok&&part;part=part->nextObject,index++) {
         GRE_Material base=YMGRE_Material_Find(materials,part->materiaName);if(!base)base=fallback;
         GRErgb24 white={255,255,255},ambient=base?base->ambient:white,diffuse=base?base->diffuse:part->polygonList[0].planeColor,specular=base?base->specular:(GRErgb24){0,0,0};
-        char texture[4096];snprintf(texture,sizeof(texture),"%s/texture_%u.bmp",directory,index);
+        char texture[96];
         unsigned w=base&&base->pixel?base->width:1,h=base&&base->pixel?base->height:1;
-        ok=w&&h&&bitmap(texture,base&&base->pixel?base->pixel:&white,w,h);
+        ok=w&&h&&exportTexture(directory,"texture",index,base&&base->pixel?base->pixel:&white,
+            w,h,sharedTextures,texture,sizeof(texture));
+        char material[32];
         fprintf(f,"material %s\n{\n    technique\n    {\n        pass\n        {\n"
             "            ambient %.9g %.9g %.9g\n            diffuse %.9g %.9g %.9g\n            specular %.9g %.9g %.9g\n"
-            "            texture_unit\n            {\n                texture texture_%u.bmp\n            }\n",
-            materialName(part),ambient.R/255.0,ambient.G/255.0,ambient.B/255.0,diffuse.R/255.0,diffuse.G/255.0,diffuse.B/255.0,
-            specular.R/255.0,specular.G/255.0,specular.B/255.0,index);
+            "            texture_unit\n            {\n                texture %s\n            }\n",
+            exportedMaterialName(part,materialSuffix,material),ambient.R/255.0,ambient.G/255.0,ambient.B/255.0,diffuse.R/255.0,diffuse.G/255.0,diffuse.B/255.0,
+            specular.R/255.0,specular.G/255.0,specular.B/255.0,texture);
         fprintf(f,"            lighting %s\n",base && base->unlit?"off":"on");
         if(base&&base->advanced) {
             if(base->advanced->rayType)fprintf(f,"            ymgre_ray %u %.9g %.9g %u %u %u %.9g\n",
@@ -120,9 +164,10 @@ static int exportModel(GRE_Object4d mesh,GRE_List materials,GRE_Material fallbac
                 base->advanced->transmissionColor.R,base->advanced->transmissionColor.G,base->advanced->transmissionColor.B,base->advanced->raySpecularStrength);
             fprintf(f,"            specular_power %u\n",base->advanced->specularPower);
             if(base->advanced->normalPixel) {
-                snprintf(texture,sizeof(texture),"%s/normal_%u.bmp",directory,index);
-                ok=ok&&bitmap(texture,base->advanced->normalPixel,base->advanced->normalWidth,base->advanced->normalHeight);
-                fprintf(f,"            normal_map normal_%u.bmp\n",index);
+                ok=ok&&exportTexture(directory,"normal",index,base->advanced->normalPixel,
+                    base->advanced->normalWidth,base->advanced->normalHeight,
+                    sharedTextures,texture,sizeof(texture));
+                fprintf(f,"            normal_map %s\n",texture);
             }
         }
         fputs("        }\n    }\n}\n",f);
@@ -131,7 +176,7 @@ static int exportModel(GRE_Object4d mesh,GRE_List materials,GRE_Material fallbac
     char absolute[4096];if(ok)ok=realpath(path,absolute)!=NULL && strlen(absolute)<pathCapacity;
     if(ok){strcpy(meshPath,absolute);return 1;}
     unlink(path);unlink(materialPath);
-    for(unsigned i=0;i<count;i++){snprintf(path,sizeof(path),"%s/texture_%u.bmp",directory,i);unlink(path);snprintf(path,sizeof(path),"%s/normal_%u.bmp",directory,i);unlink(path);}rmdir(directory);
+    if(!sharedTextures){for(unsigned i=0;i<count;i++){snprintf(path,sizeof(path),"%s/texture_%u.bmp",directory,i);unlink(path);snprintf(path,sizeof(path),"%s/normal_%u.bmp",directory,i);unlink(path);}rmdir(directory);}
     snprintf(error,errorCapacity,"模型导出写入失败，原模型保留");return 0;
 invalid:
     snprintf(error,errorCapacity,"模型或导出目录无效（需静态三角网格及最多8套UV）");return 0;
@@ -140,7 +185,119 @@ invalid:
 int SceneModel_Export(GRE_Object4d mesh,GRE_List materials,GRE_Material fallback,
     const gre_fvector4d* origin,const char* root,const char* stem,
     char* meshPath,size_t pathCapacity,char* error,size_t errorCapacity)
-{return exportModel(mesh,materials,fallback,origin,root,stem,meshPath,pathCapacity,error,errorCapacity,0);}
+{return exportModel(mesh,materials,fallback,origin,root,stem,meshPath,pathCapacity,error,errorCapacity,0,"",0);}
+
+int SceneModel_ExportIntoDirectory(GRE_Object4d mesh,GRE_List materials,GRE_Material fallback,
+    const gre_fvector4d* origin,const char* directory,const char* stem,
+    char* meshPath,size_t pathCapacity,char* error,size_t errorCapacity)
+{return exportModel(mesh,materials,fallback,origin,directory,stem,meshPath,pathCapacity,error,errorCapacity,1,"",0);}
+
+static void lodName(char out[64],const char* requested)
+{
+    size_t length=0;
+    if(requested)for(const unsigned char* p=(const unsigned char*)requested;*p&&length<48;){
+        unsigned char c=*p;
+        if(c==' '||c=='\t'){if(length&&out[length-1]!='_')out[length++]='_';p++;}
+        else if((c>='A'&&c<='Z')||(c>='a'&&c<='z')||
+                (c>='0'&&c<='9')||c=='_'||c=='-')out[length++]=(char)*p++;
+        else if(c>=0xc2&&c<=0xf4){
+            size_t bytes=c<0xe0?2:c<0xf0?3:4;
+            if(length+bytes>48)break;
+            size_t valid=1;
+            while(valid<bytes&&p[valid]&&(p[valid]&0xc0)==0x80)valid++;
+            if(valid==bytes){memcpy(out+length,p,bytes);length+=bytes;p+=bytes;}
+            else p++;
+        }else p++;
+    }
+    while(length&&out[length-1]=='_')length--;
+    if(!length){memcpy(out,"object",7);return;}
+    out[length]=0;
+}
+static int createLodFolder(char* folder,size_t capacity,const char* root,const char* objectName)
+{
+    char name[64];lodName(name,objectName);
+    for(unsigned suffix=1;suffix<10000;suffix++){
+        int n=suffix==1?snprintf(folder,capacity,"%s/%s_lod",root,name):
+            snprintf(folder,capacity,"%s/%s_lod_%u",root,name,suffix);
+        if(n<0||(size_t)n>=capacity)return 0;
+        if(mkdir(folder,0755)==0)return 1;
+        if(errno!=EEXIST)return 0;
+    }
+    return 0;
+}
+int SceneModel_ExportLODWithImageNamed(GRE_Object4d levels[3],GRE_List materials[3],
+    const grass_impostor *farImage,GRE_Material fallback,
+    const gre_fvector4d* origin,const char* root,const char* objectName,float nearPixels,float middlePixels,
+    float hysteresis,char* lodPath,size_t pathCapacity,char* error,size_t errorCapacity)
+{
+    if(!levels||!materials||!root||!lodPath||!pathCapacity||
+       !isfinite(nearPixels)||!isfinite(middlePixels)||
+       !isfinite(hysteresis)||hysteresis<0||hysteresis>=1||
+       nearPixels<=middlePixels||middlePixels<=0){
+        snprintf(error,errorCapacity,"LOD 模型或阈值无效");return 0;
+    }
+    const char* names[3]={"near","middle","far"};
+    char base[64];lodName(base,objectName);
+    YMGRE_LOD_Object description;YMGRE_LOD_Init(&description,hysteresis);
+    for(int i=0;i<3;i++){
+        int image=i==2&&farImage;
+        char resource[128];
+        if(image)snprintf(resource,sizeof(resource),"views8.bin");
+        else snprintf(resource,sizeof(resource),"%s_%s.mesh",base,names[i]);
+        if((image?0:(!levels[i]||!materials[i]))||
+           !YMGRE_LOD_Add(&description,image?YMGRE_LOD_IMAGE:YMGRE_LOD_MESH,
+                          i==0?nearPixels:i==1?middlePixels:0,
+                          resource,image?(void*)farImage:levels[i])){
+            snprintf(error,errorCapacity,"LOD 层级资源无效");return 0;
+        }
+    }
+    char folder[4096],meshPath[4096],descriptionPath[4096];
+    if(!createLodFolder(folder,sizeof(folder),root,objectName)){
+        snprintf(error,errorCapacity,"无法创建 LOD 资源目录");return 0;
+    }
+    for(int i=0;i<3;i++){
+        if(i==2&&farImage){
+            if(!SceneLodImage_Save(farImage,folder,origin,error,errorCapacity))return 0;
+        }else{
+            char stem[80],suffix[16];
+            snprintf(stem,sizeof(stem),"%s_%s",base,names[i]);
+            snprintf(suffix,sizeof(suffix),"_%s",names[i]);
+            if(!exportModel(levels[i],materials[i],fallback,origin,folder,stem,
+                meshPath,sizeof(meshPath),error,errorCapacity,1,suffix,1))return 0;
+        }
+    }
+    if(snprintf(descriptionPath,sizeof(descriptionPath),"%s/object.lod",folder)>=(int)sizeof(descriptionPath)||
+       strlen(descriptionPath)>=pathCapacity){
+        snprintf(error,errorCapacity,"LOD 描述文件路径过长");return 0;
+    }
+    FILE* file=fopen(descriptionPath,"w");
+    if(!file){snprintf(error,errorCapacity,"无法写入 LOD 描述文件");return 0;}
+    fprintf(file,"YMGRE_LOD 1\nhysteresis %.2f\n",description.hysteresis);
+    for(int i=0;i<3;i++)fprintf(file,"level %s %.6g %s\n",
+        description.levels[i].kind==YMGRE_LOD_IMAGE?"image":"mesh",
+        description.levels[i].min_pixels,description.levels[i].asset);
+    int writeError=ferror(file),closeError=fclose(file);
+    if(writeError||closeError){snprintf(error,errorCapacity,"无法完成 LOD 描述文件");return 0;}
+    strcpy(lodPath,descriptionPath);return 1;
+}
+
+int SceneModel_ExportLODWithImage(GRE_Object4d levels[3],GRE_List materials[3],
+    const grass_impostor *farImage,GRE_Material fallback,const gre_fvector4d* origin,
+    const char* root,float nearPixels,float middlePixels,float hysteresis,
+    char* lodPath,size_t pathCapacity,char* error,size_t errorCapacity)
+{
+    return SceneModel_ExportLODWithImageNamed(levels,materials,farImage,fallback,origin,
+        root,levels&&levels[0]?levels[0]->objName:NULL,nearPixels,middlePixels,
+        hysteresis,lodPath,pathCapacity,error,errorCapacity);
+}
+
+int SceneModel_ExportLOD(GRE_Object4d levels[3],GRE_List materials[3],GRE_Material fallback,
+    const gre_fvector4d* origin,const char* root,float nearPixels,float middlePixels,
+    float hysteresis,char* lodPath,size_t pathCapacity,char* error,size_t errorCapacity)
+{
+    return SceneModel_ExportLODWithImage(levels,materials,NULL,fallback,origin,root,
+        nearPixels,middlePixels,hysteresis,lodPath,pathCapacity,error,errorCapacity);
+}
 
 /* The caller owns this newly created bake directory. UV0 becomes the atlas;
    splitting vertices at chart seams makes it usable by ordinary Ogre loaders. */
@@ -198,6 +355,6 @@ int SceneModel_ExportBaked(GRE_Object4d source,GRE_Lightmap map,GRE_Material bas
     if(map->materialOnly&&base&&base->advanced){advanced=*base->advanced;advanced.normalPixel=NULL;
         advanced.normalWidth=advanced.normalHeight=0;material.advanced=&advanced;}
     gre_list empty={0};
-    int ok=exportModel(mesh,&empty,&material,origin,directory,"baked_model",path,pathCapacity,error,capacity,1);
+    int ok=exportModel(mesh,&empty,&material,origin,directory,"baked_model",path,pathCapacity,error,capacity,1,"",0);
     free(pixels);YMGRE_Free_Object(mesh);return ok;
 }

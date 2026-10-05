@@ -47,6 +47,7 @@ def variant_name(depth, bits):
 
 
 FEATURES = ('TRANSPARENCY', 'OPACITY_MIPMAP', 'PBR', 'LINEAR_COLOR', 'RASTER_DISPATCH', 'PNG', 'JPEG')
+PORTABLE_POLICIES = ('COMPACT_OWNED_TOPOLOGY',)
 
 def build_package(out,args):
     feature_value = 0 if args.minimal else 1
@@ -56,7 +57,10 @@ def build_package(out,args):
         build=WORK/'libraries'/tag
         run(['cmake','-S',ROOT/'sdk/library','-B',build,
              '-DCMAKE_BUILD_TYPE=Release',f'-DYMGRE_INDEX_BITS={bits}',
-             f'-DYMGRE_CAMERA_COLOR_DEPTH={depth}', *feature_flags], WORK/f'configure-{tag}.log')
+             f'-DYMGRE_CAMERA_COLOR_DEPTH={depth}', *feature_flags,
+             *[f'-DYMGRE_{name}=OFF' for name in PORTABLE_POLICIES],
+             f'-DYMGRE_RASTER_FAST_INTERPOLATION={"ON" if depth == 16 else "OFF"}',
+             f'-DYMGRE_RASTER_LIGHT_CURVE={"ON" if depth == 16 else "OFF"}'], WORK/f'configure-{tag}.log')
         run(['cmake','--build',build,'--target','ymgre',f'-j{args.jobs}'], WORK/f'build-{tag}.log')
         copy(build/'engine/libymgre.a', out/f'lib/libymgre_{tag}.a')
     for section in ('CONFIG','CORE','OPOBJ','IOFILE','DEBUG'):
@@ -66,7 +70,8 @@ def build_package(out,args):
         copy(ROOT/'Demo'/name,out/'examples/host'/name)
     copy(ROOT/'sdk/YMGREConfig.cmake',out/'cmake/YMGREConfig.cmake')
     (out/'cmake/YMGREFeatures.cmake').write_text(''.join(
-        f'set(_ymgre_feature_{name} {feature_value})\n' for name in FEATURES))
+        f'set(_ymgre_feature_{name} {feature_value})\n' for name in FEATURES) + ''.join(
+        f'set(_ymgre_policy_{name} 0)\n' for name in PORTABLE_POLICIES))
     feature_header=out/'include/YMGRE/CONFIG/YMGRE_Features.h'
     import re
     header = feature_header.read_text()
@@ -86,7 +91,7 @@ def build_package(out,args):
     copy(ROOT/'LICENSE',out/'licenses/YMGRE-LICENSE')
     copy(ROOT/'sdk/README.md',out/'README.md')
     copy(ROOT/'docs/images/banner.svg',out/'docs/images/banner.svg')
-    for name in ('material-rendering.md','material-rendering-validation.md','image-loading.md'):
+    for name in ('material-rendering.md','material-rendering-validation.md','image-loading.md','portable-optimizations.md'):
         copy(ROOT/'docs'/name,out/'docs'/name)
     for name in ('advanced_raytrace_mirror','advanced_raytrace_refraction','advanced_perspective','advanced_normal_map',
                  'advanced_raytrace_shadow','basic_shapes','extended_shapes'):
@@ -131,7 +136,10 @@ def build_package(out,args):
         digest.update(str(p.relative_to(ROOT)).encode());digest.update(p.read_bytes())
     info={'built_at_utc':datetime.now(timezone.utc).isoformat(),'system':platform.system(),
           'machine':platform.machine(),'compiler':subprocess.check_output(['cc','--version'],text=True).splitlines()[0],
-          'material_features':{name:feature_value for name in FEATURES},'build_type':'Release','position_independent':True,'framebuffers':['RGB565','RGB888'],'color_depths':[16,24],
+          'material_features':{name:feature_value for name in FEATURES},
+          'memory_placement':'render buffers fast-first with slow fallback; image and geometry buffers slow',
+          'rgb565_fast_raster':True,'rgb888_fast_raster':False,
+          'build_type':'Release','position_independent':True,'framebuffers':['RGB565','RGB888'],'color_depths':[16,24],
           'variants':[{'color_depth':depth,'index_bits':bits,
                        'library':f'lib/libymgre_{variant_name(depth,bits)}.a'} for depth,bits in VARIANTS],
           'index_bits':[16,32],'example_sources':len(DEMOS)+1,'prebuilt_demos_per_variant':1,

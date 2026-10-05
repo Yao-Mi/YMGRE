@@ -4,8 +4,10 @@
 #include "YMGRE_RenderContext.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Material.h"
+#include "YMGRE_MaterialRaster.h"
 #include "YMGRE_Color.h"
 #include "YMGRE_TriangleRaster.h"
+#include "YMGRE_Mem.h"
 #include "YMCS_File_IO.h"
 #include <assert.h>
 #include <stdio.h>
@@ -16,20 +18,32 @@
 static void put32(unsigned char* p,unsigned v){for(int i=0;i<4;i++)p[i]=(v>>(8*i))&255;}
 static void materialFiles(const char* root)
 {
- char path[1024],map[1024];snprintf(map,sizeof(map),"%s/extensions_mrs.bmp",root);
+ char path[1024],map[1024],colorMap[1024],maskMap[1024];snprintf(map,sizeof(map),"%s/extensions_mrs.bmp",root);
  GRErgb24 parameter={0,200,120};YMGRE_Image_LoadTo_Bmp_File(map,&parameter,1,1);
+ snprintf(colorMap,sizeof(colorMap),"%s/extensions_color.bmp",root);
+ GRErgb24 colors[4]={{255,0,0},{0,255,0},{0,0,255},{255,255,255}};
+ YMGRE_Image_LoadTo_Bmp_File(colorMap,colors,2,2);
+ snprintf(maskMap,sizeof(maskMap),"%s/extensions_mask.bmp",root);
+ GRErgb24 coverage[4]={{255,255,255},{0,0,0},{0,0,0},{0,0,0}};
+ YMGRE_Image_LoadTo_Bmp_File(maskMap,coverage,2,2);
  snprintf(path,sizeof(path),"%s/extensions.material",root);
  FILE* f=fopen(path,"w");assert(f);
- fputs("material card\n{\n cull_hardware none\n pbr_ior 1.5\n normal_strength 0.4\n pbr_parameters extensions_mrs.bmp\n}\nmaterial closed\n{\n cull_hardware clockwise\n specular_power 25\n pbr_ior 1.7\n}\n",f);fclose(f);
+ fputs("material card\n{\n color_mip on\n cull_hardware none\n pbr_ior 1.5\n normal_strength 0.4\n pbr_parameters extensions_mrs.bmp\n texture_unit\n {\n  texture extensions_color.bmp\n }\n opacity_map extensions_mask.bmp\n}\nmaterial closed\n{\n cull_hardware clockwise\n specular_power 25\n pbr_ior 1.7\n texture_unit\n {\n  texture extensions_color.bmp\n }\n}\n",f);fclose(f);
  gre_scence scene={0};YMGRE_ParseMaterialScript(&scene,path);
  GRE_Material card=YMGRE_Material_Find(&scene.MaterialList,"card"),closed=YMGRE_Material_Find(&scene.MaterialList,"closed");
  assert(card&&closed&&card->doubleSided&&!closed->doubleSided);
+ assert(card->advanced&&card->advanced->colorUseMip&&card->advanced->colorMips);
+ assert(card->advanced->colorMips->count==2);
+#if YMGRE_ENABLE_OPACITY_MIPMAP
+ assert(card->advanced->colorMips->pixels[1][0].R==255);
+#endif
+ assert(!closed->advanced||(!closed->advanced->colorUseMip&&!closed->advanced->colorMips));
 #if YMGRE_ENABLE_PBR
  assert(card->advanced&&card->advanced->pbrIOR==1.5f&&card->advanced->pbrNormalStrength==.4f);
  assert(card->advanced->pbrEnabled&&card->advanced->pbrParameters&&card->advanced->pbrParameters[0].G==200);
  assert(closed->advanced->pbrIOR==1.7f&&closed->advanced->pbrNormalStrength==1);
 #endif
- YMGRE_List_Clear(&scene.MaterialList,YMGRE_Free_Material);remove(path);remove(map);
+ YMGRE_List_Clear(&scene.MaterialList,YMGRE_Free_Material);remove(path);remove(map);remove(colorMap);remove(maskMap);
 #if YMGRE_ENABLE_TRANSPARENCY
  GRE_Material m=YMGRE_Creat_Material("opacity");assert(m);
  uint8 odd[]={0,40,80,120,160,200,220,240,255};
@@ -68,6 +82,112 @@ static void colors(void)
  gre_render_workspace fixed={0};assert(!YMGRE_Color_BeginFrame(c,&fixed,(GRErgb24){0,0,0}));
  float buffer[16*16*3];YMGRE_RenderWorkspace_BindMaterialBuffers(&fixed,NULL,0,buffer,16*16*3);assert(YMGRE_Color_BeginFrame(c,&fixed,(GRErgb24){0,0,0}));assert(c->linearColor==buffer);
  YMGRE_Free_RenderWorkspace(w);YMGRE_Free_Camera(c);
+#endif
+}
+static void colorMips(void)
+{
+ GRE_Material m=YMGRE_Creat_Material("color-mip");assert(m);
+ m->width=m->height=8;m->pixel=GRE_ImageBuff_Malloc(64*sizeof(*m->pixel));assert(m->pixel);
+ for(int y=0;y<8;y++)for(int x=0;x<8;x++){
+  uint8 value=(x+y)&1?255:0;
+  m->pixel[y*8+x]=(GRErgb24){value,value,value};
+ }
+ assert(YMGRE_Material_BuildColorMips(m));
+ GRE_ColorMips chain=m->advanced->colorMips;
+ assert(chain&&chain->count==4&&chain->pixels[0]==m->pixel);
+ assert(chain->width[1]==4&&chain->height[1]==4&&chain->width[3]==1);
+ for(int i=0;i<16;i++)assert(chain->pixels[1][i].R==128);
+ GRE_Camera4d cam=YMGRE_Creat_Camera(1,8,8,45,45,45,45);assert(cam);
+ YMGRE_Camera_Frustum_Init(cam,.1f,10);
+ GRE_Index indices[]={0,1,2};gre_polygon4d triangle={0};triangle.num=3;triangle.index=indices;
+ gre_vertex4d_wN vertices[3]={0};
+ vertices[0].base.pos=(gre_fvector4d){1,1,2,1};
+ vertices[1].base.pos=(gre_fvector4d){5,1,2,1};vertices[1].base.u=1;
+ vertices[2].base.pos=(gre_fvector4d){1,5,2,1};vertices[2].base.v=1;
+ for(int i=0;i<3;i++){vertices[i].color=(GRErgb24){255,255,255};vertices[i].vertexLighting=vertices[i].color;}
+ YMGRE_ColorMipView view=YMGRE_Material_ColorMipForTriangle(m,&vertices[0],&vertices[1],&vertices[2]);
+ assert(view.level==1&&view.width==4&&view.pixels==chain->pixels[1]);
+ m->advanced->colorUseMip=0;
+ view=YMGRE_Material_ColorMipForTriangle(m,&vertices[0],&vertices[1],&vertices[2]);
+ assert(view.level==0&&view.pixels==m->pixel&&m->advanced->colorMips==chain);
+ m->advanced->colorUseMip=1;
+ YMGRE_CameraImage_Init(cam,(GRErgb24){0,0,0});
+ YMGRE_TriangleRaster_FillVertexLit_wN(vertices,&triangle,m,cam);
+ int withMip=GRE_FramePixel_To_RGB24(cam->img.data[2*8+2]).R;
+ assert(withMip>=115&&withMip<=140);
+ gre_vertex4d basic[3];for(int i=0;i<3;i++)basic[i]=vertices[i].base;
+ YMGRE_CameraImage_Init(cam,(GRErgb24){0,0,0});
+ YMGRE_TriangleRaster_Fill(basic,&triangle,(GRErgb24){128,128,128},m,cam);
+ int legacyWithMip=GRE_FramePixel_To_RGB24(cam->img.data[2*8+2]).R;
+ assert(legacyWithMip>=115&&legacyWithMip<=140);
+#if YMGRE_ENABLE_PBR
+ gre_light4d global={0};global.type=GRE_GlobalLight;global.proper.lightcolor=(GRErgb24){255,255,255};global.proper.strength=1;
+ gre_listnode lightNode={sizeof(global),&global,NULL};gre_list lights={&lightNode,1};gre_fvector4d lightPos={0};
+ m->advanced->pbrEnabled=1;cam->pbrEnabled=1;
+ YMGRE_CameraImage_Init(cam,(GRErgb24){0,0,0});
+ YMGRE_TriangleRaster_Fill_wN(vertices,&triangle,m,&lights,&lightPos,NULL,0,cam);
+ int pbrWithMip=GRE_FramePixel_To_RGB24(cam->img.data[2*8+2]).R;
+#endif
+#if YMGRE_ENABLE_TRANSPARENCY
+ uint8 alpha[64];memset(alpha,128,sizeof(alpha));assert(YMGRE_Material_SetOpacity(m,alpha,8,8,1));
+ assert(!m->advanced->colorMips);
+ assert(YMGRE_Material_BuildColorMips(m));
+#if YMGRE_ENABLE_OPACITY_MIPMAP
+ assert(YMGRE_Material_OpacityLOD(m,&vertices[0],&vertices[1],&vertices[2],16)==1);
+#endif
+#if YMGRE_ENABLE_PBR
+ cam->pbrEnabled=0;
+#endif
+ cam->opacityPass=1;YMGRE_CameraImage_Init(cam,(GRErgb24){0,0,0});
+ YMGRE_TriangleRaster_FillVertexLit_wN(vertices,&triangle,m,cam);
+ assert(cam->img.zbuff[2*8+2]>2);
+ cam->opacityPass=2;YMGRE_TriangleRaster_FillVertexLit_wN(vertices,&triangle,m,cam);
+ int blended=GRE_FramePixel_To_RGB24(cam->img.data[2*8+2]).R;
+ assert(blended>=55&&blended<=75&&cam->img.zbuff[2*8+2]>2);
+ YMGRE_Material_ClearOpacity(m);cam->opacityPass=0;
+#endif
+ YMGRE_Material_ClearColorMips(m);assert(!m->advanced->colorMips);
+ YMGRE_CameraImage_Init(cam,(GRErgb24){0,0,0});
+ YMGRE_TriangleRaster_FillVertexLit_wN(vertices,&triangle,m,cam);
+ int withoutMip=GRE_FramePixel_To_RGB24(cam->img.data[2*8+2]).R;
+ assert(abs(withMip-withoutMip)>70);
+ YMGRE_CameraImage_Init(cam,(GRErgb24){0,0,0});
+ YMGRE_TriangleRaster_Fill(basic,&triangle,(GRErgb24){128,128,128},m,cam);
+ int legacyWithoutMip=GRE_FramePixel_To_RGB24(cam->img.data[2*8+2]).R;
+ assert(abs(legacyWithMip-legacyWithoutMip)>70);
+#if YMGRE_ENABLE_PBR
+ cam->pbrEnabled=1;
+ YMGRE_CameraImage_Init(cam,(GRErgb24){0,0,0});
+ YMGRE_TriangleRaster_Fill_wN(vertices,&triangle,m,&lights,&lightPos,NULL,0,cam);
+ int pbrWithoutMip=GRE_FramePixel_To_RGB24(cam->img.data[2*8+2]).R;
+ assert(abs(pbrWithMip-pbrWithoutMip)>70);
+#endif
+ assert(YMGRE_Material_BuildColorMips(m));
+ GRErgb24 substitute={255,0,0};GRErgb24* original=m->pixel;m->pixel=&substitute;
+ view=YMGRE_Material_ColorMipForTriangle(m,&vertices[0],&vertices[1],&vertices[2]);
+ assert(view.level==0&&view.pixels==&substitute);
+ m->pixel=original;
+ YMGRE_Free_Camera(cam);YMGRE_Free_Material(m);
+ GRE_Material odd=YMGRE_Creat_Material("odd-mip");assert(odd);
+ odd->width=odd->height=3;odd->pixel=GRE_ImageBuff_Malloc(9*sizeof(*odd->pixel));assert(odd->pixel);
+ for(int i=0;i<9;i++)odd->pixel[i]=(GRErgb24){(uint8)(i*20),0,0};
+ assert(YMGRE_Material_BuildColorMips(odd));
+ chain=odd->advanced->colorMips;
+ assert(chain->count==3&&chain->width[1]==2&&chain->height[1]==2);
+ assert(chain->pixels[1][0].R==40&&chain->pixels[1][3].R==160);
+ YMGRE_Free_Material(odd);
+#if YMGRE_ENABLE_OPACITY_MIPMAP
+ GRE_Material cutout=YMGRE_Creat_Material("cutout-mip");assert(cutout);
+ cutout->width=cutout->height=2;
+ cutout->pixel=GRE_ImageBuff_Malloc(4*sizeof(*cutout->pixel));assert(cutout->pixel);
+ cutout->pixel[0]=(GRErgb24){255,0,0};
+ for(int i=1;i<4;i++)cutout->pixel[i]=(GRErgb24){0,0,0};
+ uint8 mask[]={255,0,0,0};assert(YMGRE_Material_SetOpacity(cutout,mask,2,2,1));
+ assert(YMGRE_Material_BuildColorMips(cutout));
+ assert(cutout->advanced->opacityMipPixels[1][0]==64);
+ assert(cutout->advanced->colorMips->pixels[1][0].R==255);
+ YMGRE_Material_ClearOpacity(cutout);assert(!cutout->advanced->colorMips);
+ YMGRE_Free_Material(cutout);
 #endif
 }
 static void raster(void)
@@ -169,9 +289,9 @@ static void parallelPipeline(void)
 #endif
 int main(int argc,char** argv)
 {
- assert(argc==2);materialFiles(argv[1]);colors();raster();
+ assert(argc==2);materialFiles(argv[1]);colors();colorMips();raster();
 #if YMGRE_ENABLE_RASTER_DISPATCH
  parallelPipeline();
 #endif
- puts("PASS: material flags, gray8 BMP, opacity ownership/mips, LUTs, workspace, raster coverage/depth, band dispatch");return 0;
+ puts("PASS: material flags, color/opacity mips, LUTs, workspace, raster coverage/depth, band dispatch");return 0;
 }

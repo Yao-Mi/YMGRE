@@ -170,8 +170,8 @@ GRE_Camera4d YMGRE_Creat_Camera(int16 id, uint16 imgW, uint16 imgH, float32 alph
 	GRE_Camera4d mycam = creatCameraHeader(id, alpha_Lx, alpha_Rx, beta_Uy, beta_Dy);
 	mycam->img.width = imgW;
 	mycam->img.height = imgH;
-	mycam->img.data = (GRE_FrameBuffer)GRE_ImageBuff_Malloc((size_t)imgW * imgH * sizeof(GRE_FramePixel));
-	mycam->img.zbuff = (float32*)GRE_ImageBuff_Malloc((size_t)imgW * imgH * sizeof(float32));
+	mycam->img.data = (GRE_FrameBuffer)GRE_RenderColorBuff_Malloc((size_t)imgW * imgH * sizeof(GRE_FramePixel));
+	mycam->img.zbuff = (float32*)GRE_RenderTargetBuff_Malloc((size_t)imgW * imgH * sizeof(float32));
 	mycam->target = &mycam->img;
 	mycam->ownsImageBuffers = 1;
 	gre_log_explain((mycam->img.data == NULL) || (mycam->img.zbuff == NULL), GRE_LOG_Mem1, "相机照片内存申请失败");
@@ -201,7 +201,7 @@ GRE_Object4d YMGRE_Creat_Object(int pointNum,int polygonNum,char* name,char* mat
 		"模型数量超过当前索引或内存范围");
 	GRE_Object4d myobj = GRE_malloc0(sizeof(gre_object4d));
 	myobj->pointNum = pointNum;
-	myobj->pointList = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
+	myobj->pointList = GRE_GeometryBuff_Malloc(pointNum * sizeof(gre_vertex4d));
 	myobj->pointList_ = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
 	/* Untextured generators (including cube/box) only assign positions.
 	   Give UV0 a defined default before advanced attribute generation/sampling. */
@@ -218,6 +218,8 @@ GRE_Object4d YMGRE_Creat_Object(int pointNum,int polygonNum,char* name,char* mat
 	myobj->importedNormals = NULL;
 	myobj->polygonNum = polygonNum;
 	myobj->polygonList = GRE_malloc1(polygonNum * sizeof(gre_polygon4d));
+	myobj->topologyStorage = NULL;
+	myobj->topologyIndexCount = 0;
 	myobj->nextObject = NULL;//默认只有一个submesh
 	//物体名称设置
 	int namelen = (name == NULL) ? 1 : strlen(name) + 1;
@@ -273,6 +275,34 @@ int YMGRE_Object_EnableVertexAttributes(GRE_Object4d object)
 	object->pointList_wN_ = transformed;
 	return 1;
 }
+
+/* Preparation only: consolidates owned polygon index allocations before rendering. */
+int YMGRE_Object_CompactTopology(GRE_Object4d object)
+{
+ if(object==NULL || object->polygonNum<=0 || object->topologyStorage) return 0;
+ size_t count=0;
+ for(int pi=0;pi<object->polygonNum;pi++) {
+  GRE_Polygon4d p=&object->polygonList[pi];
+  if(p->num && !p->index) return 0;
+  if(p->num>(SIZE_MAX/sizeof(GRE_Index))-count) return 0;
+  count+=p->num;
+ }
+ if(count==0 || count>UINT32_MAX) return 0;
+ GRE_Index *storage=GRE_RenderBuff_Malloc(count*sizeof(GRE_Index));
+ if(!storage) return 0;
+ size_t offset=0;
+ for(int pi=0;pi<object->polygonNum;pi++) {
+  GRE_Polygon4d p=&object->polygonList[pi];
+  if(p->num) GRE_memcpy(storage+offset,p->index,p->num*sizeof(GRE_Index));
+  GRE_PolyIndex_Free(p->index);
+  p->index=p->num?storage+offset:NULL;offset+=p->num;
+ }
+ object->topologyStorage=storage;object->topologyIndexCount=(uint32)count;
+ return 1;
+}
+#ifndef YMGRE_COMPACT_OWNED_TOPOLOGY
+#define YMGRE_COMPACT_OWNED_TOPOLOGY 0
+#endif
 
 int YMGRE_Object_GenerateVertexAttributes(GRE_Object4d object)
 {
@@ -333,6 +363,9 @@ int YMGRE_Object_GenerateVertexAttributes(GRE_Object4d object)
 		vertex->tangentW=vertex->tangentW<0.0f?-1.0f:1.0f;
 		object->pointList_wN_[i]=*vertex;
 	}
+#if YMGRE_COMPACT_OWNED_TOPOLOGY
+	(void)YMGRE_Object_CompactTopology(object);
+#endif
 	return 1;
 }
 

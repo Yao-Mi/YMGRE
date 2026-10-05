@@ -1,5 +1,5 @@
 {
-  "built_at_utc": "2026-09-29T16:59:17.991694+00:00",
+  "built_at_utc": "2026-10-05T19:32:49.210634+00:00",
   "system": "Linux",
   "machine": "x86_64",
   "compiler": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
@@ -12,6 +12,9 @@
     "PNG": 1,
     "JPEG": 1
   },
+  "memory_placement": "render buffers fast-first with slow fallback; image and geometry buffers slow",
+  "rgb565_fast_raster": true,
+  "rgb888_fast_raster": false,
   "build_type": "Release",
   "position_independent": true,
   "framebuffers": [
@@ -52,8 +55,8 @@
   "prebuilt_demos_per_variant": 1,
   "external_ymgui_validated": false,
   "bundled_ymgui": false,
-  "source_sha256": "d1a01e22b9eac0ab9ed1e3460c388ea0825c292bb3c6a626246bc6215f5ee208",
-  "git_head": "f843b72ee66b6d9605a1b8bcffb2ed10eb279030",
+  "source_sha256": "430530965a5e16ba05b67bf67d3016d76cd32a150e6deef487544983eacb0385",
+  "git_head": "eb902671fd1af0a47549a64f9cd9e5bc42711e6f",
   "source_includes_uncommitted_changes": true,
   "sdk_requires_engine_source": false,
   "rebuild_command": "./sdk/build.sh"

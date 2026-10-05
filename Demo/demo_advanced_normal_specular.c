@@ -1,3 +1,4 @@
+#include "YMGRE_Material.h"
 #include "demo_host.h"
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_Camera.h"
@@ -66,7 +67,7 @@ static GRE_Material createMaterial(int stage)
 	material->width = material->height = 1;
 	material->pixel = GRE_ImageBuff_Malloc(sizeof(GRErgb24));
 	material->pixel[0] = (GRErgb24){ 255, 255, 255 };
-	material->advanced = GRE_malloc0(sizeof(gre_material_advanced));
+	YMGRE_Material_EnsureAdvanced(material);
 	material->advanced->specularPower = 28;
 	material->advanced->normalWidth = material->advanced->normalHeight = 16;
 	material->advanced->normalPixel = GRE_ImageBuff_Malloc(256 * sizeof(GRErgb24));

@@ -60,12 +60,46 @@ void YMGRE_Object_WorldToCameraTo(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Ve
 
 void YMGRE_Object_WorldToCameraTo_wN(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE_Vertex4d_wN out)
 {
+	YMGRE_Object_WorldToCameraMaskedTo(myobj, camera, out, 1, NULL);
+}
+
+void YMGRE_Object_WorldToCameraMaskedTo(GRE_Object4d myobj, GRE_FMat4x4 camera,
+	GRE_Vertex4d_wN out, uint8 transformTangent, const uint8* active)
+{
 	gre_log_explain((myobj == NULL) || (camera == NULL) || (out == NULL), GRE_LOG_PtrIO,
 		"输入的物体、相机或高级顶点缓存不存在");
 	if (myobj == NULL || camera == NULL || out == NULL || myobj->pointList_wN == NULL)
 		return;
+	uint8 diagonal = camera->val[3][0] == 0 && camera->val[3][1] == 0 &&
+		camera->val[3][2] == 0 && camera->val[3][3] == 1;
+	for (uint8 row = 0; row < 3; row++)
+		for (uint8 col = 0; col < 3; col++)
+			if (row != col && camera->val[row][col] != 0) diagonal = 0;
+	if (diagonal) {
+		float32 sx = camera->val[0][0], sy = camera->val[1][1], sz = camera->val[2][2];
+		float32 tx = camera->val[0][3], ty = camera->val[1][3], tz = camera->val[2][3];
+		for (uint32 i = 0; i < (uint32)myobj->pointNum; i++) {
+			if (active && !active[i]) continue;
+			out[i] = myobj->pointList_wN[i];
+			out[i].base.pos.x = sx * out[i].base.pos.x + tx * out[i].base.pos.w;
+			out[i].base.pos.y = sy * out[i].base.pos.y + ty * out[i].base.pos.w;
+			out[i].base.pos.z = sz * out[i].base.pos.z + tz * out[i].base.pos.w;
+			out[i].normal.x *= sx;
+			out[i].normal.y *= sy;
+			out[i].normal.z *= sz;
+			out[i].normal.w = 0;
+			if (transformTangent) {
+				out[i].tangent.x *= sx;
+				out[i].tangent.y *= sy;
+				out[i].tangent.z *= sz;
+			}
+			out[i].tangent.w = 0;
+		}
+		return;
+	}
 	for (uint32 i = 0; i < (uint32)myobj->pointNum; i++)
 	{
+		if (active && !active[i]) continue;
 		YMGRE_Fvector4d_MatMultTo(camera, &myobj->pointList_wN[i].base.pos, &out[i].base.pos);
 		out[i].base.u = myobj->pointList_wN[i].base.u;
 		out[i].base.v = myobj->pointList_wN[i].base.v;
@@ -80,7 +114,8 @@ void YMGRE_Object_WorldToCameraTo_wN(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE
 		out[i].vertexLighting = myobj->pointList_wN[i].vertexLighting;
 		out[i].vertexSpecular = myobj->pointList_wN[i].vertexSpecular;
 		YMGRE_Fvector4d_MatMultTo(camera, &out[i].normal, &out[i].normal);
-		YMGRE_Fvector4d_MatMultTo(camera, &out[i].tangent, &out[i].tangent);
+		if (transformTangent)
+			YMGRE_Fvector4d_MatMultTo(camera, &out[i].tangent, &out[i].tangent);
 		out[i].normal.w = out[i].tangent.w = 0;
 	}
 }

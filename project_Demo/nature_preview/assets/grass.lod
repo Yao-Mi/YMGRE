@@ -1,0 +1,5 @@
+# YMGRE LOD description, version 1. Resource names are resolved by this demo.
+YMGRE_LOD 1
+hysteresis 0.10
+level mesh 90 original
+level image 0 baked8

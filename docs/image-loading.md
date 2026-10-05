@@ -4,6 +4,8 @@
 
 材质解析器的 `texture`、`normal_map`、`pbr_parameters` 和 `opacity_map` 已统一使用新接口。`YMGRE_Material_LoadOpacity` 读取灰度图并建立可选 mip；原 `YMGRE_Bmp_File_LoadTo_Image`、`YMGRE_Material_LoadOpacityBMP` 接口保留兼容。
 
+颜色 Mip 由材质选择启用：在 `.material` 中写 `color_mip on`，解析器会在该材质的颜色图和透明图都加载后生成颜色层；未写或写 `color_mip off` 时不生成。程序创建的材质也可在载入贴图后显式调用 `YMGRE_Material_BuildColorMips`。有同尺寸透明度 Mip 时先设置透明图再生成颜色 Mip，以便按覆盖度加权。换图前先调用 `YMGRE_Material_ClearColorMips`。渲染时每个三角形只选择一个层级，详情见 [材质渲染说明](material-rendering.md)。
+
 ## 模块边界
 
 解码实现位于 `extern_lib/image_decode`，可独立构建为 `ImageDecode::image_decode`，不依赖引擎。`YMGRE/IOFILE/YMGRE_Image.c` 只负责分配器、颜色布局和材质接口适配；核心 SDK 将模块对象纳入现有静态库，不额外要求一个解码静态库。详细接口见该模块 README。所有解码只在加载资源时发生。

@@ -13,12 +13,15 @@ endif()
 include(${CMAKE_CURRENT_LIST_DIR}/../ymgre_app.cmake)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../extern_lib/mxml ${CMAKE_BINARY_DIR}/mxml)
 add_executable(scene_baker
-  scene_bake.c scene_model_export.c scene_ray_renderer.c scene_uv.c scene_uv_data.c scene_uv_edit.c scene_uv_editor.c scene_uv_preview.c scene_editor_texture.c scene_texture_image.c scene_texture_paint.c scene_editor.c scene_editor_place.c scene_editor_color.c scene_editor_font.c
+  scene_bake.c scene_model_export.c scene_lod_image.c ../nature_preview/grass_impostor.c scene_ray_renderer.c scene_uv.c scene_uv_data.c scene_uv_edit.c scene_uv_editor.c scene_uv_preview.c scene_editor_texture.c scene_texture_image.c scene_texture_paint.c scene_editor.c scene_editor_place.c scene_editor_color.c scene_editor_font.c
   scene_editor_inspector.c scene_editor_import.c scene_editor_file_dialog.c
   scene_editor_io.c scene_editor_model.c scene_editor_hierarchy.c)
 target_compile_definitions(scene_baker PRIVATE
   YMGRE_EARTH_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/../../Resource/地球贴图.bmp"
   YMGRE_TANK_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/../../Resource/obj/Tank1_Head.mesh"
+  YMGRE_GRASS_LOD_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/../../Resource/vegetation_lowpoly/Grasses/grass_green_low/grass_green_low.mesh"
+  YMGRE_TREE_LOD_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/../../Resource/vegetation_lowpoly/trees/oak_01/oak_01.mesh"
+  YMGRE_BIRCH_LOD_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/../../Resource/vegetation_lowpoly/trees/birch_01/birch_01.mesh"
   GB2312_BIN_PATH="${CMAKE_CURRENT_LIST_DIR}/../../extern_lib/YMGUI/Demo/gb2312_glyphs.bin")
 target_include_directories(scene_baker PRIVATE .)
 target_link_libraries(scene_baker PRIVATE scene_uv_atlas ymgre ymgre_demo_host MiniXML::MiniXML PNG::PNG JPEG::JPEG)
@@ -33,6 +36,21 @@ set_tests_properties(scene_baker_editor PROPERTIES ENVIRONMENT
 
 add_executable(scene_bake_cli scene_baker.c scene_bake.c)
 target_link_libraries(scene_bake_cli PRIVATE ymgre)
+
+add_executable(scene_lod_baker scene_lod_baker.c scene_model_export.c scene_lod_image.c ../nature_preview/grass_impostor.c)
+target_link_libraries(scene_lod_baker PRIVATE ymgre)
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+add_test(NAME scene_lod_baker_roundtrip COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_LIST_DIR}/test_scene_lod_baker.py $<TARGET_FILE:scene_lod_baker>
+    ${CMAKE_CURRENT_LIST_DIR}/../../Resource/vegetation_lowpoly/Grasses/grass_green_low/grass_green_low.mesh
+    ${CMAKE_CURRENT_LIST_DIR}/../../Resource/vegetation_lowpoly/trees/oak_01/oak_01.mesh
+    ${CMAKE_CURRENT_LIST_DIR}/../../Resource/vegetation_lowpoly/trees/birch_01/birch_01.mesh)
+endif()
+
+add_test(NAME scene_lod_editor COMMAND scene_baker)
+set_tests_properties(scene_lod_editor PROPERTIES ENVIRONMENT
+  "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;YMGRE_SCENE_LOD_SELFTEST=1")
 
 add_test(NAME tank_model_roundtrip COMMAND scene_baker)
 set_tests_properties(tank_model_roundtrip PROPERTIES ENVIRONMENT
@@ -92,4 +110,4 @@ add_test(NAME scene_texture_tools COMMAND scene_baker)
 set_tests_properties(scene_texture_tools PROPERTIES ENVIRONMENT
   "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;YMGRE_TEXTURE_TOOLS=1")
 
-ymgre_set_program_output(scene_baker scene_bake_cli)
+ymgre_set_program_output(scene_baker scene_bake_cli scene_lod_baker)

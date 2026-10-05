@@ -11,8 +11,8 @@ GRE_RenderTarget YMGRE_Creat_RenderTarget(uint16 width, uint16 height)
 	gre_log_explain(target == NULL, GRE_LOG_Mem0, "渲染目标头内存申请失败");
 	target->width = width;
 	target->height = height;
-	target->data = GRE_ImageBuff_Malloc((size_t)width * height * sizeof(GRE_FramePixel));
-	target->zbuff = GRE_ImageBuff_Malloc((size_t)width * height * sizeof(float32));
+	target->data = GRE_RenderColorBuff_Malloc((size_t)width * height * sizeof(GRE_FramePixel));
+	target->zbuff = GRE_RenderTargetBuff_Malloc((size_t)width * height * sizeof(float32));
 	gre_log_explain((target->data == NULL) || (target->zbuff == NULL), GRE_LOG_Mem1, "渲染目标缓存申请失败");
 	return target;
 }
@@ -31,8 +31,8 @@ void YMGRE_RenderTarget_Init(GRE_RenderTarget target, uint16 width, uint16 heigh
 void YMGRE_Free_RenderTarget(GRE_RenderTarget target)
 {
 	if (target == NULL)return;
-	GRE_ImageBuff_Free(target->zbuff);
-	GRE_ImageBuff_Free(target->data);
+	GRE_RenderBuff_Free(target->zbuff);
+	GRE_RenderBuff_Free(target->data);
 	GRE_free0(target);
 }
 
@@ -47,6 +47,9 @@ GRE_RenderWorkspace YMGRE_Creat_RenderWorkspace(void)
 	workspace->ownsMemory = 1;
 	workspace->pointList_wN = NULL;
 	workspace->pointWNMax = 0;
+	workspace->projectedPoints = NULL;
+	workspace->clipCodes = NULL;
+	workspace->projectedMax = 0;
 	return workspace;
 }
 
@@ -77,6 +80,9 @@ void YMGRE_RenderWorkspace_Init(GRE_RenderWorkspace workspace, GRE_Vertex4d poin
 	workspace->ownsMemory = 0;
 	workspace->pointList_wN = NULL;
 	workspace->pointWNMax = 0;
+	workspace->projectedPoints = NULL;
+	workspace->clipCodes = NULL;
+	workspace->projectedMax = 0;
 }
 
 #if YMGRE_ENABLE_RASTER_DISPATCH
@@ -96,14 +102,41 @@ void YMGRE_RenderWorkspace_BindVertexAttributes(GRE_RenderWorkspace workspace,
 	workspace->pointWNMax = pointMax;
 }
 
+void YMGRE_RenderWorkspace_BindProjectionCache(GRE_RenderWorkspace workspace,
+	gre_fvector4d* positions, uint8* codes, uint32 pointMax)
+{
+	if (workspace == NULL || workspace->ownsMemory || positions == NULL || codes == NULL) return;
+	workspace->projectedPoints = positions;
+	workspace->clipCodes = codes;
+	workspace->projectedMax = pointMax;
+}
+
+int YMGRE_RenderWorkspace_EnableProjectionCache(GRE_RenderWorkspace workspace, uint32 pointNum)
+{
+	if (workspace == NULL || pointNum == 0) return 0;
+	if (workspace->projectedPoints && workspace->clipCodes && workspace->projectedMax >= pointNum) return 1;
+	if (!workspace->ownsMemory || pointNum > SIZE_MAX / sizeof(gre_fvector4d)) return 0;
+	gre_fvector4d* positions = GRE_RenderBuff_Malloc(
+		(size_t)pointNum * sizeof(gre_fvector4d));
+	if (!positions) return 0;
+	uint8* codes = GRE_RenderBuff_Malloc((size_t)pointNum);
+	if (!codes) { GRE_RenderBuff_Free(positions); return 0; }
+	GRE_RenderBuff_Free(workspace->projectedPoints);
+	GRE_RenderBuff_Free(workspace->clipCodes);
+	workspace->projectedPoints = positions;
+	workspace->clipCodes = codes;
+	workspace->projectedMax = pointNum;
+	return 1;
+}
+
 int YMGRE_RenderWorkspace_EnableVertexAttributes(GRE_RenderWorkspace workspace, uint32 pointNum)
 {
 	if (workspace == NULL || pointNum == 0) return 0;
 	if (workspace->pointList_wN != NULL && workspace->pointWNMax >= pointNum) return 1;
 	if (!workspace->ownsMemory) return 0;//固定工作区容量不足时不自动分配
-	GRE_Vertex4d_wN points = GRE_malloc1(pointNum * sizeof(gre_vertex4d_wN));
+	GRE_Vertex4d_wN points = GRE_RenderBuff_Malloc((size_t)pointNum * sizeof(gre_vertex4d_wN));
 	if (points == NULL) return 0;
-	if (workspace->ownsMemory) GRE_free1(workspace->pointList_wN);
+	if (workspace->ownsMemory) GRE_RenderBuff_Free(workspace->pointList_wN);
 	workspace->pointList_wN = points;
 	workspace->pointWNMax = pointNum;
 	return 1;
@@ -123,19 +156,19 @@ void YMGRE_RenderWorkspace_Reserve(GRE_RenderWorkspace workspace, uint32 pointNu
 	if (pointNum > workspace->pointMax)
 	{
 		//先申请新缓存再替换旧缓存，扩容后原有临时结果不需要保留
-		GRE_Vertex4d points = GRE_malloc1(pointNum * sizeof(gre_vertex4d));
+		GRE_Vertex4d points = GRE_RenderBuff_Malloc((size_t)pointNum * sizeof(gre_vertex4d));
 		gre_log_explain(points == NULL, GRE_LOG_Mem1, "渲染顶点缓存申请失败");
-		GRE_free1(workspace->pointList);
+		GRE_RenderBuff_Free(workspace->pointList);
 		workspace->pointList = points;
 		workspace->pointMax = pointNum;
 	}
 	if (polygonNum > workspace->polygonMax)
 	{
 		//多边形隐藏状态和光照颜色使用相同容量，便于按索引并行访问
-		uint8* polygonHide = GRE_malloc1(polygonNum * sizeof(uint8));
+		uint8* polygonHide = GRE_RenderBuff_Malloc((size_t)polygonNum * sizeof(uint8));
 		GRErgb24* polygonColor = GRE_malloc1(polygonNum * sizeof(GRErgb24));
 		gre_log_explain((polygonHide == NULL) || (polygonColor == NULL), GRE_LOG_Mem1, "渲染多边形缓存申请失败");
-		GRE_free1(workspace->polygonHide);
+		GRE_RenderBuff_Free(workspace->polygonHide);
 		GRE_free1(workspace->polygonColor);
 		workspace->polygonHide = polygonHide;
 		workspace->polygonColor = polygonColor;
@@ -143,9 +176,9 @@ void YMGRE_RenderWorkspace_Reserve(GRE_RenderWorkspace workspace, uint32 pointNu
 	}
 	if (lightNum > workspace->lightMax)
 	{
-		gre_fvector4d* lightPos = GRE_malloc1(lightNum * sizeof(gre_fvector4d));
+		gre_fvector4d* lightPos = GRE_RenderBuff_Malloc((size_t)lightNum * sizeof(gre_fvector4d));
 		gre_log_explain(lightPos == NULL, GRE_LOG_Mem1, "渲染灯光缓存申请失败");
-		GRE_free1(workspace->lightPos);
+		GRE_RenderBuff_Free(workspace->lightPos);
 		workspace->lightPos = lightPos;
 		workspace->lightMax = lightNum;
 	}
@@ -157,17 +190,19 @@ void YMGRE_Free_RenderWorkspace(GRE_RenderWorkspace workspace)
 	if (workspace == NULL)return;
 	if (workspace->ownsMemory)
 	{
-		GRE_free1(workspace->pointList);
-		GRE_free1(workspace->pointList_wN);
-		GRE_free1(workspace->polygonHide);
+		GRE_RenderBuff_Free(workspace->pointList);
+		GRE_RenderBuff_Free(workspace->pointList_wN);
+		GRE_RenderBuff_Free(workspace->polygonHide);
 		GRE_free1(workspace->polygonColor);
-		GRE_free1(workspace->lightPos);
+		GRE_RenderBuff_Free(workspace->lightPos);
 #if YMGRE_ENABLE_TRANSPARENCY
-        GRE_free1(workspace->transparentTriangles);
+        GRE_RenderBuff_Free(workspace->transparentTriangles);
 #endif
 #if YMGRE_ENABLE_LINEAR_COLOR
-        GRE_free1(workspace->linearColor);
+        GRE_RenderBuff_Free(workspace->linearColor);
 #endif
+		GRE_RenderBuff_Free(workspace->projectedPoints);
+		GRE_RenderBuff_Free(workspace->clipCodes);
 		GRE_free0(workspace);
 	}
 }

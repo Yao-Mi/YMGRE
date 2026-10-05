@@ -1,5 +1,31 @@
 # scene_baker
 
+## LOD 资源制作
+
+桌面编辑器选中网格物体后，点顶部 **制作LOD**。面板可填写近/中切换像素、死区和中/远两级的三角面目标保留比例；远级可选 **简化模型** 或 **八方向图**。点击 **连续预览** 会让当前相机从近阈值的 150% 投影尺寸移到远处再返回，按实际 LOD 选择结果显示相应网格或图像。点击 **导出LOD** 选目录，会把各级资源和 `object.lod` 组合为一个独立包。包名取自当前场景对象名，例如 `birch_01_lod/`，同名已存在时依次使用 `birch_01_lod_2/` 等名称，不会覆盖旧包；无需额外输入名称。生成简化网格和八方向图发生在预览或导出时，不修改场景里的原模型。
+
+LOD 包内平铺 `birch_01_near.mesh`、`birch_01_middle.mesh`、`birch_01_far.mesh` 及对应的 `.material`、`object.lod`。三级材质引用相同颜色或法线图时只保存一份 `texture_<内容标识>.bmp` 或 `normal_<内容标识>.bmp`；不同内容仍各自保存，避免覆盖。模型和材质文件的后缀说明层级，文件内的材质名使用可被 GRE 读取的短名。
+
+八方向图采用 8 个水平视角、每视角 64×64 像素。包内的 `views8.bin` 是供运行时资源回调读取的图像资产，旁边的 `view_0.bmp`～`view_7.bmp` 和 `mask_0.bmp`～`mask_7.bmp` 便于检查颜色及透明覆盖。`.lod` 远级写成 `level image ... views8.bin`；近、中级仍是 Ogre 网格。图像资产保持本地坐标，场景实例继续持有各自的位置、可见性和 LOD 状态。当前八方向图适合竖直摆放的树草等物体，预览和导出用的是同一资源生成路径。
+
+网格目标保留比例是简化器的目标值，受拓扑、材质分段等约束，实际面数可能高于目标。带逐面光照贴图的模型暂不简化；需先导出普通模型。八方向图只覆盖水平视角，俯仰角明显变化的物体应使用网格远级。
+
+### 命令行
+
+连续预览的最近端点为 180 像素投影直径，比默认 120 像素近阈值多 50%。
+
+同目录的 `scene_lod_baker` 使用库里的网格简化、LOD 选择和已有的 Ogre 模型导出器。输入一份模型时离线生成中、远两级；输入三份模型时直接组合。每次导出在指定的**已有目录**下创建以输入模型名命名的独立包，内含各级 `.mesh`、`.material`、共享贴图和 `object.lod`，不会覆盖先前资源。阈值目前固定为投影直径 120／40 像素，切换死区为 10%。
+
+```sh
+mkdir -p /tmp/ymgre-lod-assets
+./build/bin/rgb888/index16/scene_lod_baker export /tmp/ymgre-lod-assets path/to/near.mesh
+./build/bin/rgb888/index16/scene_lod_baker export /tmp/ymgre-lod-assets path/to/near.mesh path/to/middle.mesh path/to/far.mesh
+./build/bin/rgb888/index16/scene_lod_baker preview /tmp/ymgre-lod-assets/near_lod/object.lod /tmp/ymgre-lod-assets/preview
+python3 project_Demo/scene_baker/make_scene_lod_gif.py /tmp/ymgre-lod-assets/preview /tmp/ymgre-lod-assets/preview.gif
+```
+
+`preview` 输出 33 张相机连续往返的 BMP，并打印每帧的投影尺寸、层级、是否重建网格和克隆 CPU 时间。命令行版目前制作、预览三级网格包；八方向图由桌面编辑器制作并预览。预览复用库中的阈值与死区，层级不变时保留当前网格。可以编辑 `object.lod` 中的像素阈值与 `hysteresis`，再运行预览比较效果；各级网格应使用同一原点和尺度，导出器会提示明显偏移的模型。描述中的资源路径相对于该文件；应用负责文件读取和资源绑定。
+
 独立 RGB888 场景烘焙编辑器。已打通“选中物体 → UV1 烘焙 → 导出 → 回贴预览 → 保存/重开场景”。
 
 ## 构建与使用
@@ -66,7 +92,7 @@ YMGRE_BAKE_DIR=/path/to/output ./build/bin/rgb888/index16/scene_baker
 ctest --test-dir build/.cache/configs/rgb888/index16/project_Demo/scene_baker --output-on-failure
 ```
 
-`scene_bake` 验证 UV1 不重叠、UV0 不被修改、受光面与背光面的差异、资源读写、错误输入、空灯光、透视采样及近面裁剪；`scene_baker_editor` 验证编辑器原有功能、真实菜单点击、导出失败保留预览、预览切换、场景重开和失效判断，并在输出中给出临时场景、光照图和编辑器截图路径。
+`scene_bake` 验证 UV1 不重叠、UV0 不被修改、受光面与背光面的差异、资源读写、错误输入、空灯光、透视采样及近面裁剪；`scene_baker_editor` 验证编辑器原有功能、真实菜单点击、导出失败保留预览、预览切换、场景重开和失效判断，并在输出中给出临时场景、光照图和编辑器截图路径。`scene_lod_editor` 验证面板、三级网格和八方向图的连续预览、描述文件及图像资源回读，并对草、树网格实际生成八方向图。
 
 ## 本次验收结果
 

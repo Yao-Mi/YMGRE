@@ -24,6 +24,18 @@ static inline float32 YMGRE_Spot_EquivalentPointLightGain(float32 halfConeAngleD
 
 
 
+/* Shininess is an integer; avoid the general logarithm/exponential path. */
+static inline float32 YMGRE_Light_IntegerPower(float32 x, uint8 exponent)
+{
+	float32 result = 1.0f;
+	while (exponent) {
+		if (exponent & 1) result *= x;
+		exponent >>= 1;
+		if (exponent) x *= x;
+	}
+	return result;
+}
+
 //三角形平面光照
 static inline void YMGRE_PolygonLighting_ComponentsAdvanced(GRE_Polygon4d thispoly,
 	GRE_Fvector4d planeVetex0, GRE_Fvector4d pN, GRE_Light4d thislight,
@@ -105,7 +117,7 @@ static inline void YMGRE_PolygonLighting_ComponentsAdvanced(GRE_Polygon4d thispo
 
 				float32 specular = YMGRE_Fvector4d_Dot(&View, pN) / Nlen;
 				specular = GREMax(specular, 0.0f);
-				specular = YMGRE_Pow(specular, high_n);
+				specular = YMGRE_Light_IntegerPower(specular, high_n);
 				// 高光还需受入射角约束，避免仅凭 N·H 在整个光锥内铺开。
 				float32 noLight = dotval / (Dlen * Nlen);
 				noLight = GREMax(noLight, 0.0f);
@@ -200,7 +212,7 @@ static inline void YMGRE_PolygonLighting_ComponentsAdvanced(GRE_Polygon4d thispo
 
 				dotval = YMGRE_Fvector4d_Dot(&View, pN) / Nlen; // H*N ,此处对N进行归一化
 				dotval = GREMax(dotval, 0.0f); // β半角>90时，会出现负值
-				dotval = YMGRE_Pow(dotval, high_n);
+				dotval = YMGRE_Light_IntegerPower(dotval, high_n);
 				//加入高光部分： Is = Is * Ks * (H *N)^n
 				sr += ((uint32)(light_r * materialSpecular.R / 255.0f * mirror_ks * dotval));
 				sg += ((uint32)(light_g * materialSpecular.G / 255.0f * mirror_ks * dotval));

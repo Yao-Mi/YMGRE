@@ -3,13 +3,26 @@
 
 #define _VS201X_USE 1 //使用VS平台
 
-#ifdef _VS201X_USE
+#if defined(_MSC_VER)
 #pragma warning(disable:4996)
 #endif
 
 #include <stdio.h>
 
 #include"./YMGRE_PubType.h"
+
+/* Reuse vertex-depth reciprocals in the common vertex-lit fragment path. */
+#ifndef YMGRE_RASTER_FAST_INTERPOLATION
+#define YMGRE_RASTER_FAST_INTERPOLATION (YMGRE_CAMERA_COLOR_DEPTH == 16)
+#endif
+
+/* Optional approximate flat-depth lighting for compact RGB565 targets. */
+#ifndef YMGRE_RASTER_LIGHT_CURVE
+#define YMGRE_RASTER_LIGHT_CURVE (YMGRE_CAMERA_COLOR_DEPTH == 16)
+#endif
+#ifndef YMGRE_RASTER_LIGHT_CURVE_ERROR
+#define YMGRE_RASTER_LIGHT_CURVE_ERROR 1.0f
+#endif
 
 #ifndef NULL
 #define NULL (void*)0

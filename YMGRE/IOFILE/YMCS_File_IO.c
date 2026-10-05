@@ -115,6 +115,7 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 				Mtnames[si] = '\0';
 				// 创建材质
 				GRE_Material materail = YMGRE_Creat_Material(Mtnames);
+				int colorMipRequested=0;
 
 				//再读取一行
 				fgets(line, 256, file);
@@ -142,6 +143,14 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
                                 if(!strcmp(mode,"none"))materail->doubleSided=1;
                                 else if(!strcmp(mode,"clockwise"))materail->doubleSided=0;
                             }continue;
+                        }
+                        if(!strncmp(info,"color_mip ",10)){
+                            char mode[16];
+                            if(sscanf(info,"color_mip %15s",mode)==1){
+                                if(!strcmp(mode,"on"))colorMipRequested=1;
+                                else if(!strcmp(mode,"off"))colorMipRequested=0;
+                            }
+                            continue;
                         }
 #if YMGRE_ENABLE_TRANSPARENCY
                         if(!strncmp(info,"opacity_map ",12)){
@@ -274,6 +283,9 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 						}
 					}
 				}
+				// Build after both color and opacity maps, regardless of script line order.
+				if(colorMipRequested && !YMGRE_Material_BuildColorMips(materail))
+					fprintf(stderr,"Unable to build color mip for material: %s\n",Mtnames);
 				//装载到全局材质库
 				YMGRE_Scence_AddMeterial(mysc, materail);
 			}
@@ -586,6 +598,23 @@ GRE_Object4d YMGRE_LoadOgreMeshAndMaterial(GRE_Scence mysc,const char* meshpath)
 		}
 
 		gre_log_explain(head == NULL, GRE_LOG_FILE, "读取mesh失败");
+		/* Every submesh is culled independently.  The mesh bounds chunk below
+		 * describes the complete mesh and must not leave later parts with the
+		 * uninitialized boundType from YMGRE_Creat_Object. */
+		for(GRE_Object4d part=head;part;part=part->nextObject) {
+			gre_fvector4d lo=part->pointList[0].pos,hi=lo;
+			float32 radius=0;
+			for(int i=0;i<part->pointNum;i++) {
+				gre_fvector4d p=part->pointList[i].pos;
+				if(p.x<lo.x)lo.x=p.x;if(p.y<lo.y)lo.y=p.y;if(p.z<lo.z)lo.z=p.z;
+				if(p.x>hi.x)hi.x=p.x;if(p.y>hi.y)hi.y=p.y;if(p.z>hi.z)hi.z=p.z;
+				p.w=0;float32 r=YMGRE_Fvector4d_Len1(&p);if(r>radius)radius=r;
+			}
+			part->BoundingBoxMin=lo;part->BoundingBoxMax=hi;
+			/* The culler centers its bound at WorldCoordinate, so a sphere
+			 * around the local origin safely encloses offset submeshes. */
+			part->BoundingSphereR=radius;part->boundType=GRE_Bounding_Sphere_R;
+		}
 
 		// Chunk--M_MESH_BOUNDS
 		uint16 MESH_BOUNDS = SUBMESH;

@@ -24,6 +24,7 @@ static void clear(GRE_Camera4d camera,float depth) {
     for(int i=0;i<64*64;i++)camera->img.zbuff[i]=depth;
 }
 int main(void) {
+    const GRErgb24 background=GRE_FramePixel_To_RGB24(GRE_FramePixel_From_RGB24((GRErgb24){50,20,10}));
     prepare(&red,(GRErgb24){255,0,0});prepare(&blue,(GRErgb24){0,0,255});
     GRE_Camera4d camera=YMGRE_Creat_Camera(0,64,64,35,35,35,35);
     YMGRE_Camera_Frustum_Init(camera,.1f,100);
@@ -33,9 +34,9 @@ int main(void) {
     if(center.R<240||center.G||fabsf(camera->img.zbuff[32*64+32]-5)>.001f)goto fail;
     /* This pixel is inside the billboard rectangle but outside its mask. */
     GRErgb24 transparent=GRE_FramePixel_To_RGB24(camera->img.data[24*64+24]);
-    if(transparent.R!=50||transparent.G!=20||camera->img.zbuff[24*64+24]!=10)goto fail;
+    if(transparent.R!=background.R||transparent.G!=background.G||transparent.B!=background.B||camera->img.zbuff[24*64+24]!=10)goto fail;
     clear(camera,3);grass_impostor_draw(&red,camera,0,0,5,1,0);
-    for(int i=0;i<64*64;i++)if(camera->img.zbuff[i]!=3||GRE_FramePixel_To_RGB24(camera->img.data[i]).R!=50)goto fail;
+    for(int i=0;i<64*64;i++)if(camera->img.zbuff[i]!=3||GRE_FramePixel_To_RGB24(camera->img.data[i]).R!=background.R)goto fail;
     clear(camera,100);grass_impostor_draw(&blue,camera,0,0,8,1,0);grass_impostor_draw(&red,camera,0,0,5,1,0);
     memcpy(savedColor,camera->img.data,sizeof savedColor);memcpy(savedDepth,camera->img.zbuff,sizeof savedDepth);
     clear(camera,100);grass_impostor_draw(&red,camera,0,0,5,1,0);grass_impostor_draw(&blue,camera,0,0,8,1,0);

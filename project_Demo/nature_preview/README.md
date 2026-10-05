@@ -68,11 +68,12 @@ WASD 移动，方向键转视角，Q/E 升降，R 复位，Esc 退出。相机�
 | --- | --- |
 | `nature_preview.c` | 地形、植被布局、相机和天空；`updateGround` 更新黄绿地面，`addSceneProps` 组装地球与坦克 |
 | `grass_impostor.c` / `.h` | 为每种草生成八方向缓存图，以及透明遮罩与深度绘制 |
+| `assets/grass.lod` | 草丛模型／图片层级、屏幕像素阈值和切换缓冲；启动时由库解析，demo 绑定原模型与八方向缓存 |
 | `vegetation_catalog.h` | 树、草丛和散落枝叶的完整资源目录 |
 | `generate_heightmap.py` | 生成可复现的地形高度图 |
 | `build_both.sh` | 分别构建 index16、index32，并执行 CTest |
 
-地图尺寸、细草密度、树木数量、加载前向倍率和近处草丛网格距离位于 `nature_preview.c` 顶部宏定义。草丛数量同时受 `ACCENT_COUNT` 和实例生成处 `copies` 控制，调整时必须保持二者一致，初始化会校验总数。草丛分块和缓存渲染属于此 demo 的实现，尚未抽成核心库通用接口。
+地图尺寸、细草密度、树木数量和加载前向倍率位于 `nature_preview.c` 顶部宏定义。草丛模型／图片切换的屏幕像素阈值和缓冲位于 `assets/grass.lod`。草丛数量同时受 `ACCENT_COUNT` 和实例生成处 `copies` 控制，调整时必须保持二者一致，初始化会校验总数。通用层级选择与描述文件解析位于核心库，草丛分块、八方向缓存生成及绘制属于此 demo 的实现。
 
 ## 验证、性能与截图
 

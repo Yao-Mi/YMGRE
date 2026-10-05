@@ -4,6 +4,7 @@
 #include "YMGRE_Rendering_Pipeline.h"
 #include "YMGRE_CullingAndClipping.h"
 #include "YMGRE_TriangleRaster.h"
+#include "YMGRE_LOD.h"
 #include "YMCS_File_IO.h"
 #include "YMGUI_Invalidate.h"
 #include "grass_impostor.h"
@@ -22,7 +23,6 @@
 #define TREES 54
 #define TREE_CLEARANCE .7f
 #define ACCENT_COUNT 17800
-#define ACCENT_MESH_DISTANCE 7.f
 #define ACCENT_RADIUS 42.f
 #define PATCH_GRID 24
 #define PATCH_SIZE (WORLD_SIZE/PATCH_GRID)
@@ -39,13 +39,21 @@ static unsigned rng=73921;
 static GRE_Object4d grassCache[PATCH_COUNT];
 static gre_listnode grassNodes[PATCH_COUNT];
 static float grassScale[GRASS_TYPES];
-typedef struct { float x,z,scale,angle;int kind;GRE_Object4d mesh; } accent_instance;
+typedef struct { float x,z,scale,angle;int kind;GRE_Object4d mesh;YMGRE_LOD_Instance lod; } accent_instance;
 static accent_instance accentsOnMap[ACCENT_COUNT];
 static gre_listnode accentNodes[ACCENT_COUNT];
 static int accentChunkHead[PATCH_COUNT],accentNext[ACCENT_COUNT];
 static int impostorInstances[ACCENT_COUNT],impostorCount,activeAccentChunks;
 static float accentBaseY[ACCENT_COUNT];
 static grass_impostor impostors[GRASS_TYPES];
+static YMGRE_LOD_Object accentLod[GRASS_TYPES];
+typedef struct { GRE_Object4d mesh; grass_impostor *image; } accent_lod_assets;
+static void *resolveAccentLod(YMGRE_LOD_Kind kind,const char *name,void *context) {
+    accent_lod_assets *assets=(accent_lod_assets*)context;
+    if(kind==YMGRE_LOD_MESH&&!strcmp(name,"original"))return assets->mesh;
+    if(kind==YMGRE_LOD_IMAGE&&!strcmp(name,"baked8"))return assets->image;
+    return NULL;
+}
 typedef char blade_patch_must_fit_indices[(BLADES_PER_PATCH*3<=YMGRE_MAX_VERTICES)?1:-1];
 static unsigned hash(unsigned x) { x^=x>>16; x*=0x7feb352du; x^=x>>15; x*=0x846ca68bu; return x^(x>>16); }
 static float unit(unsigned x) { return (hash(x)>>8)*(1.f/16777216.f); }
@@ -311,6 +319,22 @@ static void drawBlades(GRE_Camera4d source,gre_list *patches,GRE_RenderWorkspace
     }
 }
 static void freeGrass(void) { for(int i=0;i<PATCH_COUNT;i++) { YMGRE_Free_Object(grassCache[i]);grassCache[i]=NULL; } }
+static int loadAccentLod(GRE_Object4d *sources) {
+    char path[512],text[2048];
+    snprintf(path,sizeof path,"%s/assets/grass.lod",NATURE_ROOT);
+    FILE *file=fopen(path,"rb");if(!file)return 0;
+    size_t len=fread(text,1,sizeof text-1,file);
+    int complete=feof(file);fclose(file);if(!complete)return 0;
+    text[len]=0;
+    YMGRE_LOD_Object description;
+    if(!YMGRE_LOD_Parse(&description,text))return 0;
+    for(int k=0;k<GRASS_TYPES;k++) {
+        accentLod[k]=description;
+        accent_lod_assets assets={sources[k],&impostors[k]};
+        if(!YMGRE_LOD_Resolve(&accentLod[k],resolveAccentLod,&assets))return 0;
+    }
+    return 1;
+}
 /* Placement records are bucketed once. Whole offscreen chunks are skipped;
  * only nearby instances allocate full meshes. Distant instances share eight
  * cached cutout views per species instead of duplicating their geometry. */
@@ -324,7 +348,7 @@ static void indexAccentChunks(void) {
         accentBaseY[i]=height(a->x,a->z)-.04f;
     }
 }
-static int updateAccents(GRE_Object4d *sources,GRE_Camera4d camera,gre_list *draw) {
+static int updateAccents(GRE_Camera4d camera,gre_list *draw) {
     int n=0;impostorCount=0;activeAccentChunks=0;
     for(int chunk=0;chunk<PATCH_COUNT;chunk++) {
         if(accentChunkHead[chunk]<0)continue;
@@ -336,10 +360,17 @@ static int updateAccents(GRE_Object4d *sources,GRE_Camera4d camera,gre_list *dra
         for(int i=accentChunkHead[chunk];i>=0;i=accentNext[i]) {
             accent_instance *a=&accentsOnMap[i];float dx=a->x-camera->pos.x,dz=a->z-camera->pos.z;
             if(!active || !withinLoadingRange(dx,dz,camera,ACCENT_RADIUS)) { YMGRE_Free_Object(a->mesh);a->mesh=NULL;continue; }
-            if(dx*dx+dz*dz>ACCENT_MESH_DISTANCE*ACCENT_MESH_DISTANCE) {
+            const grass_impostor *asset=&impostors[a->kind];
+            float ca=cosf(a->angle),sa=sinf(a->angle);
+            gre_fvector4d center={a->x+a->scale*(asset->center.x*ca-asset->center.z*sa),
+                accentBaseY[i]+asset->center.y*a->scale,
+                a->z+a->scale*(asset->center.x*sa+asset->center.z*ca),1};
+            const YMGRE_LOD_Level *level=YMGRE_LOD_SelectCamera(&accentLod[a->kind],&a->lod,camera,
+                center,asset->span*a->scale*.5f);
+            if(!level||level->kind==YMGRE_LOD_IMAGE) {
                 YMGRE_Free_Object(a->mesh);a->mesh=NULL;impostorInstances[impostorCount++]=i;continue;
             }
-            if(!a->mesh)a->mesh=plant(sources[a->kind],a->x,a->z,a->scale,a->angle);
+            if(!a->mesh)a->mesh=plant((GRE_Object4d)level->resource,a->x,a->z,a->scale,a->angle);
             accentNodes[n]=(gre_listnode){sizeof(gre_object4d),a->mesh,NULL};
             if(n)accentNodes[n-1].next=&accentNodes[n];
             n++;
@@ -350,7 +381,8 @@ static int updateAccents(GRE_Object4d *sources,GRE_Camera4d camera,gre_list *dra
 static void drawAccentImpostors(GRE_Camera4d camera) {
     for(int j=0;j<impostorCount;j++) {
         int i=impostorInstances[j];accent_instance *a=&accentsOnMap[i];
-        grass_impostor_draw(&impostors[a->kind],camera,a->x,accentBaseY[i],a->z,a->scale,a->angle);
+        const YMGRE_LOD_Level *level=&accentLod[a->kind].levels[a->lod.level];
+        grass_impostor_draw((const grass_impostor*)level->resource,camera,a->x,accentBaseY[i],a->z,a->scale,a->angle);
     }
 }
 static void freeAccents(void) { for(int i=0;i<ACCENT_COUNT;i++) { YMGRE_Free_Object(accentsOnMap[i].mesh);accentsOnMap[i].mesh=NULL; } }
@@ -466,7 +498,7 @@ int main(int argc,char **argv) {
         for(int j=0;j<copies;j++) {
             if(accents>=ACCENT_COUNT)goto cleanup;
             float x=(random01()-.5f)*86,z=(random01()-.5f)*86;
-            accentsOnMap[accents]=(accent_instance){x,z,grassScale[k]*(.7f+random01()*.6f),random01()*6.283f,k,NULL};
+            accentsOnMap[accents]=(accent_instance){x,z,grassScale[k]*(.7f+random01()*.6f),random01()*6.283f,k,NULL,{0}};
             accents++;accentSpecies[k]++;
         }
     }
@@ -479,6 +511,7 @@ int main(int argc,char **argv) {
     YMGRE_List_Append(&scene.LightList,sizeof(gre_light4d),sun);
     double bakeStart=YMGRE_DemoHost_Time();
     for(int k=0;k<GRASS_TYPES;k++)if(!grass_impostor_bake(&impostors[k],grasses[k],&scene.MaterialList,&scene.LightList))goto cleanup;
+    if(!loadAccentLod(grasses)) { fprintf(stderr,"Cannot load grass LOD description\n");goto cleanup; }
     printf("Baked %d species x %d views in %.1f ms\n",GRASS_TYPES,GRASS_VIEWS,(YMGRE_DemoHost_Time()-bakeStart)*1000);fflush(stdout);
     createSky();
     GRE_Camera4d camera=YMGRE_Creat_Camera(0,800,500,43,43,30,30); YMGRE_Camera_Frustum_Init(camera,.15f,220);
@@ -505,7 +538,10 @@ int main(int argc,char **argv) {
         if(smoke && frames==0)held=0;
         if(smoke && frames==2) { x=30;z=24;yaw=1.4f;pitch=0;held=0;actions=4; }
         if(smoke && frames==3) { held=0;actions=1; }
-        if(actions&1) { x=0;z=-28;lift=1.8f;yaw=0;pitch=.035f; }
+        if(actions&1) {
+            x=0;z=-28;lift=1.8f;yaw=0;pitch=.035f;
+            for(int i=0;i<ACCENT_COUNT;i++)accentsOnMap[i].lod.initialized=0;
+        }
         if(first||held||actions) {
             yaw+=((held&16?1:0)-(held&32?1:0))*dt*.8f;
             pitch=clamp(pitch+((held&64?1:0)-(held&128?1:0))*dt*.6f,-1,1);
@@ -519,7 +555,7 @@ int main(int argc,char **argv) {
             gre_list grassDraw={0};
             int visible=updateGrass(camera,&grassDraw);
             updateGround(ground,camera);
-            gre_list accentDraw={0};int visibleAccents=updateAccents(grasses,camera,&accentDraw);
+            gre_list accentDraw={0};int visibleAccents=updateAccents(camera,&accentDraw);
             if(first) { printf("Active accent chunks %d; full meshes %d; cached views %d\n",activeAccentChunks,accentDraw.len,impostorCount);printf("Visible short blades %d in %d batches; %d detailed accents; all species placed; tree spacing verified\n",visible,grassDraw.len,visibleAccents);fflush(stdout); }
             double loadedAt=YMGRE_DemoHost_Time();
             sceneTail->next=accentDraw.listhead;

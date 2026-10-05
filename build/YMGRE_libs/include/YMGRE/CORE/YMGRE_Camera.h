@@ -86,11 +86,11 @@ static inline void YMGRE_CameraImage_Init(GRE_Camera4d myCam,GRErgb24 background
 {
 	GRE_RenderTarget target = (myCam->target != NULL) ? myCam->target : &myCam->img;
 	float32 zfar_val= myCam->frustum.Zfar;
-	for (int i = 0,imgsize= target->width* target->height; i < imgsize; i++)
-	{
-		target->zbuff[i] = zfar_val;//初始化zbuff为最远距离 zfar
-		target->data[i] = GRE_FramePixel_From_RGB24(background);//初始化为默认背景色
-	}
+	GRE_FramePixel clearPixel = GRE_FramePixel_From_RGB24(background);
+	size_t count = (size_t)target->width * target->height;
+	/* Keep depth and color writes sequential on external-memory targets. */
+	for (size_t i = 0; i < count; i++) target->zbuff[i] = zfar_val;
+	for (size_t i = 0; i < count; i++) target->data[i] = clearPixel;
 }
 
 //视景体初始化：远近平面

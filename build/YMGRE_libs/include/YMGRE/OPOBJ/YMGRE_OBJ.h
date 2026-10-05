@@ -154,6 +154,8 @@ typedef struct gre_object4d_
 
 	int polygonNum;//多边形数量
 	GRE_Polygon4d polygonList;//多边形列表
+	GRE_Index* topologyStorage; // Optional contiguous owned polygon indices.
+	uint32 topologyIndexCount;
 
 	float32 mirrorKs;//镜面反射率
 
@@ -279,6 +281,9 @@ typedef struct gre_render_workspace_
  float32* linearColor; size_t linearCapacity; // RGB float count
 #endif
  int materialStatus; // 0 success; -1 insufficient material workspace
+	gre_fvector4d* projectedPoints; // Camera-local projected positions.
+	uint8* clipCodes; // Camera-local frustum codes and active-vertex mask.
+	uint32 projectedMax;
 	uint8 ownsMemory;//为1时由工作区扩容并释放内部缓存
 }gre_render_workspace;
 typedef gre_render_workspace* GRE_RenderWorkspace;
@@ -347,6 +352,15 @@ typedef struct gre_camera4d_
 typedef gre_camera4d* GRE_Camera4d;
 
 /*-------------------------------------  材质  ---------------------------------------------*/
+typedef struct gre_color_mips_ {
+ uint8 count;
+ uint16 width[16],height[16];
+ GRErgb24* pixels[16]; // level 0 aliases the material's base texture
+ GRErgb24* source;
+ uint16 sourceWidth,sourceHeight;
+} gre_color_mips;
+typedef gre_color_mips* GRE_ColorMips;
+
 typedef struct gre_material_advanced_
 {
 	uint16 normalWidth, normalHeight;
@@ -370,6 +384,8 @@ typedef struct gre_material_advanced_
 	uint8 rayType;// 0 ordinary, 1 mirror, 2 dielectric glass
 	float32 reflectivity, ior, raySpecularStrength;
 	GRErgb24 transmissionColor;
+	uint8 colorUseMip; // opt-in per material; colorMips owns the generated levels
+	GRE_ColorMips colorMips; // optional, owned; higher levels use GRE_ImageBuff_Free
 }gre_material_advanced;
 typedef gre_material_advanced* GRE_MaterialAdvanced;
 
