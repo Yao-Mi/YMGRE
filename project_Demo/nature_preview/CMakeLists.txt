@@ -13,3 +13,5 @@ set_tests_properties(nature_preview_camera_smoke PROPERTIES ENVIRONMENT "YMGRE_H
 add_executable(test_grass_impostor test_grass_impostor.c grass_impostor.c)
 target_link_libraries(test_grass_impostor PRIVATE ymgre)
 add_test(NAME nature_grass_impostor_depth COMMAND test_grass_impostor)
+
+ymgre_set_program_output(nature_preview)

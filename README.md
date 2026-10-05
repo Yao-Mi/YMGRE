@@ -28,7 +28,17 @@ YMGRE 从顶点变换、视锥裁剪、三角形填充和深度缓冲出发，�
 
 ## 渲染效果
 
-下面的图片均来自本仓库 Demo 的真实运行画面。显示层使用 YMGUI/SDL，截图只做 PNG 编码转换。
+下面的图片均来自本仓库 Demo 的真实渲染输出，截图仅做图片格式转换。
+
+### Girl 人物材质
+
+| 半身效果 | 脸部近景 |
+|:---:|:---:|
+| ![Girl 查看器：人物、头发及衣物材质](docs/images/girl_viewer.jpg) | ![Girl 查看器：脸部与发丝近景](docs/images/girl_viewer_close.jpg) |
+
+`girl_viewer` 使用 CPU 光栅化、逐像素 GGX、法线贴图、透明发丝及 Mip、线性色彩和曝光。以上是当前 `Resource/girl` 资源的实际画面；此示例未启用阴影或光追。运行 `./project_Demo/girl_viewer/build.sh --run` 打开，详见 [Girl 示例说明](project_Demo/girl_viewer/README.md)。
+
+### 反射、折射与贴图
 
 | 镜面反射 | 玻璃折射 |
 |:---:|:---:|
@@ -189,8 +199,9 @@ build/
 │   ├── build_demos.sh
 │   ├── README.md
 │   └── 手册.md
-├── YMGRE_libs-linux-x86_64.tar.gz
-└── YMGRE_libs-linux-x86_64.tar.gz.sha256
+├── bin/<色深>/<索引宽度>/    # 所有 Demo 和应用的可执行文件
+├── archives/                # 本地压缩包及 SHA256 文件
+└── .cache/                  # 可重建的构建缓存与过程日志
 ```
 
 默认发布流程不需要 YMGUI。提供外部包时，可以额外验收全部窗口 Demo：
@@ -201,20 +212,22 @@ build/
 
 `--release` 将压缩包和 SHA256 文件写入可提交的 `releases/`；普通构建不会修改该目录。脚本在临时目录组装 SDK，构建或验收失败会保留已有 SDK 和分发包。可用 `--jobs 8` 调整并行度。
 
-`build/YMGRE_libs/` 的现有 Git 放行规则继续保留，其他构建输出仍忽略。发布日志在 `build/_ymgre_sdk/`。详见 [分发说明](releases/README.md)；脚本不会自动提交或推送。
+`build/YMGRE_libs/` 的现有 Git 放行规则继续保留，其他构建输出仍忽略。发布日志在 `build/.cache/sdk/`。详见 [分发说明](releases/README.md)；脚本不会自动提交或推送。
 
 ## 从源码构建
+
+日常入口：`./project_Demo/girl_viewer/build.sh --run` 打开人物示例，`./sdk/build.sh` 生成 SDK。所有 Demo 程序位于 `build/bin/<色深>/<索引宽度>/`，SDK 位于 `build/YMGRE_libs/`，中间文件统一放在 `build/.cache/`。详见 [构建入口与目录](docs/BUILD_LAYOUT.md)。
 
 桌面 Demo 需要 C 编译器、CMake、pkg-config、SDL2 开发包，以及仓库的 YMGUI 子模块。
 
 ```sh
 git submodule update --init --recursive
-cmake -S . -B build/rgb888/index16/Demo \
+cmake -S . -B build/.cache/configs/rgb888/index16/Demo \
   -DYMGRE_INDEX_BITS=16 \
   -DYMGRE_CAMERA_COLOR_DEPTH=24
-cmake --build build/rgb888/index16/Demo -j4
-ctest --test-dir build/rgb888/index16/Demo --output-on-failure
-./build/rgb888/index16/Demo/demo_basic_shapes
+cmake --build build/.cache/configs/rgb888/index16/Demo -j4
+ctest --test-dir build/.cache/configs/rgb888/index16/Demo --output-on-failure
+./build/bin/rgb888/index16/demo_basic_shapes
 ```
 
 一键构建核心、基础 Demo 和所有独立应用：
@@ -264,3 +277,9 @@ Ogre 读取对应现有静态模型路径，支持范围和资源约定见手册
 个人及非商业组织以非营利目的学习、研究或自用 YMGRE，可免费使用；商业用途必须事先说明并取得著作权人的书面授权。对外分发修改版或使用修改版对外提供服务时，须按许可条款公开本库的对应源码及必要构建文件。独立应用不因仅调用或链接本库而必须公开业务代码。第三方资源及外部依赖按各自原许可使用。完整条款见 [LICENSE](LICENSE)（`LicenseRef-YMGRE-Noncommercial-1.2`）。
 
 本声明不撤回使用者依据此前有效许可已经取得的权利。
+
+## 可裁剪材质渲染
+
+高级光栅化管线支持按材质双面、单通道透明图及 Mip、逐像素 GGX 和 LUT 线性色彩／曝光。五项编译开关可分别裁剪；旧材质和相机默认行为保留。详见 [材质接口与裁剪](docs/material-rendering.md) 和 [材质对比查看器](project_Demo/girl_viewer/README.md)。
+
+材质贴图可选加载 PNG/JPEG，分别用 `YMGRE_ENABLE_PNG`、`YMGRE_ENABLE_JPEG` 启用（源码默认 OFF）。Girl 示例优先采用 JPG 颜色／法线／材质参数图，透明遮罩保留无损 PNG，资源约 41.6 MiB。详见 [图片加载与依赖](docs/image-loading.md)。

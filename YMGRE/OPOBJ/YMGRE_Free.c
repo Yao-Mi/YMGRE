@@ -1,3 +1,4 @@
+#include "../CORE/YMGRE_Material.h"
 #include"./YMGRE_Free.h"
 #include"../DEBUG/YMGRE_Debug.h"
 #include"../CONFIG/YMGRE_Mem.h"
@@ -87,6 +88,12 @@ void YMGRE_Free_Material(void* data)
 	if (pthis->advanced != NULL)
 	{
 		GRE_ImageBuff_Free(pthis->advanced->normalPixel);//法线图（可选）
+#if YMGRE_ENABLE_PBR
+        GRE_ImageBuff_Free(pthis->advanced->pbrParameters);
+#endif
+#if YMGRE_ENABLE_TRANSPARENCY
+        YMGRE_Material_ClearOpacity(pthis);
+#endif
 		GRE_free0(pthis->advanced);
 	}
 	GRE_free0(pthis);

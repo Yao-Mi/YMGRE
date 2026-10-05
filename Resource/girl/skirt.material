@@ -1,0 +1,17 @@
+material skirt
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   ymgre_color_grade 0.1 1.18 1 1 1 1
+   cull_hardware none
+   texture_unit
+   {
+    texture skirt_color.jpg
+   }
+  }
+ }
+}

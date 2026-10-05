@@ -3,27 +3,27 @@
 模块测试默认随根工程构建：
 
 ```bash
-cmake -S . -B build/rgb888/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=24 -DYMGRE_INDEX_BITS=16
-cmake --build build/rgb888/index16/Demo -j
-ctest --test-dir build/rgb888/index16/Demo --output-on-failure
+cmake -S . -B build/.cache/configs/rgb888/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=24 -DYMGRE_INDEX_BITS=16
+cmake --build build/.cache/configs/rgb888/index16/Demo -j
+ctest --test-dir build/.cache/configs/rgb888/index16/Demo --output-on-failure
 ```
 
 PC 高级流程（RGB888）：
 
 ```bash
-cmake -S . -B build/rgb888/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=24
+cmake -S . -B build/.cache/configs/rgb888/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=24
 ```
 
 MCU/低内存基础流程（RGB565）：
 
 ```bash
-cmake -S . -B build/rgb565/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=16 -DYMGRE_INDEX_BITS=16
+cmake -S . -B build/.cache/configs/rgb565/index16/Demo -DYMGRE_CAMERA_COLOR_DEPTH=16 -DYMGRE_INDEX_BITS=16
 ```
 
 关闭测试：
 
 ```bash
-cmake -S . -B build/rgb888/index16/Demo -DYMGRE_BUILD_TESTS=OFF
+cmake -S . -B build/.cache/configs/rgb888/index16/Demo -DYMGRE_BUILD_TESTS=OFF
 ```
 
 ## test_render_context
@@ -89,7 +89,7 @@ cmake -S . -B build/rgb888/index16/Demo -DYMGRE_BUILD_TESTS=OFF
 三角形坐标、相机、UV、材质和输出尺寸必须保持不变。第一格失败后不得用后续格判断原因。
 
 ```bash
-./build/rgb888/index16/Demo/demo_advanced_stages
+./build/bin/rgb888/index16/demo_advanced_stages
 ```
 
 | 格 | 新增变量 | 必须满足 | 判定失败 |
@@ -150,7 +150,7 @@ output = texture * vertexColor * materialDiffuse * lightColor * diffuse
 再下排从左到右。六格使用相同的大三角形、相机和输出尺寸：
 
 ```bash
-./build/rgb888/index16/Demo/demo_advanced_point_light
+./build/bin/rgb888/index16/demo_advanced_point_light
 ```
 
 | 格 | 唯一新增或改变的条件 | 观察标准 |

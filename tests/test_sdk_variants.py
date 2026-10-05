@@ -49,4 +49,11 @@ endforeach()
     configure('mixed-gui-depth', source=sdk_cmake.parent / 'examples',
               flags=['-DYMGRE_CAMERA_COLOR_DEPTH=24', '-DYMGUI_COLOR_DEPTH=16', '-DYMGRE_WINDOWED_DEMOS=ON'],
               error='YMGUI_COLOR_DEPTH must match YMGRE_CAMERA_COLOR_DEPTH')
-print('9 SDK configuration checks passed')
+    feature_text=(sdk_cmake/'YMGREFeatures.cmake').read_text()
+    full='set(_ymgre_feature_PBR 1)' in feature_text
+    configure('mixed-feature', flags=[f'-DYMGRE_ENABLE_PBR={0 if full else 1}'], error='YMGRE SDK feature mismatch')
+    configure('mixed-dispatch', flags=[f'-DYMGRE_ENABLE_RASTER_DISPATCH={0 if full else 1}'], error='YMGRE SDK feature mismatch')
+    for codec in ('PNG','JPEG'):
+        enabled=f'set(_ymgre_feature_{codec} 1)' in feature_text
+        configure('mixed-'+codec.lower(),flags=[f'-DYMGRE_ENABLE_{codec}={0 if enabled else 1}'],error='YMGRE SDK feature mismatch')
+print('13 SDK configuration checks passed')

@@ -28,15 +28,15 @@
 
 产物分别位于：
 
-- `build/rgb888/index16/project_Demo/nature_preview/nature_preview`
-- `build/rgb888/index32/project_Demo/nature_preview/nature_preview`
+- `build/bin/rgb888/index16/nature_preview`
+- `build/bin/rgb888/index32/nature_preview`
 
 单独构建：
 
 ```bash
-cmake -S project_Demo/nature_preview -B build/rgb888/index32/project_Demo/nature_preview -DCMAKE_BUILD_TYPE=Release -DYMGRE_INDEX_BITS=32
-cmake --build build/rgb888/index32/project_Demo/nature_preview -j4
-./build/rgb888/index32/project_Demo/nature_preview/nature_preview
+cmake -S project_Demo/nature_preview -B build/.cache/configs/rgb888/index32/project_Demo/nature_preview -DCMAKE_BUILD_TYPE=Release -DYMGRE_INDEX_BITS=32
+cmake --build build/.cache/configs/rgb888/index32/project_Demo/nature_preview -j4
+./build/bin/rgb888/index32/nature_preview
 ```
 
 启动日志和窗口标题显示实际索引位宽。16 位索引限制针对单个网格，而非场景总顶点数；32 位不是性能优化手段。
@@ -77,9 +77,9 @@ WASD 移动，方向键转视角，Q/E 升降，R 复位，Esc 退出。相机�
 ## 验证、性能与截图
 
 ```bash
-YMGRE_HEADLESS=1 ./build/rgb888/index32/project_Demo/nature_preview/nature_preview --smoke-test
-YMGRE_HEADLESS=1 ./build/rgb888/index32/project_Demo/nature_preview/nature_preview --benchmark
-YMGRE_HEADLESS=1 YMGRE_MAX_FRAMES=2 YMGUI_SHOT=/tmp/meadow.bmp ./build/rgb888/index32/project_Demo/nature_preview/nature_preview
+YMGRE_HEADLESS=1 ./build/bin/rgb888/index32/nature_preview --smoke-test
+YMGRE_HEADLESS=1 ./build/bin/rgb888/index32/nature_preview --benchmark
+YMGRE_HEADLESS=1 YMGRE_MAX_FRAMES=2 YMGUI_SHOT=/tmp/meadow.bmp ./build/bin/rgb888/index32/nature_preview
 ```
 
 Smoke 测试检查前向 2.5 倍边界、未扩大的左右/后向边界、镜头转向后的范围旋转，以及移动、切换远处再返回后的图像一致性；初始化校验植被总量、草种完整性、树冠间距。

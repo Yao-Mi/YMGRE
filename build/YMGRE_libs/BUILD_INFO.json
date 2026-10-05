@@ -1,8 +1,17 @@
 {
-  "built_at_utc": "2026-09-20T17:08:21.430134+00:00",
+  "built_at_utc": "2026-09-29T16:59:17.991694+00:00",
   "system": "Linux",
   "machine": "x86_64",
   "compiler": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "material_features": {
+    "TRANSPARENCY": 1,
+    "OPACITY_MIPMAP": 1,
+    "PBR": 1,
+    "LINEAR_COLOR": 1,
+    "RASTER_DISPATCH": 1,
+    "PNG": 1,
+    "JPEG": 1
+  },
   "build_type": "Release",
   "position_independent": true,
   "framebuffers": [
@@ -41,10 +50,10 @@
   ],
   "example_sources": 30,
   "prebuilt_demos_per_variant": 1,
-  "external_ymgui_validated": true,
+  "external_ymgui_validated": false,
   "bundled_ymgui": false,
-  "source_sha256": "cedaf10057e0610e8efb81a4531b9e66b3da8e02e3a608cf0dea33d2ac1692d2",
-  "git_head": "e932b65120578eb82c90d3eae56279a412ea63b9",
+  "source_sha256": "d1a01e22b9eac0ab9ed1e3460c388ea0825c292bb3c6a626246bc6215f5ee208",
+  "git_head": "f843b72ee66b6d9605a1b8bcffb2ed10eb279030",
   "source_includes_uncommitted_changes": true,
   "sdk_requires_engine_source": false,
   "rebuild_command": "./sdk/build.sh"

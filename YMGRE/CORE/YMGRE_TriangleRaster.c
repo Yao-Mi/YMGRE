@@ -1,3 +1,5 @@
+#include "YMGRE_MaterialRaster.h"
+#include "YMGRE_PBR.h"
 #include "./YMGRE_TriangleRaster.h"
 #include "./YMGRE_MathBase.h"
 #include "./YMGRE_Light.h"
@@ -129,6 +131,7 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 	float32 den = (b->base.pos.y-c->base.pos.y)*(a->base.pos.x-c->base.pos.x)+
 		(c->base.pos.x-b->base.pos.x)*(a->base.pos.y-c->base.pos.y);
 	if (YMGRE_Fabs(den) < 1e-6f) return;
+ unsigned lod=YMGRE_Material_OpacityLOD(material,a,b,c,den);
 	int minX = GREMax(YMGRE_Raster_Floor(GREMin(a->base.pos.x,
 		GREMin(b->base.pos.x,c->base.pos.x))), 0);
 	int maxX = GREMin(YMGRE_Raster_Ceil(GREMax(a->base.pos.x,
@@ -151,9 +154,10 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 		float32 wa=iw0/invz, wb=iw1/invz, wc=iw2/invz, z=1.0f/invz;
 		int index=y*camera->img.width+x;
 		if (camera->img.zbuff[index] <= z || z <= camera->frustum.Znear) continue;
-		camera->img.zbuff[index]=z;
 		float32 u=wa*a->base.u+wb*b->base.u+wc*c->base.u;
 		float32 v=wa*a->base.v+wb*b->base.v+wc*c->base.v;
+		uint8 alpha=YMGRE_Material_Opacity(material,u,v,lod);
+		if(!YMGRE_Material_AcceptAlpha(camera,alpha))continue;
 		GRErgb24 texel=EMaterial_GetPixel(material ? material->pixel : NULL,
 			material ? material->width : 0, material ? material->height : 0, u, v);
 		float32 lr=wa*a->vertexLighting.R+wb*b->vertexLighting.R+wc*c->vertexLighting.R;
@@ -168,9 +172,9 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 		int cr=(int)(texel.R*lr*vr/(255.0f*255.0f)+sr);
 		int cg=(int)(texel.G*lg*vg/(255.0f*255.0f)+sg);
 		int cb=(int)(texel.B*lb*vb/(255.0f*255.0f)+sb);
-		camera->img.data[index]=GRE_FramePixel_From_RGB24((GRErgb24){
+		YMGRE_Material_WriteRGB(camera,index,z,(GRErgb24){
 			(uint8)GREMin(GREMax(cr,0),255), (uint8)GREMin(GREMax(cg,0),255),
-			(uint8)GREMin(GREMax(cb,0),255) });
+			(uint8)GREMin(GREMax(cb,0),255) },alpha);
 	}
 }
 
@@ -179,6 +183,11 @@ static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 	float32 mirrorKs, GRE_Camera4d camera, GRE_Lightmap lightmap)
 {
 	if(vertexList==NULL||polygon==NULL||(lights==NULL && lightmap==NULL)||camera==NULL) return;
+#if YMGRE_ENABLE_PBR
+ if(camera->pbrEnabled && material && !material->unlit && material->advanced && material->advanced->pbrEnabled && lights && !lightmap){
+  YMGRE_PBR_Fill(vertexList,polygon,material,lights,lightPos,worldToCamera,camera);return;
+ }
+#endif
 	uint8 specularPower = EMaterial_GetSpecularPower(material);
 	GRE_Vertex4d_wN a = &vertexList[polygon->index[0]], b = &vertexList[polygon->index[1]], c = &vertexList[polygon->index[2]];
 	// Tangent handedness is a discrete, triangle-flat attribute. Never
@@ -190,6 +199,7 @@ static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 	float32 den = (b->base.pos.y - c->base.pos.y) * (a->base.pos.x - c->base.pos.x) +
 		(c->base.pos.x - b->base.pos.x) * (a->base.pos.y - c->base.pos.y);
 	if (YMGRE_Fabs(den) < 1e-6f) return;
+ unsigned lod=YMGRE_Material_OpacityLOD(material,a,b,c,den);
 	int minX = GREMax(YMGRE_Raster_Floor(GREMin(a->base.pos.x,
 		GREMin(b->base.pos.x,c->base.pos.x))),0);
 	int maxX = GREMin(YMGRE_Raster_Ceil(GREMax(a->base.pos.x,
@@ -210,8 +220,9 @@ static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 		float32 z=1.0f/invz;
 		int index=y*camera->img.width+x;
 		if (camera->img.zbuff[index] <= z || z <= camera->frustum.Znear) continue;
-		camera->img.zbuff[index]=z;
 		float32 u=wa*a->base.u+wb*b->base.u+wc*c->base.u, v=wa*a->base.v+wb*b->base.v+wc*c->base.v;
+		uint8 alpha=YMGRE_Material_Opacity(material,u,v,lod);
+		if(!YMGRE_Material_AcceptAlpha(camera,alpha))continue;
 		gre_fvector4d normal={wa*a->normal.x+wb*b->normal.x+wc*c->normal.x,wa*a->normal.y+wb*b->normal.y+wc*c->normal.y,wa*a->normal.z+wb*b->normal.z+wc*c->normal.z,0};
 		gre_fvector4d tangent={wa*a->tangent.x+wb*b->tangent.x+wc*c->tangent.x,wa*a->tangent.y+wb*b->tangent.y+wc*c->tangent.y,wa*a->tangent.z+wb*b->tangent.z+wc*c->tangent.z,0};
 		YMGRE_Fvector4d_Normalize(&normal);
@@ -268,7 +279,7 @@ static void FillAdvanced(GRE_Vertex4d_wN vertexList, GRE_Polygon4d polygon,
 		cg=cg*(wa*a->color.G+wb*b->color.G+wc*c->color.G)/255;
 		cb=cb*(wa*a->color.B+wb*b->color.B+wc*c->color.B)/255;
 		cr += specular.R; cg += specular.G; cb += specular.B;
-		camera->img.data[index]=GRE_FramePixel_From_RGB24((GRErgb24){GREMin(cr,255),GREMin(cg,255),GREMin(cb,255)});
+		YMGRE_Material_WriteRGB(camera,index,z,(GRErgb24){GREMin(cr,255),GREMin(cg,255),GREMin(cb,255)},alpha);
 	}
 }
 void YMGRE_TriangleRaster_Fill_wN(GRE_Vertex4d_wN vertices, GRE_Polygon4d polygon,

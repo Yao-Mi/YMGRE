@@ -91,3 +91,5 @@ set_tests_properties(scene_uv_primitives PROPERTIES ENVIRONMENT
 add_test(NAME scene_texture_tools COMMAND scene_baker)
 set_tests_properties(scene_texture_tools PROPERTIES ENVIRONMENT
   "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;YMGRE_TEXTURE_TOOLS=1")
+
+ymgre_set_program_output(scene_baker scene_bake_cli)

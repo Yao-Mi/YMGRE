@@ -21,4 +21,15 @@ void YMGRE_Camera_BindRenderTarget(GRE_Camera4d camera, GRE_RenderTarget target)
 void YMGRE_Camera_BindRenderWorkspace(GRE_Camera4d camera, GRE_RenderWorkspace workspace);//给相机绑定共享或独立工作区
 GRE_RenderTarget YMGRE_Camera_GetRenderTarget(GRE_Camera4d camera);//取得相机当前输出目标
 
+/* Bind optional material scratch to a fixed workspace. Sizes are bytes / float count.
+   Query packet stride to budget transparency storage. Contents are overwritten per frame. */
+size_t YMGRE_Material_TransparentPacketSize(void);
+#if YMGRE_ENABLE_RASTER_DISPATCH
+/* NULL restores serial rendering. Borrowed synchronous dispatcher: no mandatory
+   OS/thread dependency. Unsupported scene modes automatically use the serial path. */
+void YMGRE_RenderWorkspace_SetRasterDispatcher(GRE_RenderWorkspace workspace,
+ GRE_RasterDispatch dispatch,void* user);
+#endif
+void YMGRE_RenderWorkspace_BindMaterialBuffers(GRE_RenderWorkspace workspace,
+ void* transparentPackets,size_t packetBytes,float32* linearRGB,size_t floatCount);
 #endif // !YMGRE_RENDERCONTEXT_H

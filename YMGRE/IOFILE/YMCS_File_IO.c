@@ -1,3 +1,4 @@
+#include "../CORE/YMGRE_Material.h"
 #include "../CONFIG/YMGRE_PubDefine.h"
 #include "./YMCS_File_IO.h"
 #include "../DEBUG/YMGRE_Debug.h"
@@ -136,6 +137,43 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 					else if ((*info) == '}') brackets--;
 					else
 					{
+                        if(!strncmp(info,"cull_hardware ",14)){
+                            char mode[16];if(sscanf(info,"cull_hardware %15s",mode)==1){
+                                if(!strcmp(mode,"none"))materail->doubleSided=1;
+                                else if(!strcmp(mode,"clockwise"))materail->doubleSided=0;
+                            }continue;
+                        }
+#if YMGRE_ENABLE_TRANSPARENCY
+                        if(!strncmp(info,"opacity_map ",12)){
+                            char name[128];if(sscanf(info,"opacity_map %127s",name)==1 &&
+                                !YMGRE_Material_LoadOpacity(materail,GetImageFromSamePath(scriptName,name),1))
+                                fprintf(stderr,"Unable to load opacity map: %s\n",name);
+                            continue;
+                        }
+#endif
+#if YMGRE_ENABLE_PBR
+                        if(!strncmp(info,"pbr_parameters ",15)){
+                            char name[128];if(sscanf(info,"pbr_parameters %127s",name)==1){
+                                GRE_MaterialAdvanced a=YMGRE_Material_EnsureAdvanced(materail);
+                                if(a){
+                                    if(a->pbrIOR==0){a->pbrIOR=1.45f;a->pbrNormalStrength=1;}
+                                    GRErgb24* pixels=NULL;uint16 w=0,h=0;
+                                    YMGRE_Image_LoadRGB(GetImageFromSamePath(scriptName,name),&pixels,&w,&h);
+                                    if(pixels){GRE_ImageBuff_Free(a->pbrParameters);a->pbrParameters=pixels;a->pbrWidth=w;a->pbrHeight=h;a->pbrEnabled=1;}
+                                }
+                            }continue;
+                        }
+                        if(!strncmp(info,"pbr_ior ",8)||!strncmp(info,"normal_strength ",16)){
+                            char key[32];float value;
+                            if(sscanf(info,"%31s %f",key,&value)==2 && isfinite(value)){
+                                int ior=!strcmp(key,"pbr_ior");
+                                if((ior&&value>=1&&value<=3)||(!ior&&value>=0&&value<=4)){
+                                    GRE_MaterialAdvanced a=YMGRE_Material_EnsureAdvanced(materail);
+                                    if(a){if(ior)a->pbrIOR=value;else a->pbrNormalStrength=value;}
+                                }
+                            }continue;
+                        }
+#endif
 						// 环境光
 						if (YMGRE_Memcmp(info, "ambient", sizeof("ambient") - 1) == 0)
 						{
@@ -164,8 +202,7 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
                             unsigned type,red,green,blue;float reflection,ior,highlight=.2f;
                             if(sscanf(info,"ymgre_ray %u %f %f %u %u %u %f",&type,&reflection,&ior,&red,&green,&blue,&highlight)>=6 &&
                                type<=2 && reflection>=0 && reflection<=1 && ior>=1 && ior<=3 && red<=255 && green<=255 && blue<=255 && highlight>=0 && highlight<=1) {
-                                if(!materail->advanced){materail->advanced=GRE_malloc0(sizeof(gre_material_advanced));
-                                    if(materail->advanced)memset(materail->advanced,0,sizeof(gre_material_advanced));}
+                                YMGRE_Material_EnsureAdvanced(materail);
                                 if(materail->advanced){materail->advanced->rayType=type;materail->advanced->reflectivity=reflection;
                                     materail->advanced->ior=ior;materail->advanced->raySpecularStrength=highlight;materail->advanced->transmissionColor=(GRErgb24){red,green,blue};}
                             }
@@ -183,9 +220,7 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 							info += sizeof("specular_power") - 1;
 							float32 power = YMGRE_Strtof(info, &info);
 							power = GREMax(0.0f, GREMin(power, 255.0f));
-							if (materail->advanced == NULL)
-								{ materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
-								memset(materail->advanced,0,sizeof(gre_material_advanced)); }
+							if(!YMGRE_Material_EnsureAdvanced(materail))continue;
 							materail->advanced->specularPower = (uint8)(power + 0.5f);
 							continue;
 						}
@@ -213,10 +248,8 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 								textureName[mi++] = *info++;
 							}
 							textureName[mi] = '\0';
-							if (materail->advanced == NULL)
-								{ materail->advanced = GRE_malloc0(sizeof(gre_material_advanced));
-								memset(materail->advanced,0,sizeof(gre_material_advanced)); }
-							YMGRE_Bmp_File_LoadTo_Image(GetImageFromSamePath(scriptName, textureName),
+							if(!YMGRE_Material_EnsureAdvanced(materail))continue;
+							YMGRE_Image_LoadRGB(GetImageFromSamePath(scriptName, textureName),
 								&materail->advanced->normalPixel, &materail->advanced->normalWidth,
 								&materail->advanced->normalHeight);
 							continue;
@@ -235,7 +268,7 @@ void YMGRE_ParseMaterialScript(GRE_Scence mysc, const char* scriptName)
 							}
 							textureName[mi] = '\0';
 							//贴图内容读取
-							YMGRE_Bmp_File_LoadTo_Image( GetImageFromSamePath(scriptName,textureName),\
+							YMGRE_Image_LoadRGB( GetImageFromSamePath(scriptName,textureName),
 								&materail->pixel, &materail->width, &materail->height);
 							continue;
 						}

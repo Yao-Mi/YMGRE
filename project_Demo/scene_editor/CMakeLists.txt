@@ -20,3 +20,5 @@ target_compile_definitions(scene_editor PRIVATE
 	GB2312_BIN_PATH="${CMAKE_CURRENT_LIST_DIR}/../../extern_lib/YMGUI/Demo/gb2312_glyphs.bin"
 )
 target_link_libraries(scene_editor PRIVATE ymgre ymgre_demo_host MiniXML::MiniXML)
+
+ymgre_set_program_output(scene_editor)

@@ -21,6 +21,31 @@ set(_ymgre_archive "${_ymgre_sdk}/lib/libymgre_${_ymgre_format}_index${YMGRE_IND
 if(NOT EXISTS "${_ymgre_archive}")
     message(FATAL_ERROR "Missing YMGRE SDK variant: ${_ymgre_archive}")
 endif()
+include("${CMAKE_CURRENT_LIST_DIR}/YMGREFeatures.cmake")
+set(_ymgre_feature_definitions "")
+foreach(_feature TRANSPARENCY OPACITY_MIPMAP PBR LINEAR_COLOR RASTER_DISPATCH PNG JPEG)
+ if(DEFINED YMGRE_ENABLE_${_feature})
+  if(YMGRE_ENABLE_${_feature})
+   set(_requested 1)
+  else()
+   set(_requested 0)
+  endif()
+  if(NOT _requested EQUAL _ymgre_feature_${_feature})
+   message(FATAL_ERROR "YMGRE SDK feature mismatch: ${_feature}; rebuild the SDK for a different feature profile")
+  endif()
+ endif()
+ list(APPEND _ymgre_feature_definitions "YMGRE_ENABLE_${_feature}=${_ymgre_feature_${_feature}}")
+endforeach()
+include(CMakeFindDependencyMacro)
+set(_ymgre_link_libraries m)
+if(_ymgre_feature_PNG)
+ find_dependency(PNG)
+ list(APPEND _ymgre_link_libraries PNG::PNG)
+endif()
+if(_ymgre_feature_JPEG)
+ find_dependency(JPEG)
+ list(APPEND _ymgre_link_libraries JPEG::JPEG)
+endif()
 if(TARGET YMGRE::ymgre)
     get_target_property(_ymgre_bits YMGRE::ymgre YMGRE_SDK_INDEX_BITS)
     get_target_property(_ymgre_depth YMGRE::ymgre YMGRE_SDK_COLOR_DEPTH)
@@ -36,10 +61,10 @@ else()
         IMPORTED_LOCATION "${_ymgre_archive}"
         YMGRE_SDK_INDEX_BITS "${YMGRE_INDEX_BITS}"
         YMGRE_SDK_COLOR_DEPTH "${YMGRE_CAMERA_COLOR_DEPTH}"
-        INTERFACE_COMPILE_DEFINITIONS "YMGRE_INDEX_BITS=${YMGRE_INDEX_BITS};YMGRE_CAMERA_COLOR_DEPTH=${YMGRE_CAMERA_COLOR_DEPTH}"
+        INTERFACE_COMPILE_DEFINITIONS "YMGRE_INDEX_BITS=${YMGRE_INDEX_BITS};YMGRE_CAMERA_COLOR_DEPTH=${YMGRE_CAMERA_COLOR_DEPTH};${_ymgre_feature_definitions}"
         INTERFACE_COMPILE_FEATURES c_std_99
         INTERFACE_INCLUDE_DIRECTORIES "${_ymgre_sdk}/include/YMGRE/CONFIG;${_ymgre_sdk}/include/YMGRE/CORE;${_ymgre_sdk}/include/YMGRE/OPOBJ;${_ymgre_sdk}/include/YMGRE/IOFILE;${_ymgre_sdk}/include/YMGRE/DEBUG"
-        INTERFACE_LINK_LIBRARIES "m")
+        INTERFACE_LINK_LIBRARIES "${_ymgre_link_libraries}")
 endif()
 # Window integration belongs to the example/application layer.
 if(YMGRE_FIND_COMPONENTS)

@@ -124,6 +124,15 @@ static GRE_Camera4d creatCameraHeader(int16 id, float32 alpha_Lx, float32 alpha_
 	//申请失败
 	gre_log_explain(mycam == NULL, GRE_LOG_Mem0, "相机头内存申请失败");
 
+#if YMGRE_ENABLE_TRANSPARENCY
+ mycam->opacityPass=0;
+#endif
+#if YMGRE_ENABLE_PBR
+ mycam->pbrEnabled=0; mycam->pbrNormalEnabled=1;
+#endif
+#if YMGRE_ENABLE_LINEAR_COLOR
+ mycam->linearColorEnabled=0; mycam->exposure=1; mycam->linearColor=NULL;
+#endif
 	mycam->ID = id;
 	mycam->isMoved = 1;
 	mycam->wireFrame = GRE_Render_Solid;//默认使用实体模式
@@ -343,6 +352,7 @@ GRE_Material YMGRE_Creat_Material(char* name)
 	mymaterial->height = 0;
 	mymaterial->advanced = NULL;
 	mymaterial->unlit = 0;
+	mymaterial->doubleSided = 0;
 	//默认为白色
 	GRErgb24 comcolor = (GRErgb24){ 255,255,255 };
 	mymaterial->ambient = comcolor;//环境色

@@ -1,0 +1,10 @@
+material hair_edit_alpha
+{
+ technique
+ {
+  pass
+  {
+   opacity_map hair_opacity_edited.png
+  }
+ }
+}

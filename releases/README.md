@@ -9,9 +9,9 @@
 
 ```sh
 (cd releases && sha256sum -c YMGRE_libs-linux-x86_64.tar.gz.sha256)
-mkdir -p build/sdk-unpacked
-tar -xzf releases/YMGRE_libs-linux-x86_64.tar.gz -C build/sdk-unpacked
-cd build/sdk-unpacked/YMGRE_libs
+mkdir -p build/.cache/sdk-unpacked
+tar -xzf releases/YMGRE_libs-linux-x86_64.tar.gz -C build/.cache/sdk-unpacked
+cd build/.cache/sdk-unpacked/YMGRE_libs
 sha256sum -c checksums.sha256
 ./build_demos.sh 16 --depth 16
 ./build_demos.sh 32 --depth 16
@@ -31,6 +31,6 @@ sha256sum -c checksums.sha256
 
 发布脚本先在临时目录组装 SDK，完成四种组合的独立消费者验收后，再更新本地 `build/YMGRE_libs/` 和这里的压缩包、校验文件。提供 `--ymgui-dir` 时还必须通过窗口示例验收。构建或验收失败不会替换已有 SDK 和分发包；压缩失败不会截断已有压缩包。
 
-普通 `./sdk/build.sh` 只更新 `build/YMGRE_libs/` 和 `build/` 下的本地压缩包，不修改 `releases/`。可用 `--jobs 8` 调整并行度。发布不会自动执行 Git 提交、推送或创建远程 Release；应将压缩包、校验文件与对应源码和文档一起提交。
+普通 `./sdk/build.sh` 只更新 `build/YMGRE_libs/` 和 `build/archives/` 下的本地压缩包，不修改 `releases/`。可用 `--jobs 8` 调整并行度。发布不会自动执行 Git 提交、推送或创建远程 Release；应将压缩包、校验文件与对应源码和文档一起提交。
 
 现有 `build/YMGRE_libs/` 的 Git 放行规则继续保留。`releases/` 为直接下载压缩包提供固定入口，两者都由同一脚本生成。

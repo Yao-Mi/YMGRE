@@ -1,3 +1,9 @@
+#include "YMGRE_Color.h"
+#include "YMGRE_PBR.h"
+#include "../CONFIG/YMGRE_Mem.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include "./YMGRE_Rendering_Pipeline.h"
 #include "./YMGRE_CullingAndClipping.h"
 
@@ -414,7 +420,116 @@ void YMGRE_Camera_TanglePipline_VertexColor_wN(GRE_Camera4d thiscam,
 	}
 }
 
-// Advanced material pipeline. Legacy pipeline entry points intentionally remain untouched.
+#if YMGRE_ENABLE_TRANSPARENCY
+typedef struct {
+	gre_vertex4d_wN vertices[3];
+	gre_polygon4d polygon;
+	GRE_Material material;
+	GRE_Lightmap lightmap;
+	float32 depth, mirrorKs;
+	int renderMode;
+ int minY,maxY;
+	size_t sequence;
+} GRE_TransparentTriangle;
+
+static int compareTransparentTriangles(const void* lhs, const void* rhs)
+{
+	const GRE_TransparentTriangle* a = lhs;
+	const GRE_TransparentTriangle* b = rhs;
+	if (a->depth > b->depth) return -1;
+	if (a->depth < b->depth) return 1;
+	return (a->sequence > b->sequence) - (a->sequence < b->sequence);
+}
+
+/* Sort compact indices in reserved workspace storage, never whole triangles.
+   No hidden allocation; the sequence key preserves deterministic equal depths. */
+static void siftTransparent(const GRE_TransparentTriangle* packets,size_t* order,size_t count,size_t root)
+{
+ size_t value=order[root];
+ while(root<count/2){
+  size_t child=root*2+1;
+  if(child+1<count&&compareTransparentTriangles(&packets[order[child]],&packets[order[child+1]])<0)child++;
+  if(compareTransparentTriangles(&packets[value],&packets[order[child]])>=0)break;
+  order[root]=order[child];root=child;
+ }
+ order[root]=value;
+}
+static void sortTransparent(const GRE_TransparentTriangle* packets,size_t* order,size_t count)
+{
+ for(size_t i=0;i<count;i++)order[i]=i;
+ if(count<2)return;
+ for(size_t root=count/2;root>0;)siftTransparent(packets,order,count,--root);
+ for(size_t end=count-1;end>0;end--){
+  size_t swap=order[0];order[0]=order[end];order[end]=swap;
+  siftTransparent(packets,order,end,0);
+ }
+}
+
+static void drawOpacityPacket(GRE_TransparentTriangle* packet, GRE_Camera4d cam,
+    GRE_List LightList, GRE_RenderWorkspace workspace)
+{
+	GRE_Index indices[3] = {0, 1, 2};
+	packet->polygon.index = indices;
+	#if YMGRE_ENABLE_PBR
+	if (cam->pbrEnabled && !packet->material->unlit && !packet->lightmap && packet->material->advanced && packet->material->advanced->pbrEnabled)
+		YMGRE_TriangleRaster_Fill_wN(packet->vertices, &packet->polygon,
+			packet->material, LightList, workspace->lightPos, &cam->move.TMat,
+			packet->mirrorKs, cam);
+	else
+#endif
+	if (packet->lightmap)
+		YMGRE_TriangleRaster_FillLightmap_wN(packet->vertices, &packet->polygon,
+			packet->material, packet->lightmap, cam);
+	else if (packet->renderMode == GRE_RenderMode_Vertex && !packet->material->unlit)
+		YMGRE_TriangleRaster_FillVertexLit_wN(packet->vertices, &packet->polygon,
+			packet->material, cam);
+	else
+		YMGRE_TriangleRaster_Fill_wN(packet->vertices, &packet->polygon,
+			packet->material, LightList, workspace->lightPos, &cam->move.TMat,
+			packet->mirrorKs, cam);
+}
+
+#if YMGRE_ENABLE_RASTER_DISPATCH
+/* Each job owns disjoint rows. Geometry, lights and packets are read-only;
+   depth and transparent blending retain exactly the serial submission order. */
+typedef struct {
+ GRE_TransparentTriangle* packets;size_t count;
+ GRE_Camera4d camera;GRE_List lights;GRE_RenderWorkspace workspace;
+ int pass;
+ const size_t* order;
+} GRE_RasterBatch;
+static void drawPBRBand(void* context,uint32 jobIndex)
+{
+ GRE_RasterBatch* batch=context;
+ gre_camera4d camera=*batch->camera;
+ int begin=(int)jobIndex*16,end=GREMin(begin+16,camera.img.height);
+ camera.opacityPass=batch->pass==2?2:1;
+ GRE_Index indices[3]={0,1,2};
+ for(size_t i=0;i<batch->count;i++){
+  GRE_TransparentTriangle* packet=&batch->packets[batch->order?batch->order[i]:i];
+  int alpha=packet->material->advanced&&packet->material->advanced->opacityPixel;
+  if((batch->pass==0?alpha:!alpha)||packet->maxY<begin||packet->minY>=end)continue;
+  gre_polygon4d polygon=packet->polygon;polygon.index=indices;
+  YMGRE_PBR_FillRows(packet->vertices,&polygon,packet->material,batch->lights,
+   batch->workspace->lightPos,&camera.move.TMat,&camera,begin,end);
+ }
+}
+static int canDispatchPBR(GRE_Camera4d cam,GRE_List objects,GRE_List materials,GRE_RenderWorkspace ws)
+{
+ if(!ws->rasterDispatch||!cam->pbrEnabled||cam->wireFrame==GRE_Render_Wireframe)return 0;
+ for(GRE_ListNode node=objects->listhead;node;node=node->next)
+  for(GRE_Object4d obj=node->data;obj;obj=obj->nextObject){
+   if(!obj->isVisible||!obj->pointList_wN)continue;
+   GRE_Material mat=YMGRE_Material_Find(materials,obj->materiaName);
+   if(obj->wireFrame||obj->lightmap||!mat||mat->unlit||!mat->advanced||!mat->advanced->pbrEnabled)return 0;
+  }
+ return 1;
+}
+#endif
+
+#endif
+
+// Advanced material pipeline; legacy entry points remain unchanged.
 void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList,
 	GRE_RenderWorkspace workspace)
 {
@@ -429,7 +544,32 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 	renderCamera.img = *target;
 	renderCamera.target = target;
 	GRE_Camera4d cam = &renderCamera;
-	YMGRE_CameraImage_Init(cam, (GRErgb24){ 50, 50, 50 });
+	workspace->materialStatus=0;
+#if YMGRE_ENABLE_LINEAR_COLOR
+ if(cam->wireFrame==GRE_Render_Wireframe)cam->linearColorEnabled=0;
+ if(!YMGRE_Color_BeginFrame(cam,workspace,(GRErgb24){50,50,50})){workspace->materialStatus=-1;return;}
+#endif
+ YMGRE_CameraImage_Init(cam, (GRErgb24){50,50,50});
+#if YMGRE_ENABLE_TRANSPARENCY
+ cam->opacityPass=1;
+ GRE_TransparentTriangle* transparent=workspace->transparentTriangles;
+ size_t opaqueCount=0;
+ size_t packetStride=sizeof(*transparent)+sizeof(size_t);
+ size_t transparentCount=0,transparentCapacity=workspace->transparentCapacity/packetStride;
+ int parallelPBR=0;
+#if YMGRE_ENABLE_RASTER_DISPATCH
+ parallelPBR=canDispatchPBR(cam,ObjList,MaterialList,workspace);
+#endif
+#endif
+ int deferWires=0;
+#if YMGRE_ENABLE_LINEAR_COLOR
+ deferWires=cam->linearColorEnabled;
+#endif
+#if YMGRE_ENABLE_TRANSPARENCY
+ for(GRE_ListNode n=MaterialList?MaterialList->listhead:NULL;n;n=n->next){
+  GRE_Material m=n->data;if(m&&m->advanced&&m->advanced->opacityPixel){deferWires=1;break;}
+ }
+#endif
 	uint32 lightNum = 0;
 	for(GRE_ListNode n=LightList->listhead;n!=NULL;n=n->next) lightNum++;
 	YMGRE_RenderWorkspace_Reserve(workspace, 0, 0, lightNum);
@@ -439,17 +579,29 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 		GRE_Light4d light = n->data;
 		YMGRE_Point_WorldToCamera(&light->pos, &workspace->lightPos[li++], &cam->move.TMat);
 	}
+ int materialGroups=1;
+#if YMGRE_ENABLE_TRANSPARENCY
+ if(parallelPBR)materialGroups=2;
+#endif
+ for(int materialGroup=0;materialGroup<materialGroups;materialGroup++){
 	for (GRE_ListNode node = ObjList->listhead; node != NULL; node = node->next)
 	{
 		GRE_Object4d object = node->data;
 		for (; object != NULL; object = object->nextObject)
 		{
 			if (!object->isVisible || object->pointList_wN == NULL) continue;
+            GRE_Material material = YMGRE_Material_Find(MaterialList, object->materiaName);
+#if YMGRE_ENABLE_TRANSPARENCY
+            if(parallelPBR){int alpha=material&&material->advanced&&material->advanced->opacityPixel;if(alpha!=materialGroup)continue;}
+#endif
 			YMGRE_RenderWorkspace_Reserve(workspace, object->pointNum, object->polygonNum, lightNum);
 			if (!YMGRE_RenderWorkspace_EnableVertexAttributes(workspace, object->pointNum)) continue;
 			YMGRE_Object_WorldToCameraTo_wN(object, &cam->move.TMat, workspace->pointList_wN);
 			if (YMGRE_Object_FrustumCullingCal(object, cam)) continue;
-			YMGRE_Backface_RemoveTo(object, &cam->pos, workspace->polygonHide);
+			if (material && material->doubleSided)
+				for (int pi = 0; pi < object->polygonNum; pi++) workspace->polygonHide[pi] = 0;
+			else
+				YMGRE_Backface_RemoveTo(object, &cam->pos, workspace->polygonHide);
 			/* Camera wireframe is exclusive; object wireFrame is an overlay on solid shading. */
 			if (cam->wireFrame == GRE_Render_Wireframe)
 			{
@@ -459,7 +611,6 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 			}
 			else
 			{
-				GRE_Material material = YMGRE_Material_Find(MaterialList, object->materiaName);
 				GRE_Lightmap lightmap=object->lightmap;
 				if (lightmap && (!lightmap->enabled || !lightmap->pixels || !lightmap->uv1 ||
 					lightmap->triangleCount != (uint32)object->polygonNum)) lightmap=NULL;
@@ -467,9 +618,21 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 				{
 					GRE_Polygon4d source = &object->polygonList[pi];
 					if (workspace->polygonHide[pi] || source->num != 3) continue;
+					uint8 backFacing = 0;
+					if (material && material->doubleSided) {
+						gre_fvector4d viewVector;
+						YMGRE_Fvector4d_SubToResult(&cam->pos,
+							&object->pointList[source->index[0]].pos, &viewVector);
+						backFacing = YMGRE_Fvector4d_Dot(&source->pN, &viewVector) <= 0.0f;
+					}
 					gre_vertex4d_wN input[3], clipped[YMGRE_FRUSTUM_CLIP_VERTEX_MAX];
 					for (int vi = 0; vi < 3; vi++) {
 						input[vi] = workspace->pointList_wN[source->index[vi]];
+						if (backFacing) {
+							input[vi].normal.x = -input[vi].normal.x;
+							input[vi].normal.y = -input[vi].normal.y;
+							input[vi].normal.z = -input[vi].normal.z;
+						}
 						if (lightmap) {
 							input[vi].lightmapU=lightmap->uv1[pi*6+vi*2];
 							input[vi].lightmapV=lightmap->uv1[pi*6+vi*2+1];
@@ -479,6 +642,7 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 					{
 						gre_fvector4d faceNormal = source->pN;
 						faceNormal.w = 0;
+                        if(backFacing){faceNormal.x=-faceNormal.x;faceNormal.y=-faceNormal.y;faceNormal.z=-faceNormal.z;}
 						YMGRE_Fvector4d_MatMultTo(&cam->move.TMat, &faceNormal, &faceNormal);
 						YMGRE_Fvector4d_Normalize(&faceNormal);
 						for (int vi = 0; vi < 3; vi++) input[vi].normal = faceNormal;
@@ -500,6 +664,45 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 						gre_polygon4d triangle = *source;
 						triangle.num = 3;
 						triangle.index = indices;
+#if YMGRE_ENABLE_TRANSPARENCY
+						if (parallelPBR || (material && material->advanced && material->advanced->opacityPixel)) {
+							if (transparentCount == transparentCapacity) {
+								size_t capacity = transparentCapacity ? transparentCapacity * 2 : 1024;
+								if(!workspace->ownsMemory || capacity>SIZE_MAX/packetStride){workspace->materialStatus=-1;return;}
+                                void* grown=GRE_malloc1(capacity*packetStride);
+                                if(!grown){workspace->materialStatus=-1;return;}
+                                if(transparentCount)memcpy(grown,transparent,transparentCount*sizeof(*transparent));
+                                GRE_free1(transparent);
+                                workspace->transparentTriangles=grown;workspace->transparentCapacity=capacity*packetStride;
+								transparent = grown;
+								transparentCapacity = capacity;
+							}
+							GRE_TransparentTriangle* packet = &transparent[transparentCount];
+							packet->vertices[0] = clipped[0];
+							packet->vertices[1] = clipped[vi];
+							packet->vertices[2] = clipped[vi+1];
+							packet->polygon = triangle;
+							packet->polygon.index = NULL;
+							packet->material = material;
+							packet->lightmap = lightmap;
+							packet->mirrorKs = object->mirrorKs;
+							packet->renderMode = object->renderMode;
+                            packet->minY=(int)floorf(fminf(clipped[0].base.pos.y,fminf(clipped[vi].base.pos.y,clipped[vi+1].base.pos.y)));
+                            packet->maxY=(int)ceilf(fmaxf(clipped[0].base.pos.y,fmaxf(clipped[vi].base.pos.y,clipped[vi+1].base.pos.y)));
+							packet->depth = (clipped[0].base.pos.z + clipped[vi].base.pos.z +
+								clipped[vi+1].base.pos.z) / 3.0f;
+							packet->sequence = transparentCount++;
+                            if(parallelPBR&&!materialGroup)opaqueCount++;
+							/* Group 2 is deferred until all no-opacity-map geometry has drawn. */
+							continue;
+						}
+#endif
+						#if YMGRE_ENABLE_PBR
+						if (cam->pbrEnabled && material && !material->unlit && !lightmap && material->advanced && material->advanced->pbrEnabled)
+							YMGRE_TriangleRaster_Fill_wN(clipped, &triangle, material, LightList,
+								workspace->lightPos, &cam->move.TMat, object->mirrorKs, cam);
+						else
+#endif
 						if (lightmap)
 							YMGRE_TriangleRaster_FillLightmap_wN(clipped, &triangle, material, lightmap, cam);
 						else if (object->renderMode == GRE_RenderMode_Vertex && !(material && material->unlit))
@@ -510,6 +713,7 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 					}
 				}
 			}
+            if(!deferWires)
 			if (object->wireFrame && cam->wireFrame != GRE_Render_Wireframe)
 			{
 				YMGRE_VertexList_CameraToViewPlane_wN(workspace->pointList_wN,
@@ -521,6 +725,55 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
 			}
 		}
 	}
+ }
+#if YMGRE_ENABLE_TRANSPARENCY
+ size_t* order=transparent?(size_t*)(transparent+transparentCapacity):NULL;
+#if YMGRE_ENABLE_RASTER_DISPATCH
+ if(parallelPBR){
+  GRE_RasterBatch batch={transparent,opaqueCount,cam,LightList,workspace,0,NULL};
+  uint32 jobs=(cam->img.height+15)/16;
+  workspace->rasterDispatch(workspace->rasterDispatchUser,drawPBRBand,&batch,jobs);
+  batch.pass=1;batch.packets=transparent?transparent+opaqueCount:NULL;batch.count=transparentCount-opaqueCount;
+  workspace->rasterDispatch(workspace->rasterDispatchUser,drawPBRBand,&batch,jobs);
+  sortTransparent(batch.packets,order,batch.count);
+  batch.pass=2;batch.order=order;
+  workspace->rasterDispatch(workspace->rasterDispatchUser,drawPBRBand,&batch,jobs);
+ }else
+#endif
+ {
+	/* Group 1 (materials without an opacity map) is complete. Group 2 keeps
+	   alpha==255 depth establishment separate from fractional-alpha blending,
+	   so intersecting hair cards retain the previous occlusion semantics.
+	   Preserve submission order for this depth subpass, including equal depths. */
+		for (size_t i = 0; i < transparentCount; i++)
+			drawOpacityPacket(&transparent[i], cam, LightList, workspace);
+	/* All opaque depth is now established. Blend fractional coverage globally,
+	   back to front, without writing opaque depth. */
+	sortTransparent(transparent, order, transparentCount);
+	cam->opacityPass = 2;
+	for (size_t i = 0; i < transparentCount; i++)
+		drawOpacityPacket(&transparent[order[i]], cam, LightList, workspace);
+ }
+#endif
+#if YMGRE_ENABLE_LINEAR_COLOR
+ YMGRE_Color_EndFrame(cam);
+#endif
+ if(deferWires){
+  /* Draw wire overlays after transparency and optional HDR resolution. */
+  for(GRE_ListNode node=ObjList->listhead;node;node=node->next)for(GRE_Object4d object=node->data;object;object=object->nextObject){
+   if(!object->isVisible||!object->wireFrame||!object->pointList_wN)continue;
+   YMGRE_RenderWorkspace_Reserve(workspace,object->pointNum,object->polygonNum,0);
+   if(!YMGRE_RenderWorkspace_EnableVertexAttributes(workspace,object->pointNum))continue;
+   YMGRE_Object_WorldToCameraTo_wN(object,&cam->move.TMat,workspace->pointList_wN);
+   if(YMGRE_Object_FrustumCullingCal(object,cam))continue;
+   GRE_Material material=YMGRE_Material_Find(MaterialList,object->materiaName);
+   if(material&&material->doubleSided)memset(workspace->polygonHide,0,object->polygonNum);
+   else YMGRE_Backface_RemoveTo(object,&cam->pos,workspace->polygonHide);
+   YMGRE_VertexList_CameraToViewPlane_wN(workspace->pointList_wN,object->pointNum,cam->perspectPlane.Dis);
+   YMGRE_VertexList_ViewPlaneToWindows_wN(workspace->pointList_wN,object->pointNum,cam);
+   YMGRE_TrangleObject_Wires_wN(object,workspace->pointList_wN,workspace->polygonHide,cam);
+  }
+ }
 }
 
 //独立3D线段在场景之后叠加到同一目标，不参与三角形背面剔除
@@ -558,4 +811,13 @@ void YMGRE_Camera_LineList_Rendering(GRE_Camera4d camera, const gre_line3d* line
 				ox1, oy1, z1, ox2, oy2, z2, lines[i].color, depthTest);
 		}
 	}
+}
+
+size_t YMGRE_Material_TransparentPacketSize(void)
+{
+#if YMGRE_ENABLE_TRANSPARENCY
+ return sizeof(GRE_TransparentTriangle)+sizeof(size_t);
+#else
+ return 0;
+#endif
 }

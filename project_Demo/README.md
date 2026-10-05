@@ -4,7 +4,7 @@
 
 每个项目至少包含：
 
-- 独立 `CMakeLists.txt`，按 `build/project_Demo/<项目名>` 构建；
+- 独立 `CMakeLists.txt`，按 `build/.cache/configs/<色深>/<索引宽度>/project_Demo/<项目名>` 构建（Girl 使用独立入口）；
 - 独立源文件；
 - 目标与限制说明；
 - 构建和运行命令；
@@ -12,6 +12,8 @@
 - 该项目暴露的库问题记录。
 
 当前项目：
+
+- [`girl_viewer`](girl_viewer/README.md)：人物材质查看器，运行 `./project_Demo/girl_viewer/build.sh --run`，程序位于 `build/bin/rgb888/index32/girl_viewer`。
 
 - `scene_roaming`：加载地图和障碍物，接受相机输入并持续更新两个观察视角。
 - `scene_editor`：YMGUI 编辑器外壳与 YMGRE 实时视口，验证 RenderTarget、相机交互、辅助线

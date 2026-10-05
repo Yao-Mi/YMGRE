@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'build/YMGRE_libs'
-WORK = ROOT / 'build/_ymgre_sdk'
+WORK = ROOT / 'build/.cache/sdk'
 DEMOS = '''basic_shapes extended_shapes polygon_fill polygon_triangulation depth_overlap
 frustum_clipping window_clipping backface_culling fragment_stitching shared_edge_stress
 material_texture lighting render_target camera_viewport stereo_view
@@ -46,13 +46,17 @@ def variant_name(depth, bits):
     return f'{format_name(depth)}_index{bits}'
 
 
+FEATURES = ('TRANSPARENCY', 'OPACITY_MIPMAP', 'PBR', 'LINEAR_COLOR', 'RASTER_DISPATCH', 'PNG', 'JPEG')
+
 def build_package(out,args):
+    feature_value = 0 if args.minimal else 1
+    feature_flags = [f'-DYMGRE_ENABLE_{name}={feature_value}' for name in FEATURES]
     for depth,bits in VARIANTS:
         tag=variant_name(depth,bits)
         build=WORK/'libraries'/tag
         run(['cmake','-S',ROOT/'sdk/library','-B',build,
              '-DCMAKE_BUILD_TYPE=Release',f'-DYMGRE_INDEX_BITS={bits}',
-             f'-DYMGRE_CAMERA_COLOR_DEPTH={depth}'], WORK/f'configure-{tag}.log')
+             f'-DYMGRE_CAMERA_COLOR_DEPTH={depth}', *feature_flags], WORK/f'configure-{tag}.log')
         run(['cmake','--build',build,'--target','ymgre',f'-j{args.jobs}'], WORK/f'build-{tag}.log')
         copy(build/'engine/libymgre.a', out/f'lib/libymgre_{tag}.a')
     for section in ('CONFIG','CORE','OPOBJ','IOFILE','DEBUG'):
@@ -61,9 +65,20 @@ def build_package(out,args):
     for name in ('demo_host.c','demo_host.h'):
         copy(ROOT/'Demo'/name,out/'examples/host'/name)
     copy(ROOT/'sdk/YMGREConfig.cmake',out/'cmake/YMGREConfig.cmake')
+    (out/'cmake/YMGREFeatures.cmake').write_text(''.join(
+        f'set(_ymgre_feature_{name} {feature_value})\n' for name in FEATURES))
+    feature_header=out/'include/YMGRE/CONFIG/YMGRE_Features.h'
+    import re
+    header = feature_header.read_text()
+    for feature in FEATURES:
+        header = re.sub(r'^#define YMGRE_ENABLE_' + feature + r' .+$',
+                        f'#define YMGRE_ENABLE_{feature} {feature_value}', header, flags=re.MULTILINE)
+    feature_header.write_text(header)
     for item in (ROOT/'sdk/examples').iterdir():
         if item.is_file():copy(item,out/'examples'/item.name)
     for name in DEMOS:copy(ROOT/f'Demo/demo_{name}.c',out/f'examples/demo_{name}.c')
+    for name in ('main.c','raster_pool.c','raster_pool.h','CMakeLists.txt','README.md'):
+        copy(ROOT/'project_Demo/girl_viewer'/name,out/'examples/girl_viewer'/name)
     copy(ROOT/'sdk/MANUAL.md',out/'手册.md')
     copy(ROOT/'sdk/SDK.gitignore',out/'.gitignore')
     copy(ROOT/'sdk/build_demos.sh',out/'build_demos.sh')
@@ -71,9 +86,13 @@ def build_package(out,args):
     copy(ROOT/'LICENSE',out/'licenses/YMGRE-LICENSE')
     copy(ROOT/'sdk/README.md',out/'README.md')
     copy(ROOT/'docs/images/banner.svg',out/'docs/images/banner.svg')
+    for name in ('material-rendering.md','material-rendering-validation.md','image-loading.md'):
+        copy(ROOT/'docs'/name,out/'docs'/name)
     for name in ('advanced_raytrace_mirror','advanced_raytrace_refraction','advanced_perspective','advanced_normal_map',
                  'advanced_raytrace_shadow','basic_shapes','extended_shapes'):
         copy(ROOT/'docs/images'/f'{name}.png',out/'docs/images'/f'{name}.png')
+    for name in ('girl_viewer','girl_viewer_close'):
+        copy(ROOT/'docs/images'/f'{name}.jpg',out/'docs/images'/f'{name}.jpg')
     # Validate from a separate package copy: this must not resolve repository source paths.
     standalone=WORK/'standalone'
     if standalone.exists():shutil.rmtree(standalone)
@@ -104,23 +123,23 @@ def build_package(out,args):
         if any(name in symbols for name in ('YMGUI_','SDL_','SDL_LCD_')):
             raise SystemExit('Unexpected GUI dependency in core archive')
     run(['python3',ROOT/'tests/test_sdk_variants.py',standalone/'cmake'],out/'verification/variant-selection.log')
-    sources=sorted(p for folder in ('YMGRE','Demo','sdk') for p in (ROOT/folder).rglob('*')
-                   if p.is_file() and p.suffix in ('.c','.h','.py','.cmake','.md','.txt','.sh'))
+    sources=sorted(p for folder in ('YMGRE','Demo','sdk','extern_lib/image_decode','project_Demo/girl_viewer') for p in (ROOT/folder).rglob('*')
+                   if p.is_file() and p.suffix in ('.c','.h','.inc','.py','.cmake','.md','.txt','.sh'))
     sources.extend([ROOT/'CMakeLists.txt',ROOT/'tests/test_sdk_variants.py'])
     digest=hashlib.sha256()
     for p in sources:
         digest.update(str(p.relative_to(ROOT)).encode());digest.update(p.read_bytes())
     info={'built_at_utc':datetime.now(timezone.utc).isoformat(),'system':platform.system(),
           'machine':platform.machine(),'compiler':subprocess.check_output(['cc','--version'],text=True).splitlines()[0],
-          'build_type':'Release','position_independent':True,'framebuffers':['RGB565','RGB888'],'color_depths':[16,24],
+          'material_features':{name:feature_value for name in FEATURES},'build_type':'Release','position_independent':True,'framebuffers':['RGB565','RGB888'],'color_depths':[16,24],
           'variants':[{'color_depth':depth,'index_bits':bits,
                        'library':f'lib/libymgre_{variant_name(depth,bits)}.a'} for depth,bits in VARIANTS],
           'index_bits':[16,32],'example_sources':len(DEMOS)+1,'prebuilt_demos_per_variant':1,
           'external_ymgui_validated':bool(args.ymgui_dir),'bundled_ymgui':False,'source_sha256':digest.hexdigest(),
           'git_head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
           'source_includes_uncommitted_changes':bool(subprocess.check_output(
-              ['git','status','--porcelain','--','YMGRE','Demo','sdk','CMakeLists.txt'],cwd=ROOT,text=True).strip()),
-          'sdk_requires_engine_source':False,'rebuild_command':'./sdk/build.sh'}
+              ['git','status','--porcelain','--','YMGRE','Demo','sdk','extern_lib/image_decode','project_Demo/girl_viewer','CMakeLists.txt'],cwd=ROOT,text=True).strip()),
+          'sdk_requires_engine_source':False,'rebuild_command':'./sdk/build.sh'+(' --minimal' if args.minimal else '')}
     (out/'BUILD_INFO.json').write_text(json.dumps(info,ensure_ascii=False,indent=2)+'\n')
     (out/'checksums.sha256').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p.relative_to(out))+'\n'
         for p in sorted(out.rglob('*')) if p.is_file() and p.name!='checksums.sha256'))
@@ -130,6 +149,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ymgui-dir',type=Path,help='Validate window examples against an external YMGUI SDK without bundling it')
     parser.add_argument('--release',action='store_true',help='Write the verified archive and checksum to the tracked releases directory')
+    parser.add_argument('--minimal', action='store_true', help='Compile out transparency, opacity mipmaps, PBR, linear color, raster dispatch, PNG and JPEG')
     parser.add_argument('--jobs',type=int,default=4,help='Parallel build jobs (default: 4)')
     args=parser.parse_args()
     if args.jobs < 1:
@@ -147,7 +167,7 @@ def main():
         build_package(stage,args)
         if OUT.exists():shutil.rmtree(OUT)
         shutil.move(str(stage),OUT)
-    archive_dir=ROOT/'releases' if args.release else OUT.parent
+    archive_dir=ROOT/'releases' if args.release else OUT.parent/'archives'
     archive_dir.mkdir(parents=True,exist_ok=True)
     archive=archive_dir/f'YMGRE_libs-{platform.system().lower()}-{platform.machine()}.tar.gz'
     checksum=write_archive(OUT,archive)

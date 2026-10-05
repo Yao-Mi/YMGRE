@@ -13,11 +13,12 @@ usage() {
 Usage: ./build_all.sh [--depth 16|24] [--index-bits 16|32] [--jobs N]
                       [-c|--clean] [-t|--test] [--core-only]
 Defaults: RGB888, 16-bit indices, Release, 4 jobs (or YMGRE_BUILD_JOBS).
-Builds the core, basic demos, and every project_Demo application.
+Builds the core, basic demos, and compatible project_Demo applications.
 --core-only builds just the core and its tests, without YMGUI/SDL or apps.
 --test runs root/core CTest; application tests remain separate.
 --clean rebuilds only the selected units; keeps SDKs and other configurations.
-RGB565 skips scene_baker, which currently requires RGB888.
+RGB565 skips scene_baker; girl_viewer runs only for RGB888/index32.
+Executables: build/bin/<format>/index<bits>; caches: build/.cache/configs/.
 HELP
 }
 while (($#)); do
@@ -40,7 +41,7 @@ done
 case "$ymgre_depth" in 16) ymgre_rgb=rgb565 ;; 24) ymgre_rgb=rgb888 ;; *) echo 'Depth must be 16 or 24' >&2; exit 2 ;; esac
 case "$ymgre_bits" in 16|32) ;; *) echo 'Index bits must be 16 or 32' >&2; exit 2 ;; esac
 if ! [[ "$ymgre_jobs" =~ ^[1-9][0-9]*$ ]]; then echo 'Jobs must be a positive integer' >&2; exit 2; fi
-ymgre_base="$ymgre_root/build/$ymgre_rgb/index$ymgre_bits"
+ymgre_base="$ymgre_root/build/.cache/configs/$ymgre_rgb/index$ymgre_bits"
 ymgre_pass=()
 ymgre_fail=()
 ymgre_skip=()
@@ -85,6 +86,19 @@ if ((!ymgre_core_only)); then
         [[ -f "$ymgre_cml" ]] || continue
         ymgre_src="${ymgre_cml%/CMakeLists.txt}"
         ymgre_name="${ymgre_src##*/}"
+        if [[ "$ymgre_name" == girl_viewer ]]; then
+            if [[ "$ymgre_depth" != 24 || "$ymgre_bits" != 32 ]]; then
+                ymgre_skip+=("girl_viewer (requires RGB888/index32)"); continue
+            fi
+            ymgre_girl_args=(--jobs "$ymgre_jobs")
+            if ((ymgre_clean)); then ymgre_girl_args+=(--clean); fi
+            if "$ymgre_src/build.sh" "${ymgre_girl_args[@]}"; then
+                ymgre_pass+=("girl_viewer")
+            else
+                ymgre_fail+=("girl_viewer (build)")
+            fi
+            continue
+        fi
         if [[ "$ymgre_name" == scene_baker && "$ymgre_depth" != 24 ]]; then
             ymgre_skip+=("scene_baker (requires RGB888)"); continue
         fi
@@ -95,4 +109,7 @@ printf '\nBuild summary (%s / index%s)\n' "$ymgre_rgb" "$ymgre_bits"
 for ymgre_item in "${ymgre_pass[@]}"; do printf 'PASS %s\n' "$ymgre_item"; done
 for ymgre_item in "${ymgre_skip[@]}"; do printf 'SKIP %s\n' "$ymgre_item"; done
 for ymgre_item in "${ymgre_fail[@]}"; do printf 'FAIL %s\n' "$ymgre_item"; done
+if ((!ymgre_core_only)); then
+    printf 'Programs: %s/build/bin/%s/index%s\n' "$ymgre_root" "$ymgre_rgb" "$ymgre_bits"
+fi
 ((${#ymgre_fail[@]} == 0))

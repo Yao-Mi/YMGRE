@@ -25,3 +25,5 @@ enable_testing()
 add_test(NAME human_headless COMMAND demo_human --headless)
 add_test(NAME human_window COMMAND demo_human --smoke-test)
 set_tests_properties(human_window PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy" TIMEOUT 30)
+
+ymgre_set_program_output(demo_human)

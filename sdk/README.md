@@ -119,3 +119,11 @@ YMGRE 和 YMGUI 分开发布。准备独立的 YMGUI SDK 后：
 个人及非商业组织以非营利目的学习、研究或自用 YMGRE，可免费使用；商业用途必须事先说明并取得著作权人的书面授权。对外分发修改版或使用修改版对外提供服务时，须按许可条款公开本库的对应源码及必要构建文件。独立应用不因仅调用或链接本库而必须公开业务代码。第三方资源及外部依赖按各自原许可使用。完整条款见 [LICENSE](LICENSE)，同一份许可也保存在 [licenses/YMGRE-LICENSE](licenses/YMGRE-LICENSE)。
 
 许可标识：`LicenseRef-YMGRE-Noncommercial-1.2`。本声明不撤回使用者依据此前有效许可已经取得的权利。
+
+## 可裁剪材质功能
+
+全功能 SDK 包含透明、透明 Mip、逐像素 PBR、线性色彩和可选多核调度。源码仓库运行 `./sdk/build.sh --minimal` 可生成五项材质能力和 PNG/JPEG 解码均关闭的 SDK，仍输出到 `build/YMGRE_libs`。源码 CMake 可通过 `YMGRE_ENABLE_TRANSPARENCY`、`YMGRE_ENABLE_OPACITY_MIPMAP`、`YMGRE_ENABLE_PBR`、`YMGRE_ENABLE_LINEAR_COLOR`、`YMGRE_ENABLE_RASTER_DISPATCH` 分别配置。预编译包的具体能力记录在 `BUILD_INFO.json`，CMake 会传播正确的公共宏并拒绝不一致的配置。更新时须一起替换头文件和库、重新编译应用。
+
+材质对比 demo 源码和独立 CMake 工程位于 `examples/girl_viewer`，链接完整 SDK，支持 T 切换单／多线程。大体积人物资源仅随源码仓库保存，使用 `--assets` 指向源码仓库的 `Resource/girl` 目录，详见该目录 README。
+
+完整 SDK 还支持 PNG/JPEG 贴图，需安装 libpng（含 zlib）及 libjpeg 的开发／运行依赖。CMake 自动传递依赖；手动链接需加 png、jpeg、z。`YMGRE_ENABLE_PNG`、`YMGRE_ENABLE_JPEG` 可独立裁剪，源码默认关闭，`--minimal` 同时关闭。详见 [图片加载说明](docs/image-loading.md)。

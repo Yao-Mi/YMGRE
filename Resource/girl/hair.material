@@ -1,0 +1,18 @@
+material hair
+{
+ technique
+ {
+  pass
+  {
+   ambient 1 1 1
+   diffuse 1 1 1
+   ymgre_color_grade 0 1.12 1 1 1 1
+   cull_hardware none
+   texture_unit
+   {
+    texture hair_color.jpg
+    opacity_map hair_opacity.png
+   }
+  }
+ }
+}

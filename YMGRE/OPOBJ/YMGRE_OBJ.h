@@ -1,6 +1,7 @@
 #ifndef _YMGRE_OBJ_H
 #define _YMGRE_OBJ_H
 #include"../CONFIG/YMGRE_PubType.h"
+#include "../CONFIG/YMGRE_Features.h"
 
 /*-------------------------------------  向量  ---------------------------------------------*/
 
@@ -252,6 +253,11 @@ typedef struct gre_render_target_
 }gre_render_target;
 typedef gre_render_target* GRE_RenderTarget;
 
+/* A dispatcher must call each job exactly once and join before returning.
+   Scene/material/light data must remain immutable during dispatch. */
+typedef void (*GRE_RasterJob)(void* jobContext, uint32 jobIndex);
+typedef void (*GRE_RasterDispatch)(void* user, GRE_RasterJob job, void* jobContext, uint32 jobCount);
+
 typedef struct gre_render_workspace_
 {
 	GRE_Vertex4d pointList;//当前物体变换后的顶点
@@ -263,6 +269,16 @@ typedef struct gre_render_workspace_
 	uint32 pointWNMax;//高级顶点缓存独立容量
 	uint32 polygonMax;//多边形状态和颜色缓存容量
 	uint32 lightMax;//灯光位置缓存容量
+#if YMGRE_ENABLE_TRANSPARENCY
+ void* transparentTriangles; size_t transparentCapacity; // reusable packet bytes
+#if YMGRE_ENABLE_RASTER_DISPATCH
+ GRE_RasterDispatch rasterDispatch; void* rasterDispatchUser;
+#endif
+#endif
+#if YMGRE_ENABLE_LINEAR_COLOR
+ float32* linearColor; size_t linearCapacity; // RGB float count
+#endif
+ int materialStatus; // 0 success; -1 insufficient material workspace
 	uint8 ownsMemory;//为1时由工作区扩容并释放内部缓存
 }gre_render_workspace;
 typedef gre_render_workspace* GRE_RenderWorkspace;
@@ -317,6 +333,16 @@ typedef struct gre_camera4d_
 	GRE_RenderTarget target;//实际输出目标，NULL时使用相机自带的img
 	uint8 ownsImageBuffers;//由Creat_Camera置1，Free_Camera只释放相机创建的缓存
 	GRE_RenderWorkspace workspace;//渲染工作区，顺序多相机可以共享
+#if YMGRE_ENABLE_TRANSPARENCY
+ uint8 opacityPass; // internal: 0 all, 1 opaque coverage, 2 fractional coverage
+#endif
+#if YMGRE_ENABLE_PBR
+ uint8 pbrEnabled, pbrNormalEnabled; // opt-in; default disabled / normal enabled
+#endif
+#if YMGRE_ENABLE_LINEAR_COLOR
+ uint8 linearColorEnabled; float32 exposure; // opt-in; default disabled / exposure 1
+ float32* linearColor; // borrowed from workspace only during rendering
+#endif
 }gre_camera4d;
 typedef gre_camera4d* GRE_Camera4d;
 
@@ -325,6 +351,21 @@ typedef struct gre_material_advanced_
 {
 	uint16 normalWidth, normalHeight;
 	GRErgb24* normalPixel;//切线空间法线贴图（可选）
+#if YMGRE_ENABLE_TRANSPARENCY
+ uint16 opacityWidth, opacityHeight;
+ uint8* opacityPixel; // owned single-channel 0..255 coverage, UV0
+#if YMGRE_ENABLE_OPACITY_MIPMAP
+ uint8 opacityMipCount, opacityUseMip;
+ uint16 opacityMipWidth[16], opacityMipHeight[16];
+ uint8* opacityMipPixels[16]; // level 0 aliases opacityPixel
+#endif
+#endif
+#if YMGRE_ENABLE_PBR
+ uint8 pbrEnabled;
+ uint16 pbrWidth, pbrHeight;
+ GRErgb24* pbrParameters; // linear R=metallic G=roughness B=specular IOR level
+ float32 pbrIOR, pbrNormalStrength;
+#endif
 	uint8 specularPower;// Blinn-Phong exponent; 0 keeps the default value 30
 	uint8 rayType;// 0 ordinary, 1 mirror, 2 dielectric glass
 	float32 reflectivity, ior, raySpecularStrength;
@@ -343,6 +384,7 @@ typedef struct gre_material_
 
 	uint16 width, height;
 	GRErgb24* pixel;
+	uint8 doubleSided; // default 0; reverse back-face normals when enabled
 	uint8 unlit;// Ogre lighting off: texture already contains final illumination
 	GRE_MaterialAdvanced advanced;//高级材质资源，NULL 时保持紧凑基础材质
 }gre_material;

@@ -30,7 +30,7 @@ class PackagePublicationTests(unittest.TestCase):
         self.archive.write_bytes(b'previous archive')
         self.checksum = self.releases / (self.name + '.sha256')
         self.checksum.write_bytes(b'previous checksum')
-        self.patch = patch.multiple(package, ROOT=self.root, OUT=self.out, WORK=self.root / 'build/_ymgre_sdk')
+        self.patch = patch.multiple(package, ROOT=self.root, OUT=self.out, WORK=self.root / 'build/.cache/sdk')
         self.patch.start()
         self.addCleanup(self.patch.stop)
 
@@ -50,7 +50,7 @@ class PackagePublicationTests(unittest.TestCase):
     def test_local_build_does_not_publish_release(self):
         self.invoke()
         self.assert_old_release()
-        self.assertTrue((self.out.parent / self.name).is_file())
+        self.assertTrue((self.out.parent / 'archives' / self.name).is_file())
         self.assertTrue((self.out / 'new.txt').is_file())
 
     def test_release_has_valid_archive_root_and_checksum(self):
@@ -60,7 +60,7 @@ class PackagePublicationTests(unittest.TestCase):
         with tarfile.open(self.archive) as bundle:
             self.assertIn('YMGRE_libs/new.txt', bundle.getnames())
             self.assertNotIn('YMGRE_libs/old.txt', bundle.getnames())
-        self.assertFalse((self.out.parent / self.name).exists())
+        self.assertFalse((self.out.parent / 'archives' / self.name).exists())
 
     def test_failed_validation_preserves_previous_sdk_and_release(self):
         def fail(stage, args):
@@ -71,7 +71,7 @@ class PackagePublicationTests(unittest.TestCase):
         self.assertEqual((self.out / 'old.txt').read_text(), 'previous SDK')
         self.assertFalse((self.out / 'partial.txt').exists())
         self.assert_old_release()
-        self.assertEqual(list((self.root / 'build/_ymgre_sdk').iterdir()), [])
+        self.assertEqual(list((self.root / 'build/.cache/sdk').iterdir()), [])
 
     def test_compression_failure_does_not_truncate_release(self):
         with patch.object(package.tarfile, 'open', side_effect=OSError('injected compression failure')):

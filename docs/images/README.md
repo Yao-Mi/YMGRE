@@ -1,7 +1,7 @@
 # README 图片来源与复现
 
-首页包含 17 张实际运行画面和 1 张标题封面。`banner.svg` 是仓库内编写的矢量标题设计，其中的立方体是装饰图形；其余 PNG 均来自 YMGRE Demo 或 scene_baker 编辑器的真实输出。
-新捕获的画面仅从 BMP 转码为 PNG；编辑器图片直接复制已有验收截图。没有重绘、修饰光照或合成替代渲染效果。编辑器截图记录对应验收时的界面，后续版本的控件位置可能变化。
+首页包含 19 张实际运行画面和 1 张标题封面。`banner.svg` 是仓库内编写的矢量标题设计，其中的立方体是装饰图形；其余图片均来自 YMGRE Demo 或 scene_baker 编辑器的真实输出。
+基础 Demo 画面从 BMP 转码为 PNG，Girl 画面从 PPM 转码为 JPG；编辑器图片直接复制已有验收截图。没有重绘、修饰光照或合成替代渲染效果。编辑器截图记录对应验收时的界面，后续版本的控件位置可能变化。
 
 ## 渲染 Demo
 
@@ -17,6 +17,25 @@
 | `extended_shapes.png` | `demo_extended_shapes` | RGB565，16 位索引，运行 3 帧 |
 
 除地球 Demo 外，上述截图来自仅链接 YMGRE 静态库、外部 YMGUI 测试依赖的窗口示例。地球展示需要仓库 `Resource/` 纹理，不包含在 SDK 的 30 个独立示例里。
+
+## Girl 人物材质
+
+`girl_viewer.jpg` 为默认半身画面，`girl_viewer_close.jpg` 为脸部近景。二者均来自 `girl_viewer --smoke-test` 的实际渲染缓冲，RGB888/index32，1200×800，使用当前 `Resource/girl` 压缩资源。显示逐像素 GGX、法线、透明发丝和线性色彩，没有阴影或光追，也不包含控制面板。
+
+JPG 使用质量 95、4:4:4，体积小于 PNG；无缩放、调色或修图，编码本身存在少量有损误差。复现截图并转码：
+
+```sh
+./project_Demo/girl_viewer/build.sh --test
+python3 - <<'PYCODE'
+from pathlib import Path
+from PIL import Image
+source = Path('build/.cache/configs/rgb888/index32/project_Demo/girl_viewer/captures')
+for src, dst in [('library_pixel.ppm', 'girl_viewer.jpg'),
+                 ('library_close.ppm', 'girl_viewer_close.jpg')]:
+    with Image.open(source / src) as image:
+        image.save(Path('docs/images') / dst, quality=95, subsampling=0, optimize=True)
+PYCODE
+```
 
 ## 编辑器验收截图
 
@@ -57,4 +76,4 @@ YMGRE_MAX_FRAMES=3 YMGRE_WINDOW_SCALE=1 \
 ```
 
 动态 Demo 必须运行到完成实际绘制；玻璃 Demo 根据光标位置移动球体，脚本固定其输入以保证截图可重复。
-`sdk/package.py` 自动携带封面和 7 张独立 Demo 截图。编辑器画面与地球图留在源码仓库；SDK 不引入 YMGUI 的库或头文件。
+`sdk/package.py` 自动携带封面、7 张独立 Demo 截图及 2 张 Girl 截图。编辑器画面与地球图留在源码仓库；SDK 不引入 YMGUI 的库或头文件。

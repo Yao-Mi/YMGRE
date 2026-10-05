@@ -256,19 +256,19 @@ Ogre 读入支持的格式是现有静态模型加载路径，并非所有 Ogre 
 
 ```text
 build/YMGRE_libs/
-build/YMGRE_libs-linux-x86_64.tar.gz
-build/YMGRE_libs-linux-x86_64.tar.gz.sha256
+build/archives/YMGRE_libs-linux-x86_64.tar.gz
+build/archives/YMGRE_libs-linux-x86_64.tar.gz.sha256
 ```
 
 使用 `./sdk/build.sh --release` 时，同样更新本地 `build/YMGRE_libs/`，但把压缩包和 SHA256 文件输出到可提交的 `releases/`。普通构建不会修改 `releases/`，发布脚本也不会自动提交或推送。
 
-过程日志保存在 `build/_ymgre_sdk/`。脚本先在临时目录组装并验证 SDK，构建或验收失败返回非零状态，保留已有 SDK 和分发包；压缩完成后才替换旧压缩包。`--jobs 8` 可调整并行度。
+过程日志保存在 `build/.cache/sdk/`。脚本先在临时目录组装并验证 SDK，构建或验收失败返回非零状态，保留已有 SDK 和分发包；压缩完成后才替换旧压缩包。`--jobs 8` 可调整并行度。
 默认发布只需要 C 编译器、CMake、Python 3 和 binutils（ar/nm），不需要 YMGUI 或 SDL2。
 如需同时验证窗口示例，使用 `./sdk/build.sh --ymgui-dir /absolute/path/YMGUI_libs/cmake`。
 该选项需要外部 YMGUI SDK、pkg-config、SDL2；只增加验收，不会把外部包或窗口二进制塞入 YMGRE 发布包。
 脚本不会自动安装依赖。
 正常应用构建只需包内的 `build_demos.sh` 或 CMake 导入目标，不调用源码发布脚本。
-Git 可跟踪 `releases/` 中的分发压缩包及校验文件，也保留已有 `build/YMGRE_libs/` 放行规则；其他构建目录及 `build/` 下的压缩包仍被忽略。提交发布时应包含对应源码、文档、压缩包及校验文件。
+Git 可跟踪 `releases/` 中的分发压缩包及校验文件，继续管理 `build/YMGRE_libs/` 中已跟踪的文件；其他构建目录及 `build/archives/` 下的压缩包仍被忽略。提交发布时应包含对应源码、文档、压缩包及校验文件。
 下载使用者在 SDK 内生成的 `examples-build*`、`core-build` 和 `cube.ppm` 也会被忽略。
 原生构建不等于跨芯片二进制兼容。MCU 发布应另外确认 CPU、ABI、浮点选项、工具链和内存实现。
 
@@ -279,3 +279,11 @@ Git 可跟踪 `releases/` 中的分发压缩包及校验文件，也保留已有
 商业授权通过项目发布页公布的联系方式申请，说明使用主体、用途、规模与交付方式，并以双方确认的书面文件为准。分发时须保留完整许可及已有版权、第三方许可说明；修改版本须注明已作修改。具体源码公开范围与例外以许可原文为准。
 
 本声明不撤回使用者依据此前有效许可已经取得的权利。YMGUI 的许可及发布由其独立 SDK 管理；SDL2 为窗口示例的外部系统依赖。
+
+## 可裁剪材质功能
+
+全功能 SDK 包含透明、透明 Mip、逐像素 PBR、线性色彩和可选多核调度。源码仓库运行 `./sdk/build.sh --minimal` 可生成五项材质能力和 PNG/JPEG 解码均关闭的 SDK，仍输出到 `build/YMGRE_libs`。源码 CMake 可通过 `YMGRE_ENABLE_TRANSPARENCY`、`YMGRE_ENABLE_OPACITY_MIPMAP`、`YMGRE_ENABLE_PBR`、`YMGRE_ENABLE_LINEAR_COLOR`、`YMGRE_ENABLE_RASTER_DISPATCH` 分别配置。预编译包的具体能力记录在 `BUILD_INFO.json`，CMake 会传播正确的公共宏并拒绝不一致的配置。更新时须一起替换头文件和库、重新编译应用。
+
+材质对比 demo 源码和独立 CMake 工程位于 `examples/girl_viewer`，链接完整 SDK，支持 T 切换单／多线程。大体积人物资源仅随源码仓库保存，使用 `--assets` 指向源码仓库的 `Resource/girl` 目录，详见该目录 README。
+
+完整 SDK 还支持 PNG/JPEG 贴图，需安装 libpng（含 zlib）及 libjpeg 的开发／运行依赖。CMake 自动传递依赖；手动链接需加 png、jpeg、z。`YMGRE_ENABLE_PNG`、`YMGRE_ENABLE_JPEG` 可独立裁剪，源码默认关闭，`--minimal` 同时关闭。详见 [图片加载说明](docs/image-loading.md)。

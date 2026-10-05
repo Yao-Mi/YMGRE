@@ -21,5 +21,13 @@ static inline GRErgb24 getPixel(GRE_Material mat, float u, float v)
 
 
 
+/* Copies input pixels. Replacing maps releases the previous owned map/mips. */
+GRE_MaterialAdvanced YMGRE_Material_EnsureAdvanced(GRE_Material material);
+#if YMGRE_ENABLE_TRANSPARENCY
+int YMGRE_Material_SetOpacity(GRE_Material material, const uint8* pixels, uint16 width, uint16 height, int mipmaps);
+int YMGRE_Material_LoadOpacityBMP(GRE_Material material,const char* path,int mipmaps);
+int YMGRE_Material_LoadOpacity(GRE_Material material,const char* path,int mipmaps);
+void YMGRE_Material_ClearOpacity(GRE_Material material);
+#endif
 #endif // !_YMGRE_MATERIAL_H
 

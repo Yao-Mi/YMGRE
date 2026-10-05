@@ -1,0 +1,7 @@
+set(_ymgre_feature_TRANSPARENCY 1)
+set(_ymgre_feature_OPACITY_MIPMAP 1)
+set(_ymgre_feature_PBR 1)
+set(_ymgre_feature_LINEAR_COLOR 1)
+set(_ymgre_feature_RASTER_DISPATCH 1)
+set(_ymgre_feature_PNG 1)
+set(_ymgre_feature_JPEG 1)

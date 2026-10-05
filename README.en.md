@@ -10,6 +10,16 @@ YMGRE implements vertex transforms, clipping, rasterization, depth buffering, te
 Ray intersection and shading APIs support demonstrations of shadows, reflection and refraction.
 The core writes color and depth buffers and can be integrated with desktop windows or a platform-specific display backend.
 
+## Girl material viewer
+
+| Portrait | Face close-up |
+|:---:|:---:|
+| ![Girl viewer: character, hair and clothing](docs/images/girl_viewer.jpg) | ![Girl viewer: face and hair detail](docs/images/girl_viewer_close.jpg) |
+
+Actual output from the current `Resource/girl` assets, using CPU rasterization, per-pixel GGX, normal maps, opacity mipmaps and linear color. This demo uses no shadows or ray tracing. Run `./project_Demo/girl_viewer/build.sh --run`; see the [viewer guide](project_Demo/girl_viewer/README.md).
+
+## Reflection, refraction and textures
+
 | Reflection | Refraction |
 |:---:|:---:|
 | ![Mirror rendering](docs/images/advanced_raytrace_mirror.png) | ![Glass sphere rendering](docs/images/advanced_raytrace_refraction.png) |
@@ -74,7 +84,7 @@ From this repository:
 ./sdk/build.sh --release   # Verified archive and checksum in releases/
 ```
 
-This builds all four color-depth/index-width variants, verifies standalone consumers and produces `build/YMGRE_libs/`, a `.tar.gz` archive and a SHA256 file.
+This builds all four color-depth/index-width variants, verifies standalone consumers and produces `build/YMGRE_libs/`, a `.tar.gz` archive and a SHA256 file under `build/archives/`.
 Add `--ymgui-dir /path/to/YMGUI/cmake` to validate windowed examples against an external package.
 `--release` writes the archive and checksum to the trackable `releases/` directory; normal builds leave it unchanged. Failed build/validation preserves the previous package. This does not commit or push files.
 
@@ -92,8 +102,8 @@ See [project applications](project_Demo/README.md) and [test criteria](tests/REA
 ./build_all.sh --core-only -t                  # No YMGUI/SDL dependency
 ```
 
-Outputs are separated by color depth and index width, e.g. `build/rgb888/index16/Demo/`
-and `build/rgb888/index16/project_Demo/scene_editor/`. The RGB565 build explicitly
+Outputs are separated by color depth and index width, e.g. `build/.cache/configs/rgb888/index16/Demo/`
+and `build/.cache/configs/rgb888/index16/project_Demo/scene_editor/`. The RGB565 build explicitly
 skips `scene_baker`, which currently requires RGB888. `-t` runs root tests;
 application tests run separately. See [build layout](docs/BUILD_LAYOUT.md) for
 requirements, standalone commands and scoped cleanup. Repository apps still build
@@ -105,3 +115,7 @@ from source; precompiled SDK consumers retain their separate entry point.
 YMGRE uses a custom **noncommercial-use license with separate commercial authorization** (`LicenseRef-YMGRE-Noncommercial-1.2`). Individuals and noncommercial organizations may use it free of charge for nonprofit learning, research, or personal/internal use. Commercial use requires prior written authorization from the copyright holder.
 
 Distributing modified versions or using modified versions to provide services to third parties requires publishing the corresponding library source and necessary build files under the license terms. Independent application logic does not have to be disclosed merely because it calls or links this library. Third-party content retains its own licenses, and rights already obtained under earlier valid licenses are not withdrawn. See [LICENSE](LICENSE) for the full Chinese terms.
+
+### Girl viewer and build folders
+
+Run `./project_Demo/girl_viewer/build.sh --run` to build and open the viewer, or add `--test` for core tests and a headless render check. The executable stays at `build/bin/rgb888/index32/girl_viewer`. Build caches live under `build/.cache/`, SDK output under `build/YMGRE_libs/`, and local archives under `build/archives/`. See [build layout](docs/BUILD_LAYOUT.md).

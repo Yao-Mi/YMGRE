@@ -64,10 +64,28 @@ void YMGRE_RenderWorkspace_Init(GRE_RenderWorkspace workspace, GRE_Vertex4d poin
 	workspace->pointMax = pointMax;
 	workspace->polygonMax = polygonMax;
 	workspace->lightMax = lightMax;
+#if YMGRE_ENABLE_TRANSPARENCY
+ workspace->transparentTriangles=NULL;workspace->transparentCapacity=0;
+#if YMGRE_ENABLE_RASTER_DISPATCH
+ workspace->rasterDispatch=NULL;workspace->rasterDispatchUser=NULL;
+#endif
+#endif
+#if YMGRE_ENABLE_LINEAR_COLOR
+ workspace->linearColor=NULL;workspace->linearCapacity=0;
+#endif
+ workspace->materialStatus=0;
 	workspace->ownsMemory = 0;
 	workspace->pointList_wN = NULL;
 	workspace->pointWNMax = 0;
 }
+
+#if YMGRE_ENABLE_RASTER_DISPATCH
+void YMGRE_RenderWorkspace_SetRasterDispatcher(GRE_RenderWorkspace workspace,
+ GRE_RasterDispatch dispatch,void* user)
+{
+ if(workspace){workspace->rasterDispatch=dispatch;workspace->rasterDispatchUser=user;}
+}
+#endif
 
 void YMGRE_RenderWorkspace_BindVertexAttributes(GRE_RenderWorkspace workspace,
 	GRE_Vertex4d_wN points, uint32 pointMax)
@@ -144,6 +162,12 @@ void YMGRE_Free_RenderWorkspace(GRE_RenderWorkspace workspace)
 		GRE_free1(workspace->polygonHide);
 		GRE_free1(workspace->polygonColor);
 		GRE_free1(workspace->lightPos);
+#if YMGRE_ENABLE_TRANSPARENCY
+        GRE_free1(workspace->transparentTriangles);
+#endif
+#if YMGRE_ENABLE_LINEAR_COLOR
+        GRE_free1(workspace->linearColor);
+#endif
 		GRE_free0(workspace);
 	}
 }
@@ -172,4 +196,19 @@ GRE_RenderTarget YMGRE_Camera_GetRenderTarget(GRE_Camera4d camera)
 {
 	gre_log_explain(camera == NULL, GRE_LOG_PtrI, "相机不存在");
 	return (camera->target != NULL) ? camera->target : &camera->img;
+}
+
+void YMGRE_RenderWorkspace_BindMaterialBuffers(GRE_RenderWorkspace ws,void* packets,size_t bytes,float32* rgb,size_t count)
+{
+ if(!ws||ws->ownsMemory)return;
+#if YMGRE_ENABLE_TRANSPARENCY
+ ws->transparentTriangles=packets;ws->transparentCapacity=packets?bytes:0;
+#else
+ (void)packets;(void)bytes;
+#endif
+#if YMGRE_ENABLE_LINEAR_COLOR
+ ws->linearColor=rgb;ws->linearCapacity=rgb?count:0;
+#else
+ (void)rgb;(void)count;
+#endif
 }
