@@ -143,3 +143,5 @@ uint16 YMGRE_Polygon_Triangulate(const gre_fvector4d* vertices,
 ## 紧凑网格实例与漫游移植配置
 
 紧凑网格、复用实例缓存、不透明批追加、内存放置、可选串行阶段计数的接口与前置条件见 [移植回合并说明](docs/roam-port-integration.md)。这次公共布局增加字段，须完整重编译库和调用方。
+
+阶段计时默认关闭（CMake `YMGRE_PROFILE_RENDER_STAGES=OFF`，源码宏默认 `0`），正常使用无需调用计时接口。关闭时渲染路径不会读取时钟或累计阶段耗时；只有主动开启并重编译才启用。复用曾开启该选项的 CMake 构建目录时，应显式改为 `OFF` 并重编译。
