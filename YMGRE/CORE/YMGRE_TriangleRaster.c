@@ -1,3 +1,4 @@
+#include "../CONFIG/YMGRE_Profile.h"
 #include "YMGRE_MaterialRaster.h"
 #include "YMGRE_PBR.h"
 #include "./YMGRE_TriangleRaster.h"
@@ -115,6 +116,9 @@ void YMGRE_TriangleRaster_ComputeVertexLighting_wN(GRE_Vertex4d_wN vertices,
 		material, lights, lightPos, worldToCamera, mirrorKs, NULL);
 }
 
+#if YMGRE_PROFILE_RENDER_STAGES
+#define YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN_Measured
+#endif
 void YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN(GRE_Vertex4d_wN vertices,
 	uint16 vertexCount, GRE_Polygon4d polygon, GRE_Material material,
 	GRE_List lights, gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera,
@@ -147,6 +151,19 @@ void YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN(GRE_Vertex4d_wN vertice
 				specularPower, material ? material->specular : (GRErgb24){255, 255, 255});
 	}
 }
+#if YMGRE_PROFILE_RENDER_STAGES
+#undef YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN
+void YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN(GRE_Vertex4d_wN vertices,
+	uint16 vertexCount, GRE_Polygon4d polygon, GRE_Material material,
+	GRE_List lights, gre_fvector4d* lightPos, GRE_FMat4x4 worldToCamera,
+	float32 mirrorKs, const uint8* active)
+{
+ uint32 start=YMGRE_ProfileNow();
+ YMGRE_TriangleRaster_ComputeVertexLightingMasked_wN_Measured(vertices,vertexCount,polygon,material,lights,lightPos,worldToCamera,mirrorKs,active);
+ YMGRE_ProfileCycles[3]+=YMGRE_ProfileNow()-start;
+}
+#endif
+
 
 #if YMGRE_RASTER_FAST_INTERPOLATION
 /* Affine attribute/z planes. Values advance by addition across a scanline;
@@ -334,6 +351,9 @@ static void GRE_RasterTexturedScalarPlanes(GRE_Vertex4d_wN a,GRE_Vertex4d_wN b,
 #endif
 
 
+#if YMGRE_PROFILE_RENDER_STAGES
+#define YMGRE_TriangleRaster_FillVertexLit_wN YMGRE_TriangleRaster_FillVertexLit_wN_Measured
+#endif
 void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 	GRE_Polygon4d polygon, GRE_Material material, GRE_Camera4d camera)
 {
@@ -446,6 +466,17 @@ void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
 			(uint8)GREMin(GREMax(cb,0),255) },alpha);
 	}
 }
+#if YMGRE_PROFILE_RENDER_STAGES
+#undef YMGRE_TriangleRaster_FillVertexLit_wN
+void YMGRE_TriangleRaster_FillVertexLit_wN(GRE_Vertex4d_wN vertexList,
+	GRE_Polygon4d polygon, GRE_Material material, GRE_Camera4d camera)
+{
+ uint32 start=YMGRE_ProfileNow();
+ YMGRE_TriangleRaster_FillVertexLit_wN_Measured(vertexList,polygon,material,camera);
+ YMGRE_ProfileCycles[5]+=YMGRE_ProfileNow()-start;
+}
+#endif
+
 
 typedef struct { gre_fvector4d pos;float32 strength,k0,k1,k2;GRErgb24 color,base;uint8 global; } GRE_PixelLight;
 GRE_RASTER_INLINE void GRE_ShadePointPrepared(const GRE_PixelLight *l,const gre_fvector4d *p,

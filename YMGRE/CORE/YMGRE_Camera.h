@@ -3,6 +3,7 @@
 
 #include "../OPOBJ/YMGRE_OBJ.h"
 #include "./YMGRE_MathBase.h"
+#include "../CONFIG/YMGRE_Profile.h"
 #include "../OPOBJ/YMGRE_Free.h"
 
 // uvn相机位置初始化：位置，注视点，自旋角，up向量(V)
@@ -84,13 +85,25 @@ static inline void YMGRE_UVNCamera_PositionInit(GRE_Camera4d myCam, GRE_Fvector4
 //相机初始化：背景色，相机采集图像
 static inline void YMGRE_CameraImage_Init(GRE_Camera4d myCam,GRErgb24 background)
 {
+#if YMGRE_PROFILE_RENDER_STAGES
+ uint32 start=YMGRE_ProfileNow();
+#endif
 	GRE_RenderTarget target = (myCam->target != NULL) ? myCam->target : &myCam->img;
 	float32 zfar_val= myCam->frustum.Zfar;
 	GRE_FramePixel clearPixel = GRE_FramePixel_From_RGB24(background);
 	size_t count = (size_t)target->width * target->height;
 	/* Keep depth and color writes sequential on external-memory targets. */
 	for (size_t i = 0; i < count; i++) target->zbuff[i] = zfar_val;
-	for (size_t i = 0; i < count; i++) target->data[i] = clearPixel;
+ if(myCam->backgroundRow) {
+  for(uint16 y=0;y<target->height;y++) {
+   GRE_FramePixel pixel=myCam->backgroundRow(y,target->height,myCam->backgroundUser);
+   GRE_FrameBuffer row=target->data+(size_t)y*target->width;
+   for(uint16 x=0;x<target->width;x++)row[x]=pixel;
+  }
+ } else for (size_t i = 0; i < count; i++) target->data[i] = clearPixel;
+#if YMGRE_PROFILE_RENDER_STAGES
+ YMGRE_ProfileCycles[0]+=YMGRE_ProfileNow()-start;
+#endif
 }
 
 //视景体初始化：远近平面

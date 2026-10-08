@@ -373,3 +373,9 @@ python3 tests/test_sdk_variants.py build/YMGRE_libs/cmake
 ## 移植优化回归
 
 `test_portable_optimizations` 覆盖奇数尺寸清屏、完整属性裁剪、输出容量、整数高光幂、浮点线框及共享顶点光照。它随 CTest 运行；具体组合和基线画面对照见 [移植优化兼容记录](../docs/portable-optimizations.md)。
+
+## 漫游端口经验回合并
+
+`test_compact_instances` 对比实例、共享位置、小/完整缓存和既有物体渲染的颜色与深度，覆盖代次回绕、独立三角形、重叠面排序、普通批追加、拒绝模式和背景回调；连续帧检查零分配，退出检查泄漏。`test_face_order_workspace` 覆盖排序缓存容量复用、失败扩容和外部工作区。三个 `test_memory_policy_*` 覆盖默认、慢内存和快资产策略的对齐、失败回退、释放归属和溢出。
+
+使用 `-DYMGRE_PROFILE_RENDER_STAGES=ON -DYMGRE_OPAQUE_FACE_BUCKETS=ON` 可验收可选阶段时钟及排序路径。接口契约、内存开关与未直接移入的端口实验见 [回合并说明](../docs/roam-port-integration.md)。

@@ -68,7 +68,11 @@
 #define YMGRE_Pow(x,y) powf((float)(x),(float)(y))
 #define YMGRE_Exp(x)   expf((float)(x))
 #define YMGRE_Fabs(x)  fabsf((float)(x))
-#define YMGRE_Sqrt(x)  sqrtf((float)(x))
+#if defined(__CC_ARM)
+#define YMGRE_Sqrt(x) __sqrtf((float)(x))
+#else
+#define YMGRE_Sqrt(x) sqrtf((float)(x))
+#endif
 #define YMGRE_Ceil(x) ceilf((float)(x))
 #define YMGRE_Floor(x) floorf((float)(x))
 #define YMGRE_Round(x) roundf((float)(x))

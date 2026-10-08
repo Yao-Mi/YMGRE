@@ -139,3 +139,7 @@ uint16 YMGRE_Polygon_Triangulate(const gre_fvector4d* vertices,
 - `triangleIndices` 按三个顶点索引连续输出，最多生成 `vertexNum - 2` 个三角形。
 - 不支持自交多边形、带孔多边形；输入退化或容量不足时返回 `0`。
 - 这是边界约束的多边形剖分，不是无边界点集的 Delaunay 网格化。
+
+## 紧凑网格实例与漫游移植配置
+
+紧凑网格、复用实例缓存、不透明批追加、内存放置、可选串行阶段计数的接口与前置条件见 [移植回合并说明](docs/roam-port-integration.md)。这次公共布局增加字段，须完整重编译库和调用方。

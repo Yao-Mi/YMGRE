@@ -284,6 +284,7 @@ typedef struct gre_render_workspace_
 	gre_fvector4d* projectedPoints; // Camera-local projected positions.
 	uint8* clipCodes; // Camera-local frustum codes and active-vertex mask.
 	uint32 projectedMax;
+ void* faceOrderScratch; uint32 faceOrderCapacity; // owned reusable opaque sorting buffer
 	uint8 ownsMemory;//为1时由工作区扩容并释放内部缓存
 }gre_render_workspace;
 typedef gre_render_workspace* GRE_RenderWorkspace;
@@ -338,6 +339,9 @@ typedef struct gre_camera4d_
 	GRE_RenderTarget target;//实际输出目标，NULL时使用相机自带的img
 	uint8 ownsImageBuffers;//由Creat_Camera置1，Free_Camera只释放相机创建的缓存
 	GRE_RenderWorkspace workspace;//渲染工作区，顺序多相机可以共享
+ uint8 meshBoundsEnabled; // opt-in conservative compact-mesh visibility
+ GRE_FramePixel (*backgroundRow)(uint16 row,uint16 height,void* user);
+ void* backgroundUser; // borrowed; NULL callback uses the supplied clear color
 #if YMGRE_ENABLE_TRANSPARENCY
  uint8 opacityPass; // internal: 0 all, 1 opaque coverage, 2 fractional coverage
 #endif

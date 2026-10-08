@@ -60,6 +60,7 @@ void YMGRE_RenderWorkspace_Init(GRE_RenderWorkspace workspace, GRE_Vertex4d poin
 {
 	gre_log_explain((workspace == NULL) || (points == NULL) || (polygonHide == NULL) ||
 		(polygonColor == NULL) || ((lightMax > 0) && (lightPos == NULL)), GRE_LOG_PtrIO, "渲染工作区或外部缓存不存在");
+	workspace->faceOrderScratch=NULL;workspace->faceOrderCapacity=0;
 	workspace->pointList = points;
 	workspace->polygonHide = polygonHide;
 	workspace->polygonColor = polygonColor;
@@ -116,8 +117,8 @@ int YMGRE_RenderWorkspace_EnableProjectionCache(GRE_RenderWorkspace workspace, u
 	if (workspace == NULL || pointNum == 0) return 0;
 	if (workspace->projectedPoints && workspace->clipCodes && workspace->projectedMax >= pointNum) return 1;
 	if (!workspace->ownsMemory || pointNum > SIZE_MAX / sizeof(gre_fvector4d)) return 0;
-	gre_fvector4d* positions = GRE_RenderBuff_Malloc(
-		(size_t)pointNum * sizeof(gre_fvector4d));
+	gre_fvector4d* positions = GRE_RenderBuff_MallocWithPreference(
+		(size_t)pointNum * sizeof(gre_fvector4d),YMGRE_PROJECTION_PREFER_FAST_MEMORY && YMGRE_RENDER_PREFER_FAST_MEMORY);
 	if (!positions) return 0;
 	uint8* codes = GRE_RenderBuff_Malloc((size_t)pointNum);
 	if (!codes) { GRE_RenderBuff_Free(positions); return 0; }
@@ -190,6 +191,7 @@ void YMGRE_Free_RenderWorkspace(GRE_RenderWorkspace workspace)
 	if (workspace == NULL)return;
 	if (workspace->ownsMemory)
 	{
+		GRE_free1(workspace->faceOrderScratch);
 		GRE_RenderBuff_Free(workspace->pointList);
 		GRE_RenderBuff_Free(workspace->pointList_wN);
 		GRE_RenderBuff_Free(workspace->polygonHide);
@@ -246,4 +248,14 @@ void YMGRE_RenderWorkspace_BindMaterialBuffers(GRE_RenderWorkspace ws,void* pack
 #else
  (void)rgb;(void)count;
 #endif
+}
+
+int YMGRE_RenderWorkspace_ReserveFaceOrder(GRE_RenderWorkspace w,uint32 faces)
+{
+ if(!w||!w->ownsMemory||faces>65536)return 0;
+ if(w->faceOrderCapacity>=faces)return 1;
+ if((size_t)faces>SIZE_MAX/(sizeof(float32)+sizeof(uint32)))return 0;
+ void *next=GRE_malloc1((size_t)faces*(sizeof(float32)+sizeof(uint32)));
+ if(!next)return 0;
+ GRE_free1(w->faceOrderScratch);w->faceOrderScratch=next;w->faceOrderCapacity=faces;return 1;
 }

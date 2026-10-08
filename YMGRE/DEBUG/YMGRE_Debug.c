@@ -18,8 +18,12 @@ uint8 GRE_Event_LogOutbuff[YMGRE_LOGOUT_LEN];
 void gre_assert_fail_inform(uint8* failfile, uint32 failline)
 {
 	gre_log_print("error in file\" %s\" ,line in %d \r\n", failfile, failline);
-	fflush(NULL);
-	exit(EXIT_FAILURE);
+#if defined(YMGRE_FAILURE_HALT) && YMGRE_FAILURE_HALT
+ while(1) { }
+#else
+ fflush(NULL);
+ exit(EXIT_FAILURE);
+#endif
 }
 
 
@@ -83,8 +87,12 @@ void gre_logout_imform(uint8* mytips, GREEVNLOG event)
 	}
 	gre_log_print(" is error\r\n");
 	gre_log_print("Tips:%s\r\n", mytips);
-	fflush(NULL);
-	exit(EXIT_FAILURE);
+#if defined(YMGRE_FAILURE_HALT) && YMGRE_FAILURE_HALT
+ while(1) { }
+#else
+ fflush(NULL);
+ exit(EXIT_FAILURE);
+#endif
 }
 
 

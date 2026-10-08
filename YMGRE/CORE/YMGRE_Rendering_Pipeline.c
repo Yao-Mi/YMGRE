@@ -1,3 +1,4 @@
+#include "../CONFIG/YMGRE_Profile.h"
 #include "YMGRE_Color.h"
 #include "YMGRE_PBR.h"
 #include "../CONFIG/YMGRE_Mem.h"
@@ -578,8 +579,11 @@ static int canDispatchPBR(GRE_Camera4d cam,GRE_List objects,GRE_List materials,G
 #endif
 
 // Advanced material pipeline; legacy entry points remain unchanged.
-void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList,
-	GRE_RenderWorkspace workspace)
+#if YMGRE_PROFILE_RENDER_STAGES
+#define renderAdvancedBatch renderAdvancedBatch_Measured
+#endif
+static void renderAdvancedBatch(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList,
+	GRE_RenderWorkspace workspace,uint8 clearTarget)
 {
 	gre_log_explain((thiscam==NULL)||(LightList==NULL)||(ObjList==NULL)||(MaterialList==NULL),
 		GRE_LOG_PtrI,"高级材质管线输入不存在");
@@ -597,7 +601,7 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
  if(cam->wireFrame==GRE_Render_Wireframe)cam->linearColorEnabled=0;
  if(!YMGRE_Color_BeginFrame(cam,workspace,(GRErgb24){50,50,50})){workspace->materialStatus=-1;return;}
 #endif
- YMGRE_CameraImage_Init(cam, (GRErgb24){50,50,50});
+ if(clearTarget)YMGRE_CameraImage_Init(cam, (GRErgb24){50,50,50});
 #if YMGRE_ENABLE_TRANSPARENCY
  cam->opacityPass=1;
  GRE_TransparentTriangle* transparent=workspace->transparentTriangles;
@@ -861,6 +865,17 @@ void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d thiscam, GRE_List LightList, GRE
   }
  }
 }
+#if YMGRE_PROFILE_RENDER_STAGES
+#undef renderAdvancedBatch
+static void renderAdvancedBatch(GRE_Camera4d thiscam, GRE_List LightList, GRE_List ObjList, GRE_List MaterialList,
+	GRE_RenderWorkspace workspace,uint8 clearTarget)
+{
+ uint32 start=YMGRE_ProfileNow();
+ renderAdvancedBatch_Measured(thiscam,LightList,ObjList,MaterialList,workspace,clearTarget);
+ YMGRE_ProfileCycles[6]+=YMGRE_ProfileNow()-start;
+}
+#endif
+
 
 //独立3D线段在场景之后叠加到同一目标，不参与三角形背面剔除
 void YMGRE_Camera_LineList_Rendering(GRE_Camera4d camera, const gre_line3d* lines,
@@ -906,4 +921,27 @@ size_t YMGRE_Material_TransparentPacketSize(void)
 #else
  return 0;
 #endif
+}
+
+void YMGRE_Camera_TanglePipline_wN(GRE_Camera4d camera,GRE_List lights,
+ GRE_List objects,GRE_List materials,GRE_RenderWorkspace workspace)
+{
+ renderAdvancedBatch(camera,lights,objects,materials,workspace,1);
+}
+int YMGRE_Camera_AppendOpaqueBatch_wN(GRE_Camera4d camera,GRE_List lights,
+ GRE_List objects,GRE_List materials,GRE_RenderWorkspace workspace)
+{
+ if(!camera||!lights||!objects||!materials||!workspace||!YMGRE_Camera_GetRenderTarget(camera))return 0;
+#if YMGRE_ENABLE_LINEAR_COLOR
+ if(camera->linearColorEnabled)return 0;
+#endif
+#if YMGRE_ENABLE_TRANSPARENCY
+ for(GRE_ListNode n=objects->listhead;n;n=n->next)
+  for(GRE_Object4d o=n->data;o;o=o->nextObject){
+   GRE_Material m=YMGRE_Material_Find(materials,o->materiaName);
+   if(m&&m->advanced&&m->advanced->opacityPixel)return 0;
+  }
+#endif
+ renderAdvancedBatch(camera,lights,objects,materials,workspace,0);
+ return workspace->materialStatus==0;
 }

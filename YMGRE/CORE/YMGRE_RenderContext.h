@@ -35,4 +35,9 @@ void YMGRE_RenderWorkspace_SetRasterDispatcher(GRE_RenderWorkspace workspace,
 #endif
 void YMGRE_RenderWorkspace_BindMaterialBuffers(GRE_RenderWorkspace workspace,
  void* transparentPackets,size_t packetBytes,float32* linearRGB,size_t floatCount);
+/** @brief 准备可复用面序缓冲；拥有型工作区在 Free 时释放。
+ * @param faces 最大面数，当前上限 65536；0 不申请。
+ * @return 1 容量满足，0 外部工作区或分配失败。失败保留原缓冲。
+ */
+int YMGRE_RenderWorkspace_ReserveFaceOrder(GRE_RenderWorkspace workspace,uint32 faces);
 #endif // !YMGRE_RENDERCONTEXT_H

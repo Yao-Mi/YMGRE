@@ -51,6 +51,7 @@ int YMGRE_Material_BuildColorMips(GRE_Material material)
  mips->sourceWidth=mips->width[0]=material->width;
  mips->sourceHeight=mips->height[0]=material->height;
  mips->count=1;
+ { /* ARMCC: failure cleanup uses only outer allocation pointers. */
  uint16 w=material->width,h=material->height;
  while((w>1||h>1)&&mips->count<16){
   uint16 nw=w>1?(w+1)/2:1,nh=h>1?(h+1)/2:1;
@@ -91,6 +92,7 @@ int YMGRE_Material_BuildColorMips(GRE_Material material)
  advanced->colorMips=mips;
  advanced->colorUseMip=1;
  return 1;
+ }
 failed:
  for(unsigned i=1;i<mips->count;i++)GRE_ImageBuff_Free(mips->pixels[i]);
  GRE_free1(mips);

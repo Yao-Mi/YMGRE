@@ -1,3 +1,4 @@
+#include "../CONFIG/YMGRE_Profile.h"
 #include "./YMGRE_CullingAndClipping.h"
 #include "./YMGRE_MathBase.h"
 #include "../OPOBJ/YMGRE_Free.h"
@@ -271,6 +272,9 @@ void YMGRE_Backface_RemoveTo(GRE_Object4d myobj, GRE_Fvector4d camPos, uint8* po
 	YMGRE_Backface_RemoveAndMarkTo(myobj, camPos, polygonHide, NULL, 0, 0);
 }
 
+#if YMGRE_PROFILE_RENDER_STAGES
+#define YMGRE_Backface_RemoveAndMarkTo YMGRE_Backface_RemoveAndMarkTo_Measured
+#endif
 void YMGRE_Backface_RemoveAndMarkTo(GRE_Object4d myobj, GRE_Fvector4d camPos,
 	uint8* polygonHide, uint8* active, uint8 includeBackfaces, uint8 includeNonTriangles)
 {
@@ -291,6 +295,17 @@ void YMGRE_Backface_RemoveAndMarkTo(GRE_Object4d myobj, GRE_Fvector4d camPos,
 				active[thispoly->index[vi]] = 1;
 	}
 }
+#if YMGRE_PROFILE_RENDER_STAGES
+#undef YMGRE_Backface_RemoveAndMarkTo
+void YMGRE_Backface_RemoveAndMarkTo(GRE_Object4d myobj, GRE_Fvector4d camPos,
+	uint8* polygonHide, uint8* active, uint8 includeBackfaces, uint8 includeNonTriangles)
+{
+ uint32 start=YMGRE_ProfileNow();
+ YMGRE_Backface_RemoveAndMarkTo_Measured(myobj,camPos,polygonHide,active,includeBackfaces,includeNonTriangles);
+ YMGRE_ProfileCycles[2]+=YMGRE_ProfileNow()-start;
+}
+#endif
+
 
 /*----------------------------------------  边框裁剪 ----------------------------------------------*/
 

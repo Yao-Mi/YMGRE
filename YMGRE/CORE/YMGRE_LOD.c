@@ -55,7 +55,7 @@ int YMGRE_LOD_Parse(YMGRE_LOD_Object *lod, const char *text)
                 float threshold;
                 if (sscanf(p, "level %15s %f %127s %c", kind, &threshold, asset, &extra) != 3 ||
                     !YMGRE_LOD_Add(&parsed, !strcmp(kind, "mesh") ? YMGRE_LOD_MESH :
-                                  !strcmp(kind, "image") ? YMGRE_LOD_IMAGE : 0,
+                                  !strcmp(kind, "image") ? YMGRE_LOD_IMAGE : (YMGRE_LOD_Kind)0,
                                   threshold, asset, NULL)) return 0;
             }
         }

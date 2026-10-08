@@ -1,3 +1,4 @@
+#include "../CONFIG/YMGRE_Profile.h"
 #include "./YMGRE_Coordinates_Transform.h"
 #include "./YMGRE_MathBase.h"
 
@@ -63,6 +64,9 @@ void YMGRE_Object_WorldToCameraTo_wN(GRE_Object4d myobj, GRE_FMat4x4 camera, GRE
 	YMGRE_Object_WorldToCameraMaskedTo(myobj, camera, out, 1, NULL);
 }
 
+#if YMGRE_PROFILE_RENDER_STAGES
+#define YMGRE_Object_WorldToCameraMaskedTo YMGRE_Object_WorldToCameraMaskedTo_Measured
+#endif
 void YMGRE_Object_WorldToCameraMaskedTo(GRE_Object4d myobj, GRE_FMat4x4 camera,
 	GRE_Vertex4d_wN out, uint8 transformTangent, const uint8* active)
 {
@@ -119,6 +123,17 @@ void YMGRE_Object_WorldToCameraMaskedTo(GRE_Object4d myobj, GRE_FMat4x4 camera,
 		out[i].normal.w = out[i].tangent.w = 0;
 	}
 }
+#if YMGRE_PROFILE_RENDER_STAGES
+#undef YMGRE_Object_WorldToCameraMaskedTo
+void YMGRE_Object_WorldToCameraMaskedTo(GRE_Object4d myobj, GRE_FMat4x4 camera,
+	GRE_Vertex4d_wN out, uint8 transformTangent, const uint8* active)
+{
+ uint32 start=YMGRE_ProfileNow();
+ YMGRE_Object_WorldToCameraMaskedTo_Measured(myobj,camera,out,transformTangent,active);
+ YMGRE_ProfileCycles[1]+=YMGRE_ProfileNow()-start;
+}
+#endif
+
 
 void YMGRE_VertexList_CameraToViewPlane_wN(GRE_Vertex4d_wN points, uint32 pointNum, float32 viewPlaneDis)
 {

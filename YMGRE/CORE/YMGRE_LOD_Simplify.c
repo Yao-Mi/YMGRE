@@ -281,6 +281,7 @@ static GRE_Object4d simplifyPart(GRE_Object4d source,YMGRE_LOD_SimplifyOptions o
     float32 *uvs=channels?malloc((size_t)nv*channels*2*sizeof(*uvs)):NULL;
     if(!vertices||!faces||!quadrics||!edges||!boundary||!blocked||!neighbors||!map||
        (source->importedUvCount&&!uvs))goto fail;
+    { /* Keep success declarations outside the failure-label scope (ARMCC). */
     gre_fvector4d lo=source->pointList[0].pos,hi=lo;
     for(uint32 i=0;i<nv;i++){
         vertices[i].vertex=source->pointList[i];
@@ -405,6 +406,7 @@ static GRE_Object4d simplifyPart(GRE_Object4d source,YMGRE_LOD_SimplifyOptions o
     free(vertices);free(faces);free(quadrics);free(edges);
     free(boundary);free(blocked);free(neighbors);free(map);free(uvs);
     return out;
+    }
 fail:
     free(vertices);free(faces);free(quadrics);free(edges);
     free(boundary);free(blocked);free(neighbors);free(map);free(uvs);

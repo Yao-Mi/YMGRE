@@ -162,6 +162,7 @@ static GRE_Camera4d creatCameraHeader(int16 id, float32 alpha_Lx, float32 alpha_
 	mycam->target = NULL;
 	mycam->ownsImageBuffers = 0;
 	mycam->workspace = NULL;
+ mycam->meshBoundsEnabled=0;mycam->backgroundRow=NULL;mycam->backgroundUser=NULL;
 	return mycam;
 }
 

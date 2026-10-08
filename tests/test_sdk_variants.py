@@ -56,8 +56,13 @@ endforeach()
     for codec in ('PNG','JPEG'):
         enabled=f'set(_ymgre_feature_{codec} 1)' in feature_text
         configure('mixed-'+codec.lower(),flags=[f'-DYMGRE_ENABLE_{codec}={0 if enabled else 1}'],error='YMGRE SDK feature mismatch')
+    for name, value in (('RENDER_PREFER_FAST_MEMORY', 'OFF'), ('RENDER_FAST_TARGET', 'OFF'),
+                        ('GEOMETRY_PREFER_FAST_MEMORY', 'ON'), ('IMAGE_PREFER_FAST_MEMORY', 'ON'),
+                        ('OPAQUE_FACE_BUCKETS', 'ON')):
+        configure('mixed-policy-' + name.lower(), flags=[f'-DYMGRE_{name}={value}'],
+                  error='YMGRE SDK policy mismatch')
     configure('mixed-compact', flags=['-DYMGRE_COMPACT_OWNED_TOPOLOGY=ON'], error='YMGRE SDK policy mismatch')
     configure('mixed-fast-raster', flags=['-DYMGRE_CAMERA_COLOR_DEPTH=16',
                                           '-DYMGRE_RASTER_FAST_INTERPOLATION=OFF'],
               error='YMGRE SDK raster policy mismatch')
-print('15 SDK configuration checks passed')
+print('20 SDK configuration checks passed')

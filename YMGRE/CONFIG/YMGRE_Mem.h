@@ -12,29 +12,51 @@ void GRE_free1(void * ptr);//释放内存
 void GRE_memset(void* ptr, int val, size_t size);//内存值设置
 void GRE_memcpy(void* dst, const void* src, size_t size);//内存拷贝
 
-/* Render buffers use fast memory first and fall back to large memory.
-   Record the backend so a fallback allocation is freed by its owner. */
+/* All render allocations record their owner, including slow-only allocations.
+ * Defaults preserve the previous fast-first policy and long-double alignment. */
+#ifndef YMGRE_RENDER_PREFER_FAST_MEMORY
+#define YMGRE_RENDER_PREFER_FAST_MEMORY 1
+#endif
+#ifndef YMGRE_RENDER_FAST_TARGET
+#define YMGRE_RENDER_FAST_TARGET 1
+#endif
+#ifndef YMGRE_PROJECTION_PREFER_FAST_MEMORY
+#define YMGRE_PROJECTION_PREFER_FAST_MEMORY 1
+#endif
+#ifndef YMGRE_GEOMETRY_PREFER_FAST_MEMORY
+#define YMGRE_GEOMETRY_PREFER_FAST_MEMORY 0
+#endif
+#ifndef YMGRE_IMAGE_PREFER_FAST_MEMORY
+#define YMGRE_IMAGE_PREFER_FAST_MEMORY 0
+#endif
 typedef union {
-	void (*release)(void *);
-	long double alignment;
+ void (*release)(void *);
+ long double alignment;
 } GRE_RenderMemoryHeader;
+static inline void *GRE_RenderBuff_MallocWithPreference(size_t size,int preferFast)
+{
+ if(size>SIZE_MAX-sizeof(GRE_RenderMemoryHeader))return NULL;
+ GRE_RenderMemoryHeader *block=preferFast?GRE_malloc0(size+sizeof(*block)):NULL;
+ if(block)block->release=GRE_free0;
+ else {
+  block=GRE_malloc1(size+sizeof(*block));
+  if(!block)return NULL;
+  block->release=GRE_free1;
+ }
+ return block+1;
+}
 static inline void *GRE_RenderBuff_Malloc(size_t size)
 {
-	if(size>SIZE_MAX-sizeof(GRE_RenderMemoryHeader)) return NULL;
-	GRE_RenderMemoryHeader *block=GRE_malloc0(size+sizeof(*block));
-	if(block) block->release=GRE_free0;
-	else {
-		block=GRE_malloc1(size+sizeof(*block));
-		if(!block) return NULL;
-		block->release=GRE_free1;
-	}
-	return block+1;
+ return GRE_RenderBuff_MallocWithPreference(size,YMGRE_RENDER_PREFER_FAST_MEMORY);
 }
 static inline void *GRE_RenderTargetBuff_Malloc(size_t size)
 {
-	return GRE_RenderBuff_Malloc(size);
+ return GRE_RenderBuff_MallocWithPreference(size,YMGRE_RENDER_PREFER_FAST_MEMORY&&YMGRE_RENDER_FAST_TARGET);
 }
 /* Optional independent color arena (for memory-bank placement). */
+#if defined(YMGRE_RENDER_COLOR_MALLOC) && !defined(YMGRE_RENDER_COLOR_FREE)
+#error "Custom color allocation requires a matching YMGRE_RENDER_COLOR_FREE"
+#endif
 #if defined(YMGRE_RENDER_COLOR_MALLOC)
 void *YMGRE_RENDER_COLOR_MALLOC(size_t size);
 void YMGRE_RENDER_COLOR_FREE(void *data);
@@ -59,19 +81,35 @@ static inline void GRE_RenderBuff_Free(void *data)
 //图像数据申请和释放
 static inline void *GRE_GeometryBuff_Malloc(size_t size)
 {
+#if YMGRE_GEOMETRY_PREFER_FAST_MEMORY
+ return GRE_RenderBuff_MallocWithPreference(size,1);
+#else
  return GRE_malloc1(size);
+#endif
 }
 static inline void GRE_GeometryBuff_Free(void *data)
 {
+#if YMGRE_GEOMETRY_PREFER_FAST_MEMORY
+ GRE_RenderBuff_Free(data);
+#else
  GRE_free1(data);
+#endif
 }
 static inline void* GRE_ImageBuff_Malloc(size_t tsize)
 {
-	return GRE_malloc1(tsize);
+#if YMGRE_IMAGE_PREFER_FAST_MEMORY
+ return GRE_RenderBuff_MallocWithPreference(tsize,1);
+#else
+ return GRE_malloc1(tsize);
+#endif
 }
 static inline void GRE_ImageBuff_Free(void* dap)
 {
-	GRE_free1(dap);
+#if YMGRE_IMAGE_PREFER_FAST_MEMORY
+ GRE_RenderBuff_Free(dap);
+#else
+ GRE_free1(dap);
+#endif
 }
 //多边形索引数据申请和释放
 static inline void* GRE_PolyIndex_Malloc(size_t tsize)

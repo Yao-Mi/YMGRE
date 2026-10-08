@@ -361,3 +361,7 @@
 - `scene_roaming` 改为带独立 CMakeLists 的 ProjectDemo，输出到 `build/project_Demo/scene_roaming`；
 - 地图、模型和图片统一从根 `Resource/` 加载，Demo 目录只保留演示源码和说明。
 - 早期 EGE 入口和 2 MB `worldmap.h` 归档到 `Demo/legacy`，历史球体测试块不再编入 YMGRE 库。
+
+## 2026-10-08 原生漫游端口经验回合并
+
+从 ymgre_roam_perf320 提取紧凑不透明实例、精确索引/位置准备、预分配八桶面序、普通不透明批追加、按行背景、可配置内存放置、ARMCC 兼容修整及默认关闭的串行阶段计数。保持现有透明/PBR/并行渲染和光栅规则，未接入硬件容量修改、资源删面或已撤回实验；详见 docs/roam-port-integration.md。
